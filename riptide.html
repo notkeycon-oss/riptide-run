@@ -89,7 +89,17 @@ button.alt{margin-top:10px;font-size:16px;background:none;border:none;color:var(
 #tl{left:20px;bottom:120px}#tr{left:118px;bottom:120px}
 #tu{right:24px;bottom:210px}#td{right:24px;bottom:115px;width:70px!important;height:70px!important;font-size:26px!important}
 #trst{right:118px;bottom:126px;width:58px!important;height:58px!important;font-size:18px!important}
-#tpause{position:fixed;top:12px;right:12px;width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.14);border:2px solid rgba(255,255,255,.3);color:#fff;font-size:18px;font-weight:800;display:none;z-index:4;pointer-events:auto}
+#hudBtns{position:fixed;top:12px;right:12px;display:flex;gap:8px;z-index:4}
+#hudBtns button{width:44px;height:44px;border-radius:50%;background:rgba(6,22,34,.55);border:2px solid rgba(255,255,255,.3);color:#fff;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0}
+#hudBtns button:hover{background:rgba(255,255,255,.2)}
+#netchip{top:64px;right:16px;font-size:15px;font-weight:700;letter-spacing:1px;color:var(--dim)}
+#netchip b{color:var(--good)}
+input.tx{font:inherit;font-size:22px;font-weight:600;width:100%;max-width:300px;padding:10px 14px;margin:6px auto;display:block;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:var(--ink);text-align:center;user-select:text;-webkit-user-select:text;touch-action:auto;outline:none}
+input.tx:focus{border-color:var(--accent)}
+.lb{display:flex;flex-direction:column;gap:4px;margin:10px 0;text-align:left}
+.lb div{display:flex;gap:10px;align-items:center;padding:6px 12px;border-radius:8px;background:rgba(255,255,255,.05);font-size:19px;font-variant-numeric:tabular-nums}
+.lb div.me{background:rgba(255,210,63,.18)}
+.lb .rk{width:30px;color:var(--dim);font-weight:700}.lb .nm2{flex:1;font-weight:700}.lb .dot{width:14px;height:14px;border-radius:50%}
 #err{position:fixed;inset:0;display:none;align-items:center;justify-content:center;text-align:center;padding:30px;font-size:22px;background:#0b2233;z-index:9}
 @media (max-width:860px){#maps{grid-template-columns:repeat(2,1fr)}#skins{grid-template-columns:repeat(2,1fr)}}
 @media (max-width:700px){h1{font-size:46px}#speedo .big{font-size:56px}#timer .big{font-size:34px}#msg{font-size:66px}#hint{display:none}.stat{min-width:96px}.card{padding:18px 14px}.map .nm{font-size:20px}#mini{width:110px!important;height:110px!important}}
@@ -116,13 +126,14 @@ button.alt{margin-top:10px;font-size:16px;background:none;border:none;color:var(
 <div id="msg" class="hud"></div>
 <div id="speedo" class="hud"><div class="big" id="spd">0</div><div class="unit" id="unit">MPH</div><div id="thr"><i></i></div></div>
 <canvas id="mini" class="hud" width="300" height="300" style="width:150px;height:150px"></canvas>
-<div id="hint" class="hud">W/S throttle · A/D steer · R reset · C camera · P pause</div>
+<div id="hint" class="hud">W/S throttle · A/D steer · R last checkpoint · T restart · Q menu · C camera · P pause</div>
 
 <div id="touch">
   <div class="tb" id="tl">◀</div><div class="tb" id="tr">▶</div>
   <div class="tb" id="tu">▲</div><div class="tb" id="td">▼</div><div class="tb" id="trst">R</div>
 </div>
-<button id="tpause">II</button>
+<div id="hudBtns"><button id="bPause" title="Pause (P)">II</button><button id="bRestart" title="Restart race (T)">↻</button><button id="bMenu" title="Main menu (Q)">☰</button></div>
+<div id="netchip" class="hud"></div>
 
 <div class="panel" id="menu">
   <div class="card wide">
@@ -131,12 +142,37 @@ button.alt{margin-top:10px;font-size:16px;background:none;border:none;color:var(
     <div id="maps"></div>
     <div class="row" style="margin-top:8px">
       <button class="chip" id="lapChip">LAPS: 1</button>
+      <button class="chip" id="playerChip">👤 SIGN IN</button>
     </div>
     <button class="go" id="startBtn">RACE</button>
     <div class="row">
       <button class="sec" id="garageBtn">GARAGE</button>
+      <button class="sec" id="boardBtn">LEADERBOARD</button>
       <button class="sec" id="setBtn">SETTINGS</button>
     </div>
+  </div>
+</div>
+
+<div class="panel hidden" id="login">
+  <div class="card">
+    <h2>RACER SIGN-IN</h2>
+    <div class="sub" style="margin-top:-4px">Pick a racer name and a 4-digit PIN. Use the same name + PIN on any computer to get your times, medals and skins back.</div>
+    <input class="tx" id="lname" maxlength="14" placeholder="Racer name" autocomplete="off">
+    <input class="tx" id="lpin" maxlength="4" inputmode="numeric" placeholder="4-digit PIN" autocomplete="off">
+    <div class="sub" id="lerr" style="color:var(--bad);min-height:22px;margin:4px 0"></div>
+    <button class="go" id="loginGo">SIGN IN</button><br>
+    <button class="alt" id="loginSkip">play offline for now</button>
+    <button class="alt" id="logout">sign out</button>
+  </div>
+</div>
+
+<div class="panel hidden" id="board">
+  <div class="card">
+    <h2>LEADERBOARD</h2>
+    <div class="row" id="bTabs"></div>
+    <div class="sub" id="bSub" style="margin:8px 0 0"></div>
+    <div class="lb" id="bList"></div>
+    <button class="go" id="bDone">DONE</button>
   </div>
 </div>
 
@@ -167,6 +203,7 @@ button.alt{margin-top:10px;font-size:16px;background:none;border:none;color:var(
     <div class="medal" id="fmedal"></div>
     <div class="sub" id="fnote"></div>
     <div id="funlock"></div>
+    <div class="sub" id="frank" style="margin:8px 0 0;color:var(--ink);font-weight:700"></div>
     <div class="stats">
       <div class="stat"><small>COURSE RECORD</small><b id="frec">—</b></div>
       <div class="stat"><small>YOUR BEST</small><b id="fbest">—</b></div>
@@ -616,13 +653,15 @@ if (typeof module !== 'undefined') module.exports = Core;
 </script>
 <script>
 (() => {
+// Paste your Firebase Realtime Database URL here to turn on online play, e.g. "https://riptide-run-default-rtdb.firebaseio.com"
+const ONLINE_DB = "https://riptide-run-default-rtdb.firebaseio.com";
 if (!window.THREE) { document.getElementById('err').style.display = 'flex'; return; }
 const $ = id => document.getElementById(id);
 const fmt = s => { if (s == null || !isFinite(s)) return '—'; const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2); };
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // ================= save data =================
-const DEF_SET = { laps: 1, ghost: true, splits: true, minimap: true, cam: 0, units: 'mph', volume: 2, quality: 1, shake: true };
+const DEF_SET = { laps: 1, ghost: 'mine', splits: true, minimap: true, cam: 0, units: 'mph', volume: 2, quality: 1, shake: true };
 function loadData() {
   let d = null;
   try { d = JSON.parse(localStorage.getItem('riptide_run_v2') || 'null'); } catch (e) {}
@@ -632,6 +671,7 @@ function loadData() {
   }
   d.settings = Object.assign({}, DEF_SET, d.settings || {});
   d.unlocked = d.unlocked || { classic: true }; d.runs = d.runs || {};
+  if (d.settings.ghost === true) d.settings.ghost = 'mine'; if (d.settings.ghost === false) d.settings.ghost = 'off';
   return d;
 }
 let DATA = loadData();
@@ -700,8 +740,16 @@ const skyMat = new THREE.ShaderMaterial({
       c+=uFlash*vec3(.8,.85,1.);gl_FragColor=vec4(c,1.);}`
 });
 const sky = new THREE.Mesh(new THREE.SphereGeometry(2800, 32, 16), skyMat); scene.add(sky);
-const envScene = new THREE.Scene(); envScene.add(new THREE.Mesh(new THREE.SphereGeometry(50, 32, 16), skyMat));
 let envRT = null;
+// reflection environment: a plain LDR gradient (custom sky shader output breaks the PMREM RGBE target in r128)
+function makeEnvTexture(env) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 128; const c = cv.getContext('2d');
+  const hex = n => '#' + n.toString(16).padStart(6, '0');
+  const g = c.createLinearGradient(0, 0, 0, 128);
+  g.addColorStop(0, hex(env.top)); g.addColorStop(0.46, hex(env.fog)); g.addColorStop(0.5, hex(env.fog)); g.addColorStop(0.56, hex(env.scat)); g.addColorStop(1, hex(env.deep));
+  c.fillStyle = g; c.fillRect(0, 0, 256, 128);
+  const t = new THREE.CanvasTexture(cv); t.mapping = THREE.EquirectangularReflectionMapping; return t;
+}
 
 // ================= water =================
 const WAVE_GLSL = `uniform vec4 uWA[3];uniform vec2 uWD[3];
@@ -791,8 +839,7 @@ const M4 = (x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => new THRE
 const std = (c, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.75, metalness: 0.0 }, o));
 
 // ================= boat model =================
-const BM = {}; // boat materials (skinnable)
-function makeBoatMats() {
+function makeBoatMats(BM) {
   BM.hull = std(0xc8102e, { roughness: 0.28, side: THREE.DoubleSide });
   BM.stripe = std(0xffffff, { roughness: 0.3, side: THREE.DoubleSide });
   BM.bottom = std(0x10243a, { roughness: 0.5, side: THREE.DoubleSide });
@@ -808,9 +855,12 @@ function makeBoatMats() {
   BM.jacket = std(0xff6a13, { roughness: 0.7 });
   BM.skinT = std(0xc98f6b, { roughness: 0.8 });
   BM.helmet = std(0xffffff, { roughness: 0.25 });
+  return BM;
 }
-makeBoatMats();
-function applySkin(id) {
+const BM = makeBoatMats({}); // boat materials (skinnable)
+const MATKEY = new Map(Object.entries(BM).map(([k, v]) => [v, k]));
+function applySkin(id) { applySkinTo(BM, id); }
+function applySkinTo(BM, id) {
   const s = SKINS.find(k => k.id === id) || SKINS[0];
   BM.hull.color.setHex(s.hull); BM.hull.metalness = s.metal; BM.hull.roughness = s.rough;
   BM.stripe.color.setHex(s.stripe); BM.stripe.emissive.setHex(s.glow ? s.stripe : 0); BM.stripe.emissiveIntensity = s.glow ? 0.55 : 0;
@@ -818,6 +868,14 @@ function applySkin(id) {
   BM.motor.color.setHex(s.motor); BM.motor.metalness = s.id === 'champion' || s.id === 'gold' ? 0.8 : 0.1;
   BM.cap.color.setHex(s.cap); BM.cap.emissive.setHex(s.glow ? s.cap : 0); BM.cap.emissiveIntensity = s.glow ? 0.4 : 0;
   BM.helmet.color.setHex(s.id === 'classic' ? 0xffffff : s.hull);
+  return BM;
+}
+const PEERMATS = {};
+function skinnedClone(id) {
+  if (!PEERMATS[id]) PEERMATS[id] = applySkinTo(makeBoatMats({}), id);
+  const set = PEERMATS[id], g = boatMesh.clone(true);
+  g.traverse(o => { if (o.isMesh) { const k = MATKEY.get(o.material); if (k) o.material = set[k]; } });
+  return g;
 }
 // hull shape (u: 0 = transom, 1 = bow tip)
 const HZ = u => 2.75 - u * 6.0;
@@ -1003,7 +1061,7 @@ function buildWorld(i) {
   waterU.uFogD.value = env.fogD; waterU.uFoam.value = env.foam;
   const WV = Core.getWaves(); let amp = 0;
   WV.forEach((w, k) => { waterU.uWA.value[k].set(w.A, w.k, w.w, w.p); waterU.uWD.value[k].set(w.dx, w.dz); amp += w.A; }); waterU.uAmp.value = amp;
-  if (envRT) envRT.dispose(); envRT = pmrem.fromScene(envScene, 0.03); scene.environment = envRT.texture;
+  if (envRT) envRT.dispose(); { const et = makeEnvTexture(env); envRT = pmrem.fromEquirectangular(et); et.dispose(); } scene.environment = envRT.texture;
   // rocks (smooth, noise-sculpted, 4 variants)
   const geos = rockGeos(env.rock), rmat = std(0xffffff, { vertexColors: true, roughness: 0.92 });
   const buckets = [[], [], [], []]; world.rocks.forEach((o, k) => buckets[k % 4].push(o));
@@ -1231,10 +1289,13 @@ function beep(freq, len, type = 'triangle', vol = 0.25) {
 const keys = {};
 const KM = { ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r' };
 addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') $('loginGo').click(); return; }
   if (KM[e.code]) { keys[KM[e.code]] = true; e.preventDefault(); }
   if (e.repeat) return;
   if (e.code === 'KeyR') resetToCheckpoint();
   if (e.code === 'KeyC') camMode = (camMode + 1) % 3;
+  if (e.code === 'KeyT' && state !== 'menu') startRace();
+  if (e.code === 'KeyQ' && state !== 'menu') quitToMenu();
   if (e.code === 'KeyM') { S.volume = S.volume ? 0 : 2; save(); }
   if (e.code === 'KeyP' || e.code === 'Escape') { if (!$('settings').classList.contains('hidden')) closeSettings(); else togglePause(); }
   if (e.code === 'Enter' && (state === 'menu' && $('garage').classList.contains('hidden') && $('settings').classList.contains('hidden') || state === 'finished')) { e.preventDefault(); startRace(); }
@@ -1243,8 +1304,7 @@ addEventListener('keyup', e => { if (KM[e.code]) keys[KM[e.code]] = false; });
 addEventListener('blur', () => { for (const k in keys) keys[k] = false; if (state === 'racing' || state === 'countdown') togglePause(); });
 const isTouch = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 if (isTouch) {
-  $('touch').style.display = 'block'; $('tpause').style.display = 'block';
-  $('tpause').addEventListener('click', () => togglePause());
+  $('touch').style.display = 'block';
   const bind = (id, k) => {
     const el = $(id);
     const on = e => { e.preventDefault(); initAudio(); if (k === 'R') resetToCheckpoint(); else keys[k] = true; el.classList.add('on'); };
@@ -1257,7 +1317,7 @@ if (isTouch) {
 // ================= game state =================
 let state = 'menu', camMode = S.cam, pausedFrom = 'racing', camSnap = true;
 let boat, simT = 0, raceT = 0, cdT = 0, prevPos = null, R = null, run = null;
-let rec = [], recT = 0, splits = [], wrongT = 0, flipT = 0, shake = 0, lastBeep = -1, lastResetPos = null;
+let ghostData = null, rec = [], recT = 0, splits = [], wrongT = 0, flipT = 0, shake = 0, lastBeep = -1, lastResetPos = null;
 const H = 1 / 120;
 const physWorld = () => ({ obstacles: world.obstacles, channel: world.channel, limit: world.limit });
 function placeBoat(x, z, yaw) { boat = Core.makeBoat(x, z, yaw); boat.pos.y = waveH(x, z, simT); prevPos = { ...boat.pos }; camSnap = true; }
@@ -1266,6 +1326,7 @@ function loadMap(i) {
   placeBoat(world.start.x, world.start.z, world.start.yaw);
   R = Core.makeRace(world, lapsFor(MAPS[i]));
   refreshLabels();
+  joinLive(MAPS[i].id);
 }
 function startRace() {
   initAudio();
@@ -1276,6 +1337,11 @@ function startRace() {
   placeBoat(world.start.x, world.start.z, world.start.yaw); P.length = 0;
   raceT = 0; cdT = 3.6; rec = []; recT = 0; splits = []; lastBeep = -1; lastResetPos = null; camMode = S.cam;
   run = DATA.runs[runKey(meta)] || null;
+  ghostData = S.ghost !== 'off' && run && run.ghost ? run.ghost : null;
+  if (S.ghost === 'world' && NET.on) {
+    const key = runKey(meta);
+    api('wr/' + key).then(w => { if (w && w.g && w.g.length && state !== 'menu' && runKey(MAPS[mapIdx]) === key) ghostData = w.g; }).catch(() => {});
+  }
   state = 'countdown';
   refreshLabels();
 }
@@ -1320,7 +1386,8 @@ function finishRace() {
   const meta = MAPS[mapIdx], key = runKey(meta), tg = targets(meta), t = total();
   const prev = DATA.runs[key], prevBest = prev && prev.best;
   const isPB = !prevBest || t < prevBest;
-  const recBefore = Math.min(tg.rec, prevBest || Infinity);
+  const wb0 = worldBest(key);
+  const recBefore = Math.min(tg.rec, prevBest || Infinity, wb0 ? wb0.t : Infinity);
   const tier = tierOf(t, tg);
   const r = DATA.runs[key] || (DATA.runs[key] = {});
   r.medal = Math.max(r.medal || 0, tier);
@@ -1343,14 +1410,29 @@ function finishRace() {
   $('fnote').textContent = (isPB && prevBest ? `Personal best by ${(prevBest - t).toFixed(2)}s. ` : isPB ? 'First run logged. ' : `${(t - prevBest).toFixed(2)}s off your best. `)
     + (nextT ? `${MT[tier + 1]} needs ${fmt(nextT)}.` : t > tg.rec ? `Record is ${(t - tg.rec).toFixed(2)}s faster.` : '');
   $('funlock').innerHTML = unlocked.map(s => `<div class="unlock">🔓 New skin unlocked: <span style="color:var(--accent)">${s.name}</span> — equip it in the Garage</div>`).join('');
-  $('frec').textContent = fmt(Math.min(tg.rec, r.best)); $('fbest').textContent = fmt(r.best);
+  $('frec').textContent = fmt(Math.min(tg.rec, r.best, wb0 ? wb0.t : Infinity)); $('fbest').textContent = fmt(r.best);
+  $('frank').textContent = !NET.on ? '' : me() ? 'Posting to the online leaderboard…' : 'Sign in on the main menu to post your times online.';
+  if (NET.on && me()) submitRun(key, t, rec.length < 6000 ? rec : null).then(rank => {
+    $('frank').textContent = rank == null ? "Couldn't reach the leaderboard. Your time is saved on this computer." : rank ? `🌐 World rank #${rank}` : '🌐 Posted — not in the top 10 yet';
+    const wb = worldBest(key); $('frec').textContent = fmt(Math.min(tg.rec, r.best, wb ? wb.t : Infinity));
+    refreshLabels(); renderMaps();
+  });
   setTimeout(() => { if (state === 'finished') $('finish').classList.remove('hidden'); }, 1400);
   flash('FINISH', 'var(--accent)', 1300); beep(1320, 0.4);
   refreshLabels(); renderMaps();
 }
+function recordOf(m) {
+  const tg = targets(m), r = DATA.runs[runKey(m)] || {}, wb = worldBest(runKey(m));
+  let t = tg.rec, by = tg.by;
+  if (wb && wb.t < t) { t = wb.t; by = wb.n; }
+  if (r.best && r.best < t) { t = r.best; by = me() ? me().name : 'You'; }
+  return { t, by };
+}
 function refreshLabels() {
   const meta = MAPS[mapIdx], tg = targets(meta), r = DATA.runs[runKey(meta)];
-  $('trec').textContent = fmt(Math.min(tg.rec, (r && r.best) || Infinity));
+  $('trec').textContent = fmt(recordOf(meta).t);
+  $('playerChip').classList.toggle('hidden', !NET.on); $('boardBtn').classList.toggle('hidden', !NET.on);
+  $('playerChip').textContent = me() ? `👤 ${me().name.toUpperCase()}` : '👤 SIGN IN TO RACE ONLINE';
   $('tbest').textContent = fmt(r && r.best);
   $('lapChip').style.visibility = lapsFor(meta) !== 1 || meta.mode === 'CIRCUIT' || meta.mode === 'SLALOM' ? 'visible' : 'hidden';
   $('lapChip').textContent = 'LAPS: ' + S.laps;
@@ -1366,7 +1448,8 @@ function renderMaps() {
       <span class="tag">${m.mode}</span><div class="nm">${m.name}</div><div class="ds">${m.desc}</div>
       <div class="stars">${starsHTML(r.medal || 0)}</div>
       <div class="tm"><span style="color:var(--gold)">★</span> ${fmt(tg.g)} · <span style="color:var(--silver)">★</span> ${fmt(tg.s)} · <span style="color:var(--bronze)">★</span> ${fmt(tg.b)}</div>
-      <div class="tm">Best <b>${fmt(r.best)}</b> · Record <b>${fmt(Math.min(tg.rec, r.best || Infinity))}</b>${lapsFor(m) > 1 ? ` · ${lapsFor(m)} laps` : ''}</div>
+      <div class="tm">Best <b>${fmt(r.best)}</b>${lapsFor(m) > 1 ? ` · ${lapsFor(m)} laps` : ''}</div>
+      <div class="tm">Record <b>${fmt(recordOf(m).t)}</b> · ${esc(recordOf(m).by)}</div>
       <div class="rw ${got ? 'ok' : ''}">${got ? '✓' : '🔒'} Gold reward: ${skin.name}</div></div>`;
   }).join('');
   $('maps').querySelectorAll('.map').forEach(el => el.onclick = () => { const i = +el.dataset.i; if (i !== mapIdx) { loadMap(i); renderMaps(); } });
@@ -1380,11 +1463,11 @@ function renderSkins() {
       <div class="sw" style="background:linear-gradient(135deg,${hex(s.hull)} 0 55%,${hex(s.stripe)} 55% 68%,${hex(s.bottom)} 68%)"></div>
       <div><b>${s.name}</b><small>${DATA.skin === s.id ? 'Equipped' : ok ? 'Tap to equip' : '🔒 ' + req}</small></div></div>`;
   }).join('');
-  $('skins').querySelectorAll('.skin').forEach(el => el.onclick = () => { const id = el.dataset.id; if (!DATA.unlocked[id]) return; DATA.skin = id; applySkin(id); save(); renderSkins(); });
+  $('skins').querySelectorAll('.skin').forEach(el => el.onclick = () => { const id = el.dataset.id; if (!DATA.unlocked[id]) return; DATA.skin = id; applySkin(id); save(); renderSkins(); pushProfile(); });
 }
 const SET_SCHEMA = [
   { k: 'laps', label: 'Laps (Harbor & Storm)', opts: [[1, '1'], [2, '2'], [3, '3'], [5, '5']] },
-  { k: 'ghost', label: 'Ghost boat', opts: [[true, 'On'], [false, 'Off']] },
+  { k: 'ghost', label: 'Ghost boat', opts: [['mine', 'My best'], ['world', 'World record'], ['off', 'Off']] },
   { k: 'splits', label: 'Split times', opts: [[true, 'On'], [false, 'Off']] },
   { k: 'minimap', label: 'Minimap', opts: [[true, 'On'], [false, 'Off']] },
   { k: 'cam', label: 'Starting camera', opts: [[0, 'Chase'], [1, 'Far'], [2, 'Cockpit']] },
@@ -1415,9 +1498,13 @@ function applyQuality(rebuild) {
   if (rebuild) { buildWorld(mapIdx); if (R && R.rings) W3.rings.forEach((g, k) => { if (R.rings[k]) g.m.visible = g.p.visible = false; }); }
 }
 $('startBtn').onclick = startRace; $('againBtn').onclick = startRace;
-$('menuBtn').onclick = () => { $('finish').classList.add('hidden'); toMenu(); };
-$('quitBtn').onclick = () => { $('pause').classList.add('hidden'); toMenu(); };
-function toMenu() { state = 'menu'; ghostMesh.visible = false; placeBoat(world.start.x, world.start.z, world.start.yaw); W3.rings.forEach(g => { g.m.visible = g.p.visible = true; }); renderMaps(); $('menu').classList.remove('hidden'); }
+$('menuBtn').onclick = quitToMenu;
+$('quitBtn').onclick = quitToMenu;
+function quitToMenu() { for (const id of ['finish', 'pause', 'settings']) $(id).classList.add('hidden'); toMenu(); }
+$('bPause').onclick = () => togglePause();
+$('bRestart').onclick = () => startRace();
+$('bMenu').onclick = quitToMenu;
+function toMenu() { clearMyLive(); state = 'menu'; ghostMesh.visible = false; placeBoat(world.start.x, world.start.z, world.start.yaw); W3.rings.forEach(g => { g.m.visible = g.p.visible = true; }); renderMaps(); $('menu').classList.remove('hidden'); refreshBoards(true); }
 $('resumeBtn').onclick = togglePause; $('restartBtn').onclick = startRace;
 $('setBtn').onclick = () => openSettings('menu'); $('pSetBtn').onclick = () => openSettings('pause'); $('setDone').onclick = closeSettings;
 $('garageBtn').onclick = () => { renderSkins(); $('menu').classList.add('hidden'); $('garage').classList.remove('hidden'); };
@@ -1426,7 +1513,7 @@ $('lapChip').onclick = () => { const L = [1, 2, 3, 5]; S.laps = L[(L.indexOf(S.l
 let wipeArm = 0;
 $('wipe').onclick = () => {
   if (Date.now() - wipeArm > 3000) { wipeArm = Date.now(); $('wipe').textContent = 'tap again to confirm — this erases everything'; return; }
-  DATA = { settings: S, skin: 'classic', unlocked: { classic: true }, runs: {}, sel: mapIdx }; save(); applySkin('classic');
+  DATA = { settings: S, skin: 'classic', unlocked: { classic: true }, runs: {}, sel: mapIdx, player: DATA.player, skipLogin: DATA.skipLogin }; save(); applySkin('classic'); pushProfile();
   $('wipe').textContent = 'progress reset'; refreshLabels(); renderMaps();
 };
 
@@ -1456,6 +1543,7 @@ function drawMini() {
   const nextI = R && R.seq.length ? R.seq[Math.min(R.idx, R.seq.length - 1)] : -1;
   world.cps.forEach((g, i) => { const nx = racing && i === nextI; mc.fillStyle = nx ? '#ffd23f' : g.kind === 'flag' ? '#ff9a4a' : 'rgba(255,255,255,.75)'; mc.beginPath(); mc.arc(X(g.x), Y(g.z), nx ? 8 : 4.5, 0, 6.283); mc.fill(); });
   if (world.rings) world.rings.forEach((g, i) => { if (R && R.rings && R.rings[i]) return; mc.strokeStyle = '#ffd23f'; mc.lineWidth = 3; mc.beginPath(); mc.arc(X(g.x), Y(g.z), 6, 0, 6.283); mc.stroke(); });
+  for (const pid in NET.peers) { const p = NET.peers[pid]; if (!p.mesh || !p.mesh.visible) continue; mc.fillStyle = '#c38bff'; mc.beginPath(); mc.arc(X(p.pos.x), Y(p.pos.z), 5.5, 0, 6.283); mc.fill(); }
   if (ghostMesh.visible) { mc.fillStyle = '#7fe9ff'; mc.beginPath(); mc.arc(X(ghostMesh.position.x), Y(ghostMesh.position.z), 5, 0, 6.283); mc.fill(); }
   const f = Core.qrot(boat.q, { x: 0, y: 0, z: -1 }), a = Math.atan2(f.z, f.x);
   mc.save(); mc.translate(cx, cy); mc.rotate(a); mc.fillStyle = '#ff4757'; mc.strokeStyle = '#fff'; mc.lineWidth = 2;
@@ -1500,14 +1588,213 @@ function updateCamera(dt, speed) {
 // ================= ghost =================
 const gqa = new THREE.Quaternion(), gqb = new THREE.Quaternion();
 function updateGhost() {
-  const gh = run && run.ghost;
-  ghostMesh.visible = !!(S.ghost && gh && gh.length && (state === 'racing' || state === 'countdown' || state === 'finished' || state === 'paused'));
+  const gh = S.ghost === 'off' ? null : ghostData;
+  ghostMesh.visible = !!(gh && gh.length && (state === 'racing' || state === 'countdown' || state === 'finished' || state === 'paused'));
   if (!ghostMesh.visible) return;
   const gt = Math.max(0, raceT / 0.1 - 1); const i = Math.min(gh.length - 1, Math.floor(gt)); const j = Math.min(gh.length - 1, i + 1), f = Math.min(1, gt - i);
   const a = gh[i], c = gh[j];
   ghostMesh.position.set(a[0] + (c[0] - a[0]) * f, a[1] + (c[1] - a[1]) * f, a[2] + (c[2] - a[2]) * f);
   gqa.set(a[3], a[4], a[5], a[6]); gqb.set(c[3], c[4], c[5], c[6]); ghostMesh.quaternion.copy(gqa.slerp(gqb, f));
 }
+
+// ================= online (Firebase Realtime Database over REST + live stream) =================
+const DB = ONLINE_DB.replace(/\/+$/, '');
+const NET = { on: !!DB, status: DB ? 'connecting' : 'off', peers: {}, es: null, liveMap: null, sendT: 0, sending: false, boards: {}, first: true, joinedAt: 0, count: 0 };
+const cyrb53 = (str, seed = 0) => { let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed; for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); } h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909); return 4294967296 * (2097151 & h2) + (h1 >>> 0); };
+const nameKey = n => n.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
+const me = () => DATA.player || null;
+async function api(path, method = 'GET', body, query = '') {
+  const opt = { method }; if (body !== undefined) opt.body = JSON.stringify(body); if (method === 'DELETE') opt.keepalive = true;
+  let r;
+  try { r = await fetch(`${DB}/${path}.json${query}`, opt); } catch (e) { NET.status = 'offline'; throw e; }
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  NET.status = 'online'; return r.json();
+}
+async function signIn(name, pin) {
+  name = name.trim().replace(/\s+/g, ' ');
+  if (!/^[A-Za-z0-9 _-]{2,14}$/.test(name)) throw new Error('Name: 2–14 letters, numbers, spaces, - or _');
+  if (!/^\d{4}$/.test(pin)) throw new Error('PIN must be exactly 4 digits');
+  const key = nameKey(name), id = 'p' + cyrb53(key + '|' + pin).toString(36);
+  let owner;
+  try { owner = await api('names/' + key); } catch (e) { throw new Error("Couldn't reach the online server. Check your connection, or play offline."); }
+  if (owner && owner !== id) throw new Error('That name is taken — or the PIN is wrong.');
+  if (!owner) await api('names/' + key, 'PUT', id);
+  const prof = await api('players/' + id);
+  if (prof) mergeProfile(prof);
+  clearMyLive();
+  DATA.player = { name, id }; save();
+  await pushProfile();
+}
+function mergeProfile(p) {
+  for (const k in (p.runs || {})) {
+    const c = p.runs[k], l = DATA.runs[k] || (DATA.runs[k] = {});
+    if (c.best && (!l.best || c.best < l.best - 0.005)) { l.best = c.best; l.splits = null; l.ghost = null; }
+    l.medal = Math.max(l.medal || 0, c.medal || 0);
+  }
+  for (const s in (p.unlocked || {})) if (p.unlocked[s]) DATA.unlocked[s] = true;
+  if (p.skin && DATA.unlocked[p.skin] && DATA.skin === 'classic') { DATA.skin = p.skin; applySkin(p.skin); }
+  save();
+}
+async function pushProfile() {
+  if (!NET.on || !me()) return;
+  const runs = {}; for (const k in DATA.runs) { const r = DATA.runs[k]; if (r.best || r.medal) runs[k] = { best: r.best || 0, medal: r.medal || 0 }; }
+  try { await api('players/' + me().id, 'PUT', { name: me().name, runs, unlocked: DATA.unlocked, skin: DATA.skin }); } catch (e) {}
+}
+async function fetchBoard(key, force) {
+  if (!NET.on) return null;
+  const b = NET.boards[key];
+  if (b && !force && performance.now() - b.at < 20000) return b.list;
+  try {
+    const d = await api('lb/' + key, 'GET', undefined, '?orderBy=%22t%22&limitToFirst=10');
+    const list = Object.entries(d || {}).map(([id, v]) => ({ id, n: v && v.n, t: v && v.t, s: v && v.s })).filter(v => typeof v.t === 'number').sort((a, b) => a.t - b.t);
+    NET.boards[key] = { list, at: performance.now() }; return list;
+  } catch (e) { return b ? b.list : null; }
+}
+function worldBest(key) { const b = NET.boards[key]; return b && b.list.length ? b.list[0] : null; }
+let boardsBusy = false;
+async function refreshBoards(force) {
+  if (!NET.on || boardsBusy) return; boardsBusy = true;
+  try { await Promise.all(MAPS.map(m => fetchBoard(runKey(m), force))); } finally { boardsBusy = false; }
+  renderMaps(); refreshLabels();
+}
+async function submitRun(key, t, ghost) {
+  if (!NET.on || !me()) return null;
+  try {
+    const tt = Math.round(t * 100) / 100;
+    const cur = await api(`lb/${key}/${me().id}`);
+    if (!cur || tt < cur.t) await api(`lb/${key}/${me().id}`, 'PUT', { n: me().name, t: tt, s: DATA.skin, d: Date.now() });
+    const wr = await api(`wr/${key}/t`);
+    if (ghost && (typeof wr !== 'number' || tt < wr)) await api('wr/' + key, 'PUT', { n: me().name, t: tt, g: ghost });
+    await pushProfile();
+    const list = await fetchBoard(key, true);
+    return list ? list.findIndex(v => v.id === me().id) + 1 : 0;
+  } catch (e) { return null; }
+}
+// ---- live boats ----
+function joinLive(mapId) {
+  if (!NET.on || NET.liveMap === mapId) return;
+  leaveLive();
+  NET.liveMap = mapId; NET.first = true; NET.joinedAt = performance.now();
+  if (!window.EventSource) return;
+  try {
+    const es = new EventSource(`${DB}/live/${mapId}.json`);
+    const h = ev => onLive(ev);
+    es.addEventListener('put', h); es.addEventListener('patch', h);
+    es.onopen = () => { NET.status = 'online'; };
+    es.onerror = () => { if (es.readyState === 2) NET.status = 'offline'; };
+    NET.es = es;
+  } catch (e) {}
+}
+function clearMyLive() { if (NET.on && NET.liveMap && me()) api(`live/${NET.liveMap}/${me().id}`, 'DELETE').catch(() => {}); }
+function leaveLive() {
+  if (NET.es) { NET.es.close(); NET.es = null; }
+  clearMyLive();
+  for (const pid in NET.peers) dropPeer(pid);
+  NET.liveMap = null;
+}
+function onLive(ev) {
+  let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+  if (!m || typeof m.path !== 'string') return;
+  const snap = NET.first; NET.first = false;
+  const parts = m.path.split('/').filter(Boolean);
+  if (!parts.length) {
+    if (ev.type === 'put') for (const pid in NET.peers) if (!m.data || !m.data[pid]) dropPeer(pid);
+    if (m.data && typeof m.data === 'object') for (const pid in m.data) m.data[pid] === null ? dropPeer(pid) : setPeer(pid, m.data[pid], snap);
+  } else if (parts.length === 1) {
+    if (m.data === null) dropPeer(parts[0]);
+    else setPeer(parts[0], ev.type === 'patch' ? Object.assign({}, NET.peers[parts[0]] && NET.peers[parts[0]].d, m.data) : m.data, false);
+  } else {
+    const p = NET.peers[parts[0]]; const d = Object.assign({}, p && p.d); d[parts[1]] = m.data; setPeer(parts[0], d, false);
+  }
+}
+function nameTag(n) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64; const c = cv.getContext('2d');
+  c.font = 'bold 34px "Barlow Condensed", system-ui, sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  const w = Math.min(250, c.measureText(n).width + 30);
+  c.fillStyle = 'rgba(6,22,34,.72)'; c.fillRect((256 - w) / 2, 10, w, 44);
+  c.fillStyle = '#ffffff'; c.fillText(n, 128, 33);
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
+  sp.scale.set(4, 1, 1); sp.position.y = 3.3; return sp;
+}
+function setPeer(pid, d, snap) {
+  if (me() && pid === me().id) return;
+  if (!d || !Array.isArray(d.p) || d.p.length < 7) return;
+  let p = NET.peers[pid];
+  if (!p) p = NET.peers[pid] = { d, at: 0, mesh: null, skin: null, pos: new THREE.Vector3(), q: new THREE.Quaternion(), tp: new THREE.Vector3(), tq: new THREE.Quaternion(), init: false, snap: true, gc: false };
+  p.d = d;
+  if (!snap) { p.at = performance.now(); p.snap = false; }
+  p.tp.set(+d.p[0] || 0, +d.p[1] || 0, +d.p[2] || 0); p.tq.set(+d.p[3] || 0, +d.p[4] || 0, +d.p[5] || 0, +d.p[6] || 1).normalize();
+  p.v = Array.isArray(d.v) ? d.v : [0, 0];
+  const sk = SKINS.some(s => s.id === d.s) ? d.s : 'classic';
+  if (p.skin !== sk || p.name !== d.n) {
+    if (p.mesh) scene.remove(p.mesh);
+    p.mesh = skinnedClone(sk); p.mesh.add(nameTag(String(d.n || 'Racer').slice(0, 16))); p.mesh.visible = false; scene.add(p.mesh);
+    p.skin = sk; p.name = d.n;
+  }
+}
+function dropPeer(pid) { const p = NET.peers[pid]; if (!p) return; if (p.mesh) scene.remove(p.mesh); delete NET.peers[pid]; }
+const tmpP = new THREE.Vector3();
+function updatePeers(dt) {
+  if (!NET.on) return;
+  const now = performance.now(); let n = 0;
+  for (const pid in NET.peers) {
+    const p = NET.peers[pid]; const age = now - p.at;
+    const vis = !p.snap && age < 4000;
+    if (!p.snap) {
+      const ex = Math.min(age, 400) / 1000;
+      tmpP.set(p.tp.x + p.v[0] * ex, p.tp.y, p.tp.z + p.v[1] * ex);
+      if (!p.init) { p.pos.copy(tmpP); p.q.copy(p.tq); p.init = true; }
+      p.pos.lerp(tmpP, 1 - Math.exp(-10 * dt)); p.q.slerp(p.tq, 1 - Math.exp(-10 * dt));
+    }
+    if (p.mesh) { p.mesh.visible = vis; p.mesh.position.copy(p.pos); p.mesh.quaternion.copy(p.q); }
+    if (vis) n++;
+    if (!p.gc && ((p.snap && now - NET.joinedAt > 15000) || (!p.snap && age > 60000))) { p.gc = true; api(`live/${NET.liveMap}/${pid}`, 'DELETE').catch(() => {}); }
+  }
+  NET.count = n;
+}
+function sendLive(dt) {
+  if (!NET.on || !me() || !NET.liveMap) return;
+  NET.sendT -= dt;
+  if (NET.sendT > 0 || NET.sending) return;
+  if (!(state === 'racing' || state === 'countdown' || state === 'finished')) return;
+  NET.sendT = 0.2; NET.sending = true;
+  const b = boat, q2 = x => Math.round(x * 100) / 100, q3 = x => Math.round(x * 1000) / 1000;
+  api(`live/${NET.liveMap}/${me().id}`, 'PUT', { n: me().name, s: DATA.skin, p: [q2(b.pos.x), q2(b.pos.y), q2(b.pos.z), q3(b.q.x), q3(b.q.y), q3(b.q.z), q3(b.q.w)], v: [q2(b.vel.x), q2(b.vel.z)], t: q2(total()) })
+    .catch(() => {}).finally(() => { NET.sending = false; });
+}
+addEventListener('pagehide', clearMyLive);
+document.addEventListener('visibilitychange', () => { if (document.hidden) clearMyLive(); });
+// ---- sign-in + leaderboard panels ----
+let loginFrom = 'menu';
+function openLogin() {
+  loginFrom = 'menu'; $('lerr').textContent = ''; $('lname').value = me() ? me().name : ''; $('lpin').value = '';
+  $('logout').classList.toggle('hidden', !me()); $('menu').classList.add('hidden'); $('login').classList.remove('hidden');
+}
+function closeLogin() { $('login').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMaps(); refreshLabels(); }
+$('playerChip').onclick = openLogin;
+$('loginSkip').onclick = () => { DATA.skipLogin = true; save(); closeLogin(); };
+$('logout').onclick = () => { clearMyLive(); DATA.player = null; save(); closeLogin(); };
+$('loginGo').onclick = async () => {
+  $('lerr').textContent = 'Signing in…'; $('loginGo').disabled = true;
+  try { await signIn($('lname').value, $('lpin').value); $('lerr').textContent = ''; closeLogin(); NET.boards = {}; refreshBoards(); }
+  catch (e) { $('lerr').textContent = e.message || 'Sign-in failed.'; }
+  finally { $('loginGo').disabled = false; }
+};
+let boardMap = 0;
+async function renderBoard() {
+  const m = MAPS[boardMap], key = runKey(m);
+  $('bTabs').innerHTML = MAPS.map((x, i) => `<button class="chip" data-i="${i}" style="${i === boardMap ? 'background:var(--accent);color:#14202a' : ''}">${esc(x.name)}</button>`).join('');
+  $('bTabs').querySelectorAll('button').forEach(b => b.onclick = () => { boardMap = +b.dataset.i; renderBoard(); });
+  $('bSub').textContent = (lapsFor(m) > 1 ? `${lapsFor(m)} laps · ` : '') + 'Top 10 — loading…';
+  const list = await fetchBoard(key, true);
+  if (boardMap !== MAPS.indexOf(m)) return;
+  const hex = id => { const s = SKINS.find(k => k.id === id) || SKINS[0]; return '#' + s.hull.toString(16).padStart(6, '0'); };
+  $('bSub').textContent = (lapsFor(m) > 1 ? `${lapsFor(m)} laps · ` : '') + (list ? (list.length ? 'Top 10' : 'No times yet — be the first!') : "Couldn't reach the leaderboard.");
+  $('bList').innerHTML = (list || []).map((v, i) => `<div class="${me() && v.id === me().id ? 'me' : ''}"><span class="rk">${i + 1}</span><span class="dot" style="background:${hex(v.s)}"></span><span class="nm2">${esc(v.n)}</span><span>${fmt(v.t)}</span></div>`).join('');
+}
+$('boardBtn').onclick = () => { boardMap = mapIdx; $('menu').classList.add('hidden'); $('board').classList.remove('hidden'); renderBoard(); };
+$('bDone').onclick = () => { $('board').classList.add('hidden'); $('menu').classList.remove('hidden'); };
 
 // ================= main loop =================
 let acc = 0, last = performance.now(), spawnAcc = 0;
@@ -1516,6 +1803,7 @@ function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h
 addEventListener('resize', resize);
 applyQuality(false);
 loadMap(mapIdx); renderMaps(); refreshLabels();
+if (NET.on) { if (!me() && !DATA.skipLogin) openLogin(); refreshBoards(); }
 const UNIT = { mph: 2.237, kmh: 3.6, kn: 1.944 };
 
 function frame(now) {
@@ -1606,7 +1894,11 @@ function frame(now) {
   for (const id of ['timer', 'gatebox', 'speedo']) $(id).style.visibility = showHud ? 'visible' : 'hidden';
   $('mini').style.visibility = showHud && S.minimap ? 'visible' : 'hidden';
   $('hint').style.visibility = (state === 'countdown' || (state === 'racing' && raceT < 8)) && !isTouch ? 'visible' : 'hidden';
-  $('touch').style.visibility = $('tpause').style.visibility = racing ? 'visible' : 'hidden';
+  $('touch').style.visibility = racing ? 'visible' : 'hidden';
+  $('hudBtns').style.visibility = racing || state === 'finished' ? 'visible' : 'hidden';
+  updatePeers(dt); sendLive(dt);
+  $('netchip').style.visibility = NET.on && showHud ? 'visible' : 'hidden';
+  if (NET.on) $('netchip').innerHTML = NET.status === 'online' ? `<b>●</b> ONLINE${NET.count ? ` · ${NET.count} other${NET.count > 1 ? 's' : ''} on this map` : ''}${me() ? '' : ' · not signed in'}` : '● OFFLINE';
   if (racing && tgt) {
     const tx = tgt.x - b.pos.x, tz = tgt.z - b.pos.z;
     const ang = Math.atan2(camDir.x * tz - camDir.z * tx, camDir.x * tx + camDir.z * tz);
