@@ -1448,18 +1448,36 @@ function dressBoat(grp, M, L) {
   const put = (g, m, x, y, z, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) => { const me = new THREE.Mesh(g, m); me.position.set(hp.x + x, hp.y + y, hp.z + z); me.scale.set(sx, sy, sz); me.rotation.set(rx, ry, rz); me.castShadow = true; acc.add(me); return me; };
   const st = L.helmet;
   const full = st !== 'open' && st !== 'viking';
+  // three.js sphere: phi = -PI/2 faces forward (-Z), theta = PI/2 is the equator; head centre sits 0.02 below hp
+  const FWD = -Math.PI / 2;
+  const front = (r, wide, t0, t1) => new THREE.SphereGeometry(r, 40, 10, FWD - wide / 2, wide, Math.PI * t0, Math.PI * (t1 - t0));
   if (full) {
-    put(new THREE.SphereGeometry(0.158, 28, 20), M.helmet, 0, 0, 0, 1, 1.02, 1.08);
-    put(new THREE.SphereGeometry(0.16, 28, 12, -Math.PI * 0.32, Math.PI * 0.64, Math.PI * 0.36, Math.PI * 0.28), M.visor, 0, 0, 0, 1.02, 1.04, 1.1, 0, Math.PI, 0);
-    put(new THREE.BoxGeometry(0.16, 0.05, 0.08), M.trim, 0, -0.11, -0.13);
+    const SH = [1, 1.02, 1.08];
+    put(new THREE.SphereGeometry(0.158, 36, 24), M.helmet, 0, 0, 0, ...SH);
+    // wrap-around visor across the eyes, with a thin trim frame above and below
+    put(front(0.1605, Math.PI * 0.62, 0.42, 0.6), M.visor, 0, 0, 0, ...SH);
+    put(front(0.1606, Math.PI * 0.64, 0.405, 0.42), M.trim, 0, 0, 0, ...SH);
+    put(front(0.1606, Math.PI * 0.64, 0.6, 0.615), M.trim, 0, 0, 0, ...SH);
+    // chin vent
+    put(front(0.1607, Math.PI * 0.18, 0.72, 0.78), M.trim, 0, 0, 0, ...SH);
   } else {
-    put(new THREE.SphereGeometry(0.158, 28, 14, 0, Math.PI * 2, 0, Math.PI * 0.56), M.helmet, 0, 0.005, 0.01, 1, 1, 1.06);
-    put(new THREE.BoxGeometry(0.22, 0.055, 0.05), M.visor, 0, 0.0, -0.15, 1, 1, 1, 0.25);
+    // open-face shell sits high on the head with a short peak; goggles on a strap across the eyes below it
+    put(new THREE.SphereGeometry(0.158, 36, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), M.helmet, 0, 0.03, 0.01, 1, 1, 1.06);
+    put(new THREE.CylinderGeometry(0.159, 0.159, 0.022, 36, 1, true), M.trim, 0, 0.03, 0.01, 1, 1, 1.06);
+    put(new THREE.CylinderGeometry(0.175, 0.175, 0.01, 32, 1, false, Math.PI * 0.68, Math.PI * 0.64), M.helmet, 0, 0.026, 0, 1, 1, 1.08, -0.15);
+    put(new THREE.CylinderGeometry(0.128, 0.128, 0.026, 36, 1, true), M.trim, 0, -0.006, 0.002);
+    put(front(0.1335, Math.PI * 0.46, 0.43, 0.57), M.visor, 0, -0.006, 0.002);
+    put(front(0.134, Math.PI * 0.03, 0.43, 0.57), M.trim, 0, -0.006, 0.002); // goggle bridge
   }
-  if (st === 'aero') put(new THREE.ConeGeometry(0.07, 0.28, 16), M.helmet, 0, 0.05, 0.2, 1, 1, 0.5, Math.PI / 2 + 0.25);
+  if (st === 'aero') put(new THREE.ConeGeometry(0.07, 0.28, 20), M.helmet, 0, 0.05, 0.2, 1, 1, 0.5, Math.PI / 2 + 0.25);
   if (st === 'stripe') for (const x of [-0.04, 0.04]) put(new THREE.TorusGeometry(0.162, 0.012, 6, 32, Math.PI), M.trim, x, 0, 0, 1, 1.02, 1.08, 0, Math.PI / 2, 0);
-  if (st === 'shark') { const sh = new THREE.Shape(); sh.moveTo(0, 0); sh.quadraticCurveTo(0.1, 0.05, 0.16, 0.2); sh.quadraticCurveTo(0.06, 0.06, -0.1, 0); sh.closePath(); const g = new THREE.ExtrudeGeometry(sh, { depth: 0.02, bevelEnabled: false }); g.translate(0, 0, -0.01); put(g, M.trim, 0, 0.13, 0.03, 1, 1, 1, 0, -Math.PI / 2, 0); }
-  if (st === 'viking') { const horn = std(0xeee3c8, { roughness: 0.5 }); for (const s of [-1, 1]) { const c = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(s * 0.08, 0.06, 0), new THREE.Vector3(s * 0.12, 0.17, -0.02), new THREE.Vector3(s * 0.1, 0.25, -0.05)]); const tg = new THREE.TubeGeometry(c, 16, 0.03, 8, false); const p = tg.attributes.position; for (let i = 0; i < p.count; i++) { const k = Math.floor(i / 9) / 16; const cx = c.getPoint(k); p.setXYZ(i, cx.x + (p.getX(i) - cx.x) * (1 - k * 0.85), cx.y + (p.getY(i) - cx.y) * (1 - k * 0.85), cx.z + (p.getZ(i) - cx.z) * (1 - k * 0.85)); } tg.computeVertexNormals(); put(tg, horn, s * 0.12, 0.04, 0); } }
+  if (st === 'shark') {
+    // swept-back dorsal fin along the centre line (shape x = backwards, y = up)
+    const sh = new THREE.Shape(); sh.moveTo(-0.07, 0); sh.lineTo(0.1, 0); sh.quadraticCurveTo(0.09, 0.07, 0.11, 0.13); sh.quadraticCurveTo(0.0, 0.08, -0.07, 0); sh.closePath();
+    const g = new THREE.ExtrudeGeometry(sh, { depth: 0.022, bevelEnabled: true, bevelThickness: 0.006, bevelSize: 0.005, bevelSegments: 2, curveSegments: 10 }); g.translate(0, 0, -0.011);
+    put(g, M.trim, 0, 0.135, 0, 1, 1, 1, 0, -Math.PI / 2, 0);
+  }
+  if (st === 'viking') { const horn = std(0xeee3c8, { roughness: 0.5 }); for (const s of [-1, 1]) { const c = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(s * 0.08, 0.06, 0), new THREE.Vector3(s * 0.12, 0.17, -0.02), new THREE.Vector3(s * 0.1, 0.25, -0.05)]); const tg = new THREE.TubeGeometry(c, 16, 0.03, 8, false); const p = tg.attributes.position; for (let i = 0; i < p.count; i++) { const k = Math.floor(i / 9) / 16; const cx = c.getPoint(k); p.setXYZ(i, cx.x + (p.getX(i) - cx.x) * (1 - k * 0.85), cx.y + (p.getY(i) - cx.y) * (1 - k * 0.85), cx.z + (p.getZ(i) - cx.z) * (1 - k * 0.85)); } tg.computeVertexNormals(); put(tg, horn, s * 0.12, 0.04, 0, 0.8, 0.8, 0.8); } }
   if (st === 'crown') { const gm = std(0xffd23f, { metalness: 0.9, roughness: 0.2, emissive: 0x3a2a00 }); for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2; put(new THREE.ConeGeometry(0.025, 0.08, 8), gm, Math.cos(a) * 0.09, 0.15, Math.sin(a) * 0.09); } put(new THREE.TorusGeometry(0.095, 0.014, 8, 28), gm, 0, 0.12, 0, 1, 1, 1, Math.PI / 2); }
   // engine tier band on the cowling (follows motor steering)
   const motor = grp.getObjectByName('motor');
