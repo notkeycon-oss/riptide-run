@@ -2355,7 +2355,10 @@ async function signIn(name, pin) {
   const uid = takeAuth(j);
   clearMyLive();
   DATA.player = { name, id: uid, rt: j.refreshToken }; save();
-  if (owner !== uid) await api('names/' + key, 'PUT', uid);
+  if (owner !== uid) {
+    try { await api('names/' + key, 'PUT', uid); }
+    catch (e) { DATA.player = null; AUTH.token = null; save(); throw new Error(/401/.test(e.message) ? "The server's database rules haven't been updated for the new accounts yet." : "Couldn't sign in. Try again."); }
+  }
   const prof = await api('players/' + uid);
   if (prof) mergeProfile(prof);
   // first secure sign-in: bring over the old profile, leaderboard times and ghosts
