@@ -110,7 +110,7 @@ tr.sus td{background:rgba(255,90,95,.1)}
 
     <section data-tab="boards" class="hidden">
       <div class="card">
-        <div class="row"><select id="runSel"></select><button id="reload">RELOAD</button><button id="dedupe">REMOVE OLD-ACCOUNT DUPLICATES</button><button class="del" id="wipeBoard">WIPE THIS LEADERBOARD</button></div>
+        <div class="row"><select id="runSel"></select><select id="tierSel"><option value="all">All engines</option><option value="0">T1 Stock</option><option value="1">T2 Sport</option><option value="2">T3 Race</option><option value="3">T4 Pro</option><option value="4">T5 Riptide</option></select><button id="reload">RELOAD</button><button id="dedupe">REMOVE OLD-ACCOUNT DUPLICATES</button><button class="del" id="wipeBoard">WIPE THIS LEADERBOARD</button></div>
         <div class="msg" id="lbMsg"></div>
         <div id="wrBox"></div>
         <table><thead><tr><th>#</th><th>RACER</th><th>TIME (s)</th><th>ENGINE</th><th>POSTED</th><th></th></tr></thead><tbody id="lbBody"></tbody></table>
@@ -141,7 +141,7 @@ tr.sus td{background:rgba(255,90,95,.1)}
 // Same database and key as riptide.html
 const DB = "https://riptide-run-default-rtdb.firebaseio.com";
 const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
-const RULES_MARK = 'rv6'; // bump together with database.rules.json
+const RULES_MARK = 'rv7'; // bump together with database.rules.json
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -324,10 +324,11 @@ function bind(scope, only) {
   q('reset').forEach(b => b.onclick = async () => {
     const list = ids(); const word = scope === 'all' ? 'RESET ALL' : 'RESET';
     if (prompt(`This wipes ${scope === 'all' ? "EVERY racer's" : pname(list[0]) + "'s"} progress and leaderboard times. Type ${word} to confirm.`) !== word) return;
-    const lb = (await db('lb')) || {};
+    const lb = (await db('lb')) || {}, lbt = (await db('lbt').catch(() => null)) || {};
     for (const id of list) {
       await db('rst/' + id, 'PUT', Date.now()); await db('adm/' + id, 'DELETE'); await db('players/' + id, 'DELETE');
       for (const k in lb) if (lb[k][id]) { await db(`lb/${k}/${id}`, 'DELETE'); await db(`gh/${k}/${id}`, 'DELETE'); }
+      for (const k in lbt) for (const tk in lbt[k]) if (lbt[k][tk] && lbt[k][tk][id]) { await db(`lbt/${k}/${tk}/${id}`, 'DELETE'); await db(`ght/${k}/${tk}/${id}`, 'DELETE'); }
     }
     log(`Reset progress — ${scope === 'all' ? 'EVERYONE (' + list.length + ')' : pname(list[0])}`);
     if (scope === 'one') sel = null; await loadAll(); say(`Reset ${list.length} racer${list.length > 1 ? 's' : ''}.`);
@@ -347,6 +348,8 @@ function bind(scope, only) {
     if (ok !== nk) { if ((await db('names/' + ok)) === id) await db('names/' + ok, 'DELETE'); await db('alias/' + ok, 'DELETE'); }
     await db(`players/${id}/name`, 'PUT', nn);
     const lb = (await db('lb')) || {};
+    const lbt = (await db('lbt').catch(() => null)) || {};
+    for (const run in lbt) for (const tk in lbt[run]) if (lbt[run][tk] && lbt[run][tk][id]) { await db(`lbt/${run}/${tk}/${id}/n`, 'PUT', nn); if (await db(`ght/${run}/${tk}/${id}/n`)) await db(`ght/${run}/${tk}/${id}/n`, 'PUT', nn); }
     for (const run in lb) if (lb[run][id]) {
       await db(`lb/${run}/${id}/n`, 'PUT', nn);
       if (await db(`gh/${run}/${id}/n`)) await db(`gh/${run}/${id}/n`, 'PUT', nn);
@@ -401,35 +404,54 @@ async function loadRuns() {
   if (keys.includes(cur)) $('runSel').value = cur;
   loadBoard();
 }
-$('runSel').onchange = () => loadBoard(); $('reload').onclick = loadRuns;
+$('runSel').onchange = () => loadBoard(); $('tierSel').onchange = () => loadBoard(); $('reload').onclick = loadRuns;
 let board = [];
 function recordFor(key) { const [m, l] = key.split(':'), r = (MAPS.find(x => x[0] === m) || [])[2]; if (!r) return null; const L = +l || 1; return r + (L - 1) * (r - 3); }
+// a time can live in two places: the overall board (lb) and its engine tier's board (lbt). Keep them in step.
+async function timeEntries(key, id) {
+  const [o, tiers] = await Promise.all([db(`lb/${key}/${id}`), db(`lbt/${key}`, 'GET', undefined, '&shallow=true').catch(() => null)]);
+  const out = []; if (o) out.push({ path: `lb/${key}/${id}`, ghost: `gh/${key}/${id}`, v: o });
+  for (const tk in (tiers || {})) { const v = await db(`lbt/${key}/${tk}/${id}`); if (v) out.push({ path: `lbt/${key}/${tk}/${id}`, ghost: `ght/${key}/${tk}/${id}`, v }); }
+  return out;
+}
 async function loadBoard() {
   const key = $('runSel').value; if (!key) { $('lbBody').innerHTML = ''; return; }
-  const [d, wr] = await Promise.all([db('lb/' + key), db('wr/' + key)]);
-  board = Object.entries(d || {}).map(([id, v]) => Object.assign({ id }, v)).sort((a, b) => a.t - b.t);
+  const tier = $('tierSel').value;
+  const [d, wr, dt] = await Promise.all([db('lb/' + key), db('wr/' + key), tier === 'all' ? null : db(`lbt/${key}/t${tier}`).catch(() => null)]);
+  if (tier === 'all') board = Object.entries(d || {}).map(([id, v]) => Object.assign({ id }, v));
+  else {
+    // this tier: per-tier records plus older overall entries that were set with this engine
+    const m = new Map();
+    for (const [id, v] of Object.entries(dt || {})) m.set(id, Object.assign({ id }, v));
+    for (const [id, v] of Object.entries(d || {})) if ((v.e | 0) === +tier && (!m.has(id) || v.t < m.get(id).t)) m.set(id, Object.assign({ id }, v));
+    board = [...m.values()];
+  }
+  board.sort((a, b) => a.t - b.t);
   const rec = recordFor(key);
   $('wrBox').innerHTML = wr && typeof wr.t === 'number' ? `<div class="row" style="margin-top:8px">World-record ghost: <b>${esc(wr.n)}</b> ${fmt(wr.t)} <button class="del" id="wrDel">DELETE RECORD GHOST</button></div>` : '';
   if ($('wrDel')) $('wrDel').onclick = async () => { if (!confirm('Delete the world-record ghost for ' + key + '?')) return; await db('wr/' + key, 'DELETE'); log('Deleted record ghost on ' + key); loadBoard(); };
   $('lbBody').innerHTML = board.map((v, i) => `<tr class="${rec && v.t < rec * 0.88 ? 'sus' : ''}"><td>${i + 1}</td><td>${esc(v.n)} ${v.id.length < 20 ? '<span class="tag">OLD</span>' : ''}${rec && v.t < rec * 0.88 ? ' <span class="tag" style="background:var(--bad)">CHECK</span>' : ''}</td>
     <td><input type="number" step="0.01" min="20" value="${v.t}" data-i="${i}"> <small style="color:var(--dim)">${fmt(v.t)}</small></td><td>T${(v.e | 0) + 1}</td>
     <td>${v.d ? new Date(v.d).toLocaleString() : '—'}</td><td class="row"><button data-save="${i}">SAVE</button><button class="del" data-del="${i}">DELETE</button></td></tr>`).join('');
-  $('lbMsg').textContent = board.length + ' time' + (board.length === 1 ? '' : 's'); $('lbMsg').className = 'msg';
+  $('lbMsg').textContent = board.length + ' time' + (board.length === 1 ? '' : 's') + (tier === 'all' ? '' : ' with this engine'); $('lbMsg').className = 'msg';
+  // edits and deletes hit every copy of that exact time (overall board and engine-tier board)
   document.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => {
     const v = board[+b.dataset.save], t = Math.round(parseFloat(document.querySelector(`input[data-i="${b.dataset.save}"]`).value) * 100) / 100;
     if (!(t > 20)) { $('lbMsg').textContent = 'Times must be over 20 seconds.'; $('lbMsg').className = 'msg bad'; return; }
-    await db(`lb/${key}/${v.id}/t`, 'PUT', t); log(`Changed ${v.n}'s ${key} time ${fmt(v.t)} → ${fmt(t)}`); await loadBoard(); $('lbMsg').textContent = `Changed ${v.n} to ${fmt(t)}.`; $('lbMsg').className = 'msg ok';
+    for (const en of await timeEntries(key, v.id)) if (Math.abs(en.v.t - v.t) < 0.02) await db(en.path + '/t', 'PUT', t);
+    log(`Changed ${v.n}'s ${key} time ${fmt(v.t)} → ${fmt(t)}`); await loadBoard(); $('lbMsg').textContent = `Changed ${v.n} to ${fmt(t)}.`; $('lbMsg').className = 'msg ok';
   });
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
-    const v = board[+b.dataset.del]; if (!confirm(`Delete ${v.n}'s ${fmt(v.t)} (and their ghost)?`)) return;
-    await db(`lb/${key}/${v.id}`, 'DELETE'); await db(`gh/${key}/${v.id}`, 'DELETE'); log(`Deleted ${v.n}'s ${key} time ${fmt(v.t)}`);
+    const v = board[+b.dataset.del]; if (!confirm(`Delete ${v.n}'s ${fmt(v.t)} (and its ghost)?`)) return;
+    for (const en of await timeEntries(key, v.id)) if (Math.abs(en.v.t - v.t) < 0.02) { await db(en.path, 'DELETE'); await db(en.ghost, 'DELETE'); }
+    log(`Deleted ${v.n}'s ${key} time ${fmt(v.t)}`);
     await loadBoard(); $('lbMsg').textContent = `Deleted ${v.n}'s time.`; $('lbMsg').className = 'msg ok';
   });
 }
 $('wipeBoard').onclick = async () => {
   const key = $('runSel').value; if (!key) return;
   if (prompt(`Delete EVERY time and ghost on ${key}? Type WIPE to confirm.`) !== 'WIPE') return;
-  await db('lb/' + key, 'DELETE'); await db('gh/' + key, 'DELETE'); await db('wr/' + key, 'DELETE'); log('Wiped leaderboard ' + key); loadRuns();
+  await db('lb/' + key, 'DELETE'); await db('gh/' + key, 'DELETE'); await db('wr/' + key, 'DELETE'); await db('lbt/' + key, 'DELETE'); await db('ght/' + key, 'DELETE'); log('Wiped leaderboard ' + key); loadRuns();
 };
 $('dedupe').onclick = async () => {
   const lb = await db('lb') || {}; let n = 0;
