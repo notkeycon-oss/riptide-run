@@ -39,3 +39,11 @@ If your rules only allow specific paths, add the new ones. Example rules:
 ```
 
 Open rules like these are fine for a hobby game among friends. Firebase's "test mode" rules expire after 30 days, so replace them before then.
+
+## Secure accounts and admin panel
+With `FIREBASE_API_KEY` set (in `riptide.html` and `admin.html`), each racer's name + PIN becomes a real Firebase account behind the scenes. `database.rules.json` then makes sure racers can only change their own data. Only the admin account can edit or delete anyone's times.
+
+Players who signed in before the upgrade are asked to enter their PIN once. Their old times and ghosts move over automatically.
+
+- **Admin panel:** `admin.html` (not linked from the game). Sign in with the admin email and password you created in Firebase Authentication.
+- **Rules:** copy `database.rules.json` into Firebase → Realtime Database → Rules, replace both `YOUR_ADMIN_UID` with your admin account's UID, then publish. Do this only after the game update with the API key is live, because the rules reject saves that don't carry a login.

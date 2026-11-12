@@ -906,6 +906,9 @@ if (typeof module !== 'undefined') module.exports = Core;
 (() => {
 // Paste your Firebase Realtime Database URL here to turn on online play, e.g. "https://riptide-run-default-rtdb.firebaseio.com"
 const ONLINE_DB = "https://riptide-run-default-rtdb.firebaseio.com";
+// Firebase "Web API key" (Project settings → General → Your apps). With it set, racers get real
+// Firebase accounts behind their name + PIN, so the database rules can make sure people only change their own data.
+const FIREBASE_API_KEY = "";
 if (!window.THREE) { document.getElementById('err').style.display = 'flex'; return; }
 const $ = id => document.getElementById(id);
 const fmt = s => { if (s == null || !isFinite(s)) return '—'; const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2); };
@@ -2286,8 +2289,31 @@ const cyrb53 = (str, seed = 0) => { let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 
 const nameKey = n => n.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
 const me = () => DATA.player || null;
+// ---- accounts: Firebase Auth (REST) behind the name + PIN ----
+const SECURE = !!FIREBASE_API_KEY;
+const AUTH = { token: null, exp: 0, busy: null };
+const isLegacyId = id => typeof id === 'string' && id.length < 20; // old hash ids; Firebase uids are 28 chars
+async function authCall(url, body) {
+  let r;
+  try { r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }); } catch (e) { throw new Error('NETWORK'); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j.error && j.error.message) || 'HTTP ' + r.status);
+  return j;
+}
+const IDT = 'https://identitytoolkit.googleapis.com/v1/accounts:', STS = 'https://securetoken.googleapis.com/v1/token?key=';
+function takeAuth(j) { AUTH.token = j.idToken || j.id_token; AUTH.exp = Date.now() + (+(j.expiresIn || j.expires_in) || 3600) * 1000; return j.localId || j.user_id; }
+async function authToken() {
+  if (!SECURE || !me() || !me().rt) return null;
+  if (AUTH.token && Date.now() < AUTH.exp - 60000) return AUTH.token;
+  if (!AUTH.busy) AUTH.busy = authCall(STS + FIREBASE_API_KEY, { grant_type: 'refresh_token', refresh_token: me().rt })
+    .then(j => { takeAuth(j); if (j.refresh_token && DATA.player) { DATA.player.rt = j.refresh_token; save(); } return AUTH.token; })
+    .catch(e => { if (/TOKEN_EXPIRED|USER_DISABLED|USER_NOT_FOUND|INVALID_REFRESH_TOKEN/.test(e.message)) { DATA.player = null; save(); } return null; })
+    .finally(() => { AUTH.busy = null; });
+  return AUTH.busy;
+}
 async function api(path, method = 'GET', body, query = '') {
   const opt = { method }; if (body !== undefined) opt.body = JSON.stringify(body); if (method === 'DELETE') opt.keepalive = true;
+  if (method !== 'GET') { const tk = await authToken(); if (tk) query += (query ? '&' : '?') + 'auth=' + tk; }
   let r;
   try { r = await fetch(`${DB}/${path}.json${query}`, opt); } catch (e) { NET.status = 'offline'; throw e; }
   if (!r.ok) throw new Error('HTTP ' + r.status);
@@ -2297,15 +2323,49 @@ async function signIn(name, pin) {
   name = name.trim().replace(/\s+/g, ' ');
   if (!/^[A-Za-z0-9 _-]{2,14}$/.test(name)) throw new Error('Name: 2–14 letters, numbers, spaces, - or _');
   if (!/^\d{4}$/.test(pin)) throw new Error('PIN must be exactly 4 digits');
-  const key = nameKey(name), id = 'p' + cyrb53(key + '|' + pin).toString(36);
+  const key = nameKey(name), legacy = 'p' + cyrb53(key + '|' + pin).toString(36);
   let owner;
   try { owner = await api('names/' + key); } catch (e) { throw new Error("Couldn't reach the online server. Check your connection, or play offline."); }
-  if (owner && owner !== id) throw new Error('That name is taken — or the PIN is wrong.');
-  if (!owner) await api('names/' + key, 'PUT', id);
-  const prof = await api('players/' + id);
-  if (prof) mergeProfile(prof);
+  const TAKEN = 'That name is taken — or the PIN is wrong.';
+  if (!SECURE) {
+    if (owner && owner !== legacy) throw new Error(TAKEN);
+    if (!owner) await api('names/' + key, 'PUT', legacy);
+    const prof = await api('players/' + legacy);
+    if (prof) mergeProfile(prof);
+    clearMyLive();
+    DATA.player = { name, id: legacy }; save();
+    await pushProfile(); return;
+  }
+  // an old-style name can only be upgraded by someone who knows its PIN
+  if (owner && isLegacyId(owner) && owner !== legacy) throw new Error(TAKEN);
+  const cred = { email: key + '@players.riptide-run.firebaseapp.com', password: 'riptide-' + pin + '-' + key, returnSecureToken: true };
+  let j;
+  try { j = await authCall(IDT + 'signInWithPassword?key=' + FIREBASE_API_KEY, cred); }
+  catch (e) {
+    if (e.message === 'NETWORK') throw new Error("Couldn't reach the online server. Check your connection, or play offline.");
+    if (/TOO_MANY_ATTEMPTS/.test(e.message)) throw new Error('Too many tries — wait a few minutes.');
+    if (/USER_DISABLED/.test(e.message)) throw new Error('This racer has been banned.');
+    if (owner && !isLegacyId(owner)) throw new Error(TAKEN);
+    try { j = await authCall(IDT + 'signUp?key=' + FIREBASE_API_KEY, cred); }
+    catch (e2) { throw new Error(/EMAIL_EXISTS/.test(e2.message) ? TAKEN : /OPERATION_NOT_ALLOWED/.test(e2.message) ? 'Online accounts are switched off on the server.' : "Couldn't sign in. Try again."); }
+  }
+  const uid = takeAuth(j);
   clearMyLive();
-  DATA.player = { name, id }; save();
+  DATA.player = { name, id: uid, rt: j.refreshToken }; save();
+  if (owner !== uid) await api('names/' + key, 'PUT', uid);
+  const prof = await api('players/' + uid);
+  if (prof) mergeProfile(prof);
+  // first secure sign-in: bring over the old profile, leaderboard times and ghosts
+  if (owner === legacy) {
+    try {
+      const old = await api('players/' + legacy);
+      if (old) mergeProfile(old);
+      for (const rk in (old && old.runs) || {}) {
+        const e = await api(`lb/${rk}/${legacy}`);
+        if (e && typeof e.t === 'number') { await api(`lb/${rk}/${uid}`, 'PUT', Object.assign({}, e, { n: name })); const g = await api(`gh/${rk}/${legacy}`); if (g) await api(`gh/${rk}/${uid}`, 'PUT', g); }
+      }
+    } catch (e) {}
+  }
   await pushProfile();
 }
 function mergeProfile(p) {
@@ -2336,8 +2396,10 @@ async function fetchBoard(key, force) {
   const b = NET.boards[key];
   if (b && !force && performance.now() - b.at < 20000) return b.list;
   try {
-    const d = await api('lb/' + key, 'GET', undefined, '?orderBy=%22t%22&limitToFirst=10');
-    const list = Object.entries(d || {}).map(([id, v]) => ({ id, n: v && v.n, t: v && v.t, s: v && v.s, e: v && v.e | 0 })).filter(v => typeof v.t === 'number').sort((a, b) => a.t - b.t);
+    const d = await api('lb/' + key, 'GET', undefined, '?orderBy=%22t%22&limitToFirst=20');
+    const seen = new Set();
+    const list = Object.entries(d || {}).map(([id, v]) => ({ id, n: v && v.n, t: v && v.t, s: v && v.s, e: v && v.e | 0 })).filter(v => typeof v.t === 'number').sort((a, b) => a.t - b.t)
+      .filter(v => { const k = String(v.n || '').toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 10);
     NET.boards[key] = { list, at: performance.now() }; return list;
   } catch (e) { return b ? b.list : null; }
 }
@@ -2469,7 +2531,7 @@ function openLogin() {
 function closeLogin() { $('login').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMaps(); refreshLabels(); }
 $('playerChip').onclick = openLogin;
 $('loginSkip').onclick = () => { DATA.skipLogin = true; save(); closeLogin(); };
-$('logout').onclick = () => { clearMyLive(); DATA.player = null; save(); closeLogin(); };
+$('logout').onclick = () => { clearMyLive(); DATA.player = null; AUTH.token = null; save(); closeLogin(); };
 $('loginGo').onclick = async () => {
   $('lerr').textContent = 'Signing in…'; $('loginGo').disabled = true;
   try { await signIn($('lname').value, $('lpin').value); $('lerr').textContent = ''; closeLogin(); NET.boards = {}; refreshBoards(); }
@@ -3113,7 +3175,9 @@ function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h
 addEventListener('resize', resize);
 applyQuality(false);
 loadMap(mapIdx); renderMaps(); refreshLabels();
-if (NET.on) { if (!me() && !DATA.skipLogin) openLogin(); refreshBoards(); }
+if (NET.on && SECURE && me() && !me().rt) { const n = me().name; DATA.player = null; save(); openLogin(); $('lname').value = n; $('lerr').textContent = 'Accounts got an upgrade — sign in once more with your PIN to keep your times.'; }
+else if (NET.on) { if (!me() && !DATA.skipLogin) openLogin(); }
+if (NET.on) refreshBoards();
 const UNIT = { mph: 2.237, kmh: 3.6, kn: 1.944 };
 
 function frame(now) {
