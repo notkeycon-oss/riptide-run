@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Riptide Run Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#f4f8fb;--dim:rgba(244,248,251,.62);--card:rgba(255,255,255,.06);--line:rgba(255,255,255,.14);--accent:#ffd23f;--good:#3ddc84;--bad:#ff5a5f}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0b2233;color:var(--ink);font-family:'Barlow Condensed',system-ui,sans-serif;font-size:18px;min-height:100vh}
+.wrap{max-width:1000px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:40px;font-weight:800;font-style:italic;letter-spacing:1px}h1 span{color:var(--accent)}
+h2{font-size:24px;letter-spacing:2px;margin:26px 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:12px}
+input,select{font:inherit;font-size:18px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--ink);outline:none}
+input:focus,select:focus{border-color:var(--accent)}
+select option{background:#0b2233}
+button{font:inherit;font-weight:700;letter-spacing:1px;cursor:pointer;padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.1);color:var(--ink)}
+button:hover{background:rgba(255,255,255,.18)}button.go{background:var(--accent);color:#14202a;border:none}button.del{border-color:var(--bad);color:var(--bad)}
+button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.msg{color:var(--dim);margin-top:8px;min-height:22px}.msg.bad{color:var(--bad)}.msg.ok{color:var(--good)}
+.stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.stat{background:var(--card);border-radius:10px;padding:10px 14px}.stat small{display:block;color:var(--dim);font-size:14px;letter-spacing:2px}.stat b{font-size:30px}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-variant-numeric:tabular-nums}
+th{text-align:left;color:var(--dim);font-size:14px;letter-spacing:2px;font-weight:700;padding:6px}
+td{padding:6px;border-top:1px solid var(--line);vertical-align:middle}
+td input{width:110px;padding:4px 8px}
+.uid{font-family:ui-monospace,monospace;font-size:15px;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px;user-select:all;word-break:break-all}
+.tag{font-size:13px;font-weight:800;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.15)}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>RIPTIDE <span>ADMIN</span></h1>
+
+  <div id="loginBox" class="card" style="max-width:420px">
+    <div class="row" style="flex-direction:column;align-items:stretch">
+      <input id="email" type="email" placeholder="Admin email" autocomplete="username">
+      <input id="pass" type="password" placeholder="Password" autocomplete="current-password">
+      <button class="go" id="loginBtn">SIGN IN</button>
+    </div>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+
+  <div id="setupBox" class="card hidden">
+    <b>Signed in, but the database doesn't recognise you as the admin yet.</b>
+    <p class="msg">Your admin ID is below. Put it into your Firebase rules where it says <code>YOUR_ADMIN_UID</code> (both places), publish them, then reload this page.</p>
+    <div class="row" style="margin-top:8px"><span class="uid" id="uidTxt"></span><button id="copyUid">COPY</button></div>
+  </div>
+
+  <div id="panel" class="hidden">
+    <div class="row" style="justify-content:space-between;margin-top:10px"><span class="msg" id="who"></span><button id="logout">SIGN OUT</button></div>
+
+    <h2>OVERVIEW</h2>
+    <div class="stats" id="stats"></div>
+
+    <h2>LEADERBOARDS</h2>
+    <div class="card">
+      <div class="row"><select id="runSel"></select><button id="reload">RELOAD</button><button id="dedupe">REMOVE OLD-ACCOUNT DUPLICATES</button></div>
+      <div class="msg" id="lbMsg"></div>
+      <div id="wrBox"></div>
+      <table><thead><tr><th>#</th><th>RACER</th><th>TIME (s)</th><th>ENGINE</th><th>POSTED</th><th></th></tr></thead><tbody id="lbBody"></tbody></table>
+    </div>
+  </div>
+</div>
+<script>
+// Same database and key as riptide.html
+const DB = "https://riptide-run-default-rtdb.firebaseio.com";
+const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = s => { if (s == null || !isFinite(s)) return '—'; const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2); };
+const A = { token: null, exp: 0, rt: null, uid: null, email: null };
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error((j.error && j.error.message) || 'HTTP ' + r.status); return j;
+}
+function keep(j) {
+  A.token = j.idToken || j.id_token; A.rt = j.refreshToken || j.refresh_token || A.rt; A.uid = j.localId || j.user_id || A.uid; A.email = j.email || A.email;
+  A.exp = Date.now() + (+(j.expiresIn || j.expires_in) || 3600) * 1000;
+  try { sessionStorage.setItem('rr_admin', JSON.stringify({ rt: A.rt, uid: A.uid, email: A.email })); } catch (e) {}
+}
+async function token() {
+  if (A.token && Date.now() < A.exp - 60000) return A.token;
+  keep(await post('https://securetoken.googleapis.com/v1/token?key=' + FIREBASE_API_KEY, { grant_type: 'refresh_token', refresh_token: A.rt }));
+  return A.token;
+}
+async function db(path, method = 'GET', body, query = '') {
+  const tk = await token();
+  const r = await fetch(`${DB}/${path}.json?auth=${tk}${query}`, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (r.status === 401) throw new Error('DENIED');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+$('loginBtn').onclick = async () => {
+  if (!FIREBASE_API_KEY) { $('loginMsg').textContent = 'FIREBASE_API_KEY is empty at the bottom of admin.html.'; $('loginMsg').className = 'msg bad'; return; }
+  $('loginMsg').textContent = 'Signing in…'; $('loginMsg').className = 'msg';
+  try { keep(await post('https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=' + FIREBASE_API_KEY, { email: $('email').value.trim(), password: $('pass').value, returnSecureToken: true })); $('pass').value = ''; start(); }
+  catch (e) { $('loginMsg').textContent = /INVALID|NOT_FOUND|PASSWORD/.test(e.message) ? 'Wrong email or password.' : /TOO_MANY/.test(e.message) ? 'Too many tries — wait a few minutes.' : 'Sign-in failed: ' + e.message; $('loginMsg').className = 'msg bad'; }
+};
+$('pass').onkeydown = e => { if (e.key === 'Enter') $('loginBtn').click(); };
+$('logout').onclick = () => { try { sessionStorage.removeItem('rr_admin'); } catch (e) {} location.reload(); };
+$('copyUid').onclick = () => navigator.clipboard && navigator.clipboard.writeText(A.uid);
+async function start() {
+  $('loginBox').classList.add('hidden');
+  try { await db('', 'GET', undefined, '&shallow=true'); }
+  catch (e) {
+    if (e.message === 'DENIED') { $('uidTxt').textContent = A.uid; $('setupBox').classList.remove('hidden'); return; }
+    $('loginBox').classList.remove('hidden'); $('loginMsg').textContent = 'Could not reach the database.'; return;
+  }
+  $('panel').classList.remove('hidden'); $('who').textContent = 'Signed in as ' + (A.email || A.uid);
+  loadStats(); loadRuns();
+}
+async function loadStats() {
+  const count = async p => { try { return Object.keys((await db(p, 'GET', undefined, '&shallow=true')) || {}).length; } catch (e) { return '?'; } };
+  const [players, lobbies, maps] = await Promise.all([count('players'), count('lobbies'), count('maps')]);
+  let entries = 0, runs = 0; try { const lb = await db('lb'); for (const k in lb || {}) { runs++; entries += Object.keys(lb[k]).length; } } catch (e) {}
+  $('stats').innerHTML = [['RACERS', players], ['LEADERBOARD TIMES', entries], ['LEADERBOARDS', runs], ['OPEN LOBBIES', lobbies], ['PUBLISHED MAPS', maps]]
+    .map(([l, v]) => `<div class="stat"><small>${l}</small><b>${v}</b></div>`).join('');
+}
+async function loadRuns() {
+  const keys = Object.keys((await db('lb', 'GET', undefined, '&shallow=true')) || {}).sort();
+  const cur = $('runSel').value;
+  $('runSel').innerHTML = keys.map(k => { const [m, l] = k.split(':'); return `<option value="${esc(k)}">${esc(m)} · ${esc(l)} lap${l === '1' ? '' : 's'}</option>`; }).join('') || '<option value="">no leaderboards yet</option>';
+  if (keys.includes(cur)) $('runSel').value = cur;
+  loadBoard();
+}
+$('runSel').onchange = loadBoard; $('reload').onclick = () => { loadStats(); loadRuns(); };
+let board = [];
+async function loadBoard() {
+  const key = $('runSel').value; if (!key) { $('lbBody').innerHTML = ''; return; }
+  $('lbMsg').textContent = 'Loading…'; $('lbMsg').className = 'msg';
+  const [d, wr] = await Promise.all([db('lb/' + key), db('wr/' + key)]);
+  board = Object.entries(d || {}).map(([id, v]) => Object.assign({ id }, v)).sort((a, b) => a.t - b.t);
+  $('wrBox').innerHTML = wr && typeof wr.t === 'number' ? `<div class="row" style="margin-top:8px">World-record ghost: <b>${esc(wr.n)}</b> ${fmt(wr.t)} <button class="del" id="wrDel">DELETE RECORD GHOST</button></div>` : '';
+  if ($('wrDel')) $('wrDel').onclick = async () => { if (!confirm('Delete the world-record ghost for ' + key + '?')) return; await db('wr/' + key, 'DELETE'); loadBoard(); };
+  $('lbBody').innerHTML = board.map((v, i) => `<tr><td>${i + 1}</td><td>${esc(v.n)} ${v.id.length < 20 ? '<span class="tag" title="Entry from before secure accounts">OLD</span>' : ''}</td>
+    <td><input type="number" step="0.01" min="20" value="${v.t}" data-i="${i}"> <small style="color:var(--dim)">${fmt(v.t)}</small></td><td>T${(v.e | 0) + 1}</td>
+    <td>${v.d ? new Date(v.d).toLocaleString() : '—'}</td><td class="row"><button data-save="${i}">SAVE</button><button class="del" data-del="${i}">DELETE</button></td></tr>`).join('');
+  $('lbMsg').textContent = board.length + ' time' + (board.length === 1 ? '' : 's');
+  document.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => {
+    const v = board[+b.dataset.save], t = Math.round(parseFloat(document.querySelector(`input[data-i="${b.dataset.save}"]`).value) * 100) / 100;
+    if (!(t > 20)) { $('lbMsg').textContent = 'Times must be over 20 seconds.'; $('lbMsg').className = 'msg bad'; return; }
+    await db(`lb/${key}/${v.id}/t`, 'PUT', t); await loadBoard(); $('lbMsg').textContent = `Changed ${v.n} to ${fmt(t)}.`; $('lbMsg').className = 'msg ok';
+  });
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    const v = board[+b.dataset.del]; if (!confirm(`Delete ${v.n}'s ${fmt(v.t)} (and their ghost)?`)) return;
+    await db(`lb/${key}/${v.id}`, 'DELETE'); await db(`gh/${key}/${v.id}`, 'DELETE');
+    await loadBoard(); loadStats(); $('lbMsg').textContent = `Deleted ${v.n}'s time.`; $('lbMsg').className = 'msg ok';
+  });
+}
+// racers who upgraded to secure accounts can have an OLD copy of the same time left behind
+$('dedupe').onclick = async () => {
+  const lb = await db('lb') || {}; let n = 0;
+  for (const key in lb) {
+    const fresh = new Set(Object.entries(lb[key]).filter(([id]) => id.length >= 20).map(([, v]) => String(v.n).toLowerCase()));
+    for (const [id, v] of Object.entries(lb[key])) if (id.length < 20 && fresh.has(String(v.n).toLowerCase())) { await db(`lb/${key}/${id}`, 'DELETE'); await db(`gh/${key}/${id}`, 'DELETE'); n++; }
+  }
+  await loadBoard(); loadStats(); $('lbMsg').textContent = `Removed ${n} duplicate old entr${n === 1 ? 'y' : 'ies'}.`; $('lbMsg').className = 'msg ok';
+};
+try { const s = JSON.parse(sessionStorage.getItem('rr_admin') || 'null'); if (s && s.rt && FIREBASE_API_KEY) { Object.assign(A, s); token().then(start).catch(() => {}); } } catch (e) {}
+</script>
+</body>
+</html>
