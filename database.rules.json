@@ -2,7 +2,7 @@
   "rules": {
     ".read": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
     ".write": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
-    "rv4": {
+    "rv5": {
       ".read": true
     },
     "names": {
@@ -92,6 +92,11 @@
     },
     "cfg": {
       ".read": true
+    },
+    "exc": {
+      "$pid": {
+        ".read": true
+      }
     }
   }
 }
