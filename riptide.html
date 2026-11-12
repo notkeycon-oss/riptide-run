@@ -358,6 +358,9 @@ input.tx:focus{border-color:var(--accent)}
     <div class="row"><button class="sec" id="restartBtn">RESTART</button><button class="sec" id="pSetBtn">SETTINGS</button><button class="sec" id="quitBtn">QUIT</button></div>
   </div>
 </div>
+<div class="panel hidden" id="notice" style="z-index:8">
+  <div class="card"><div class="sub" style="margin:0;letter-spacing:4px" id="ntKind">MESSAGE</div><h2 id="ntTitle" style="margin-top:6px"></h2><div class="sub" id="ntText" style="font-size:20px;color:var(--ink);white-space:pre-wrap"></div><button class="go" id="ntOk">OK</button></div>
+</div>
 <div id="err">Couldn't start 3D graphics on this device. Try a different browser or turn on hardware acceleration.</div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -1081,7 +1084,8 @@ function E() { return DATA.econ; }
 // ---- admin layer: whatever the admin panel gives sits on top of real progress, so it can be removed cleanly ----
 let ADM = { speed: 1, cash: 0, xp: 0, all: false, ep: null };   // adm/{you}: written only by the admin
 let CFG = { msg: '', payMul: 1, feat: '' };                       // cfg: global event settings
-let BANNED = false;
+let BANNED = false, BAN = null;
+const offline = () => BANNED || !!CFG.maint;   // online features switched off for this racer
 const boosted = () => (ADM.speed || 1) !== 1;
 const admWallet = () => Math.max(0, (ADM.cash || 0) + E().admCash - E().admSpent);
 const realCash = () => E().earned - E().spent;
@@ -1089,7 +1093,7 @@ const cash = () => realCash() + admWallet();
 const totalXp = () => E().xp + (ADM.xp || 0) + E().admXp;
 const xpNeed = L => 250 + 100 * L;               // xp to go from level L to L+1
 function levelOf(xp) { let L = 1; while (L < 30 && xp >= xpNeed(L)) { xp -= xpNeed(L); L++; } return { L, into: xp, need: xpNeed(L), max: L >= 30 }; }
-const owns = (cat, id) => !!(ADM.all || (E().own[cat] && E().own[cat][id]) || (E().ownAdm[cat] && E().ownAdm[cat][id]));
+const owns = (cat, id) => !!(ADM.all || (E().own[cat] && E().own[cat][id]) || (E().ownAdm[cat] && E().ownAdm[cat][id]) || (ADM.items && ADM.items[cat] && ADM.items[cat][id]));
 function grant(cat, id) { (E().own[cat] || (E().own[cat] = {}))[id] = true; }
 function grantAdm(cat, id) { (E().ownAdm[cat] || (E().ownAdm[cat] = {}))[id] = true; }
 const today = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
@@ -2039,7 +2043,7 @@ function finishRace() {
   $('funlock').innerHTML = unlocked.map(s => `<div class="unlock">🔓 Unlocked: <span style="color:var(--accent)">${s.name}</span> — find it in the Garage</div>`).join('');
   $('frewards').innerHTML = rewardsHTML(pay, ups); animateBars($('frewards'));
   $('frec').textContent = fmt(meta.custom ? r.best : Math.min(tg.rec, r.best, wb0 ? wb0.t : Infinity)); $('fbest').textContent = fmt(r.best);
-  const online = NET.on && (!meta.custom || meta.code) && !adminRun && !BANNED;
+  const online = NET.on && (!meta.custom || meta.code) && !adminRun && !offline();
   $('frank').textContent = !online ? '' : me() ? 'Posting to the online leaderboard…' : 'Sign in on the main menu to post your times online.';
   if (online && me()) submitRun(key, t, rec.length < 6000 ? rec : null, isPB ? splits.slice() : null).then(rank => {
     $('frank').textContent = rank == null ? "Couldn't reach the leaderboard. Your time is saved on this computer." : rank ? `🌐 World rank #${rank}` : '🌐 Posted — not in the top 10 yet';
@@ -2072,7 +2076,7 @@ function refreshLabels() {
   const top = `<span class="pill cash">${money(cash())}</span><span class="pill">MASTERY ${lv.L}<span class="xpbar"><i style="width:${lv.max ? 100 : lv.into / lv.need * 100}%"></i></span></span><span class="pill">⚙ ${Core.TIERS[E().engine].name}</span>`;
   const stk = di.fresh ? di.streak - 1 : di.streak;
   const admPills = (boosted() ? `<span class="pill" style="color:#7ff5ff">⚡ ADMIN BOOST ×${ADM.speed}</span>` : '') + (admWallet() || ADM.all || ADM.xp || E().admXp ? `<span class="pill" style="color:#ff9bd2" title="Admin gifts: removable by the admin">🎁 ADMIN GIFTS${admWallet() ? ' · ' + money(admWallet()) : ''}</span>` : '');
-  $('topbar').innerHTML = top + (stk > 0 ? `<span class="pill">🔥 ${stk}-DAY STREAK</span>` : '') + admPills + (BANNED ? '<span class="pill" style="color:var(--bad)">⛔ BANNED FROM ONLINE</span>' : '');
+  $('topbar').innerHTML = top + (stk > 0 ? `<span class="pill">🔥 ${stk}-DAY STREAK</span>` : '') + admPills + (BANNED ? `<span class="pill" style="color:var(--bad)">⛔ BANNED${BAN && BAN.until ? ' UNTIL ' + new Date(BAN.until).toLocaleDateString() : ''}</span>` : '') + (CFG.maint ? '<span class="pill" style="color:var(--accent)">🛠 ONLINE MAINTENANCE</span>' : '');
   $('gTop').innerHTML = top;
   const fm = featuredMap();
   $('dailyTxt').innerHTML = (CFG.msg ? `<div style="margin-bottom:4px;color:var(--accent);font-weight:700">📣 ${esc(CFG.msg)}</div>` : '') + ((+CFG.payMul || 1) > 1 ? `<b style="color:#ff9bd2">🎉 EVENT: ×${+CFG.payMul} money & mastery on every race!</b> ` : '') + (di.fresh ? `🎁 <b style="color:#7dffb0">Daily bonus ready</b> — finish any race to collect (${di.streak > 1 ? `day ${di.streak} streak, ` : ''}+${money(150 + 50 * Math.min(di.streak, 10))}). ` : 'Daily bonus collected — come back tomorrow to keep the streak. ') + `Featured today: <b style="color:var(--accent)">${fm.name}</b> pays ×1.5`;
@@ -2104,8 +2108,8 @@ function itemState(cat, it) {
   const L = levelOf(totalXp()).L;
   let own;
   if (cat === 'eng') own = owns('eng', it.k);
-  else if (it.unlock === 'all') own = !!DATA.unlocked.champion || ADM.all;
-  else if (it.unlock) own = !!DATA.unlocked[it.id] || ADM.all;
+  else if (it.unlock === 'all') own = !!DATA.unlocked.champion || ADM.all || owns(cat, it.id);
+  else if (it.unlock) own = !!DATA.unlocked[it.id] || ADM.all || owns(cat, it.id);
   else if (!it.cost) own = true;
   else own = owns(cat, it.id) || (cat === 'paint' && DATA.unlocked[it.id]);
   const c = it.cost || 0;
@@ -2487,26 +2491,52 @@ function resetProgress(rs) {
   save(); applyMyLook(); pushProfile(); renderMaps(); flash('PROGRESS RESET', 'var(--bad)', 2000);
 }
 let admBusy = false;
+function notice(kind, title, text) { $('ntKind').textContent = kind; $('ntTitle').textContent = title; $('ntText').textContent = text || ''; $('notice').classList.remove('hidden'); beep(880, 0.15); }
+$('ntOk').onclick = () => $('notice').classList.add('hidden');
+const banActive = b => !!b && (b === true || !b.until || b.until > Date.now());
 async function pollAdmin() {
   if (!NET.on || admBusy) return; admBusy = true;
   try {
     const uid = me() && me().id;
-    const [c, a, rs, ban] = await Promise.all([api('cfg'), uid ? api('adm/' + uid) : null, uid ? api('rst/' + uid) : null, uid ? api('bans/' + uid) : null]);
+    // each read on its own, so one blocked path can't stop the others (e.g. bans) from applying
+    const get = p => api(p).catch(() => undefined);
+    const [c, a, rs, ban, msg] = await Promise.all([get('cfg'), uid ? get('adm/' + uid) : null, uid ? get('rst/' + uid) : null, uid ? get('bans/' + uid) : null, uid ? get('msg/' + uid) : null]);
     const before = JSON.stringify([CFG, ADM, BANNED, cash(), DATA.skin]);
-    CFG = Object.assign({ msg: '', payMul: 1, feat: '' }, c && typeof c === 'object' ? c : {});
-    BANNED = !!ban;
+    if (c !== undefined) CFG = Object.assign({ msg: '', payMul: 1, feat: '', maint: false, ann: null }, c && typeof c === 'object' ? c : {});
+    if (ban !== undefined) {
+      const was = BANNED; BAN = banActive(ban) ? ban : null; BANNED = !!BAN;
+      if (BANNED && !was) {
+        const until = BAN.until ? 'until ' + new Date(BAN.until).toLocaleString() : 'permanently';
+        notice('ACCOUNT', 'You are banned from online play', `Banned ${until}.${BAN.reason ? '\nReason: ' + BAN.reason : ''}\n\nYou can still race offline, but times won't post and lobbies are closed to you.`);
+        if (LOBBY.code) leaveLobby(); clearMyLive();
+      }
+    }
     if (uid) {
       if (typeof rs === 'number' && rs > (DATA.rsSeen || 0)) resetProgress(rs);
-      const n = a && typeof a === 'object' ? a : {};
-      const ep = n.ep || null, e = E();
-      if (ep !== e.admEp) { Object.assign(e, { admCash: 0, admSpent: 0, admXp: 0, ownAdm: {}, admEp: ep }); } // gifts removed (or a fresh batch): drop everything admin-made
-      ADM = { speed: clamp(+n.speed || 1, 0.5, 3), cash: Math.max(0, +n.cash || 0), xp: Math.max(0, +n.xp || 0), all: !!n.all, ep };
-      if (fixEquipped()) applyMyLook();
-    } else ADM = { speed: 1, cash: 0, xp: 0, all: false, ep: null };
+      if (a !== undefined) {
+        const n = a && typeof a === 'object' ? a : {};
+        const ep = n.ep || null, e = E();
+        if (ep !== e.admEp) { Object.assign(e, { admCash: 0, admSpent: 0, admXp: 0, ownAdm: {}, admEp: ep }); } // gifts removed (or a fresh batch): drop everything admin-made
+        ADM = { speed: clamp(+n.speed || 1, 0.5, 3), cash: Math.max(0, +n.cash || 0), xp: Math.max(0, +n.xp || 0), all: !!n.all, items: n.items && typeof n.items === 'object' ? n.items : null, ep };
+        if (fixEquipped()) applyMyLook();
+      }
+      // private message / kick from the admin
+      if (msg && typeof msg === 'object' && +msg.t > (DATA.msgSeen || 0)) {
+        DATA.msgSeen = +msg.t; save();
+        if (msg.kick) { if (LOBBY.code) await leaveLobby(); else if (state !== 'menu') { hidePanels(); toMenu(); } }
+        notice(msg.kick ? 'KICKED' : 'MESSAGE FROM THE ADMIN', msg.kick ? 'You were kicked by an admin' : 'Admin', String(msg.text || ''));
+      }
+    } else ADM = { speed: 1, cash: 0, xp: 0, all: false, items: null, ep: null };
+    // announcements pop up once for everyone
+    if (CFG.ann && +CFG.ann.t > (DATA.annSeen || 0)) { DATA.annSeen = +CFG.ann.t; save(); if (Date.now() - CFG.ann.t < 864e5) notice('ANNOUNCEMENT', '📣 Announcement', String(CFG.ann.text || '')); }
+    if (CFG.maint && LOBBY.code) leaveLobby();
     if (JSON.stringify([CFG, ADM, BANNED, cash(), DATA.skin]) !== before) { save(); refreshLabels(); if (state === 'menu') renderMaps(); if (open('garage')) renderSkins(); }
+    // "online now" heartbeat for the admin panel
+    if (uid && !BANNED) { pollAdmin.hb = (pollAdmin.hb || 0) + 1; if (pollAdmin.hb % 4 === 1) api(`players/${uid}/on`, 'PUT', { t: SV0, m: MAPS[mapIdx].id, s: LOBBY.code ? 'lobby ' + LOBBY.code : state }).catch(() => {}); }
   } catch (e) {}
   admBusy = false;
 }
+const SV0 = { '.sv': 'timestamp' };
 setInterval(pollAdmin, 8000);
 async function fetchBoard(key, force) {
   if (!NET.on) return null;
@@ -2528,7 +2558,7 @@ async function refreshBoards(force) {
   renderMaps(); refreshLabels();
 }
 async function submitRun(key, t, ghost, sp) {
-  if (!NET.on || !me() || BANNED) return null;
+  if (!NET.on || !me() || offline()) return null;
   try {
     const tt = Math.round(t * 100) / 100, eng = TUNE === Core.TIERS[0] ? 0 : E().engine;
     const cur = await api(`lb/${key}/${me().id}`);
@@ -2628,7 +2658,7 @@ function updatePeers(dt) {
   NET.count = n;
 }
 function sendLive(dt) {
-  if (!NET.on || !me() || !NET.liveMap) return;
+  if (!NET.on || !me() || !NET.liveMap || offline()) return;
   NET.sendT -= dt;
   if (NET.sendT > 0 || NET.sending) return;
   if (!(state === 'racing' || state === 'countdown' || state === 'finished')) return;
@@ -2712,7 +2742,8 @@ function lobbyErr(t) { $('lbErr').textContent = t || ''; }
 function openLobbyPanel() {
   if (!NET.on) return;
   if (!me()) { openLogin(); $('lerr').textContent = 'Sign in first so your friends can see who you are.'; return; }
-  if (BANNED) { flash('BANNED FROM ONLINE', 'var(--bad)', 1500); return; }
+  if (BANNED) { notice('ACCOUNT', 'Banned from online play', BAN && BAN.reason ? 'Reason: ' + BAN.reason : ''); return; }
+  if (CFG.maint) { notice('SERVER', 'Online play is down for maintenance', 'Try again a bit later — time trials still work offline.'); return; }
   hidePanels(); $('lobby').classList.remove('hidden');
   $('lobbyHome').classList.toggle('hidden', !!LOBBY.code); $('lobbyRoom').classList.toggle('hidden', !LOBBY.code);
   lobbyErr(''); if (LOBBY.code) renderRoom();
@@ -3235,7 +3266,7 @@ $('edTest').onclick = () => {
 $('edPub').onclick = async () => {
   const v = edValid(); if (v) return edMsg(v);
   if (!NET.on || !me()) return edMsg('Sign in (main menu) to publish maps online.');
-  if (BANNED) return edMsg('Your account is banned from online features.');
+  if (offline()) return edMsg(BANNED ? 'Your account is banned from online features.' : 'Online is down for maintenance.');
   edMsg('Publishing…');
   try {
     const d = ED.def; const A = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
