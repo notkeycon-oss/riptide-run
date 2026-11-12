@@ -2450,6 +2450,8 @@ function drawMini() {
   const X = x => cx + (x - bx) * SC, Y = z => cy + (z - bz) * SC;
   mc.clearRect(0, 0, Wd, Wd);
   mc.save(); mc.beginPath(); mc.arc(cx, cy, Wd / 2 - 2, 0, 6.283); mc.clip();
+  // heading-up: turn the map so the way you're facing is always the top of the circle
+  mc.translate(cx, cy); mc.rotate(-Math.PI / 2 - Math.atan2(camDir.z, camDir.x)); mc.translate(-cx, -cy);
   if (world.channel) {
     mc.fillStyle = 'rgba(176,96,56,.75)'; mc.fillRect(0, 0, Wd, Wd);
     mc.fillStyle = 'rgba(30,90,110,.9)'; mc.beginPath();
@@ -2473,7 +2475,7 @@ function drawMini() {
   if (ghostMesh.visible) { mc.fillStyle = '#7fe9ff'; mc.beginPath(); mc.arc(X(ghostMesh.position.x), Y(ghostMesh.position.z), 5, 0, 6.283); mc.fill(); }
   const f = Core.qrot(boat.q, { x: 0, y: 0, z: -1 }), a = Math.atan2(f.z, f.x);
   mc.save(); mc.translate(cx, cy); mc.rotate(a); mc.fillStyle = '#ff4757'; mc.strokeStyle = '#fff'; mc.lineWidth = 2;
-  mc.beginPath(); mc.moveTo(11, 0); mc.lineTo(-7, -6); mc.lineTo(-4, 0); mc.lineTo(-7, 6); mc.closePath(); mc.fill(); mc.stroke(); mc.restore();
+  mc.beginPath(); mc.moveTo(15, 0); mc.lineTo(-9, -8); mc.lineTo(-5, 0); mc.lineTo(-9, 8); mc.closePath(); mc.fill(); mc.stroke(); mc.restore();
   mc.restore();
 }
 
@@ -2606,7 +2608,9 @@ async function signIn(name, pin) {
   if (!SECURE) return legacyLogin();
   // an old-style name can only be upgraded by someone who knows its PIN
   if (owner && isLegacyId(owner) && owner !== legacy) throw new Error(TAKEN);
-  const cred = { email: key + '@players.riptide-run.firebaseapp.com', password: 'riptide-' + pin + '-' + key, returnSecureToken: true };
+  // a racer the admin renamed still signs in to their original account: alias/{new name} points at it
+  let ak = key; try { const al = await api('alias/' + key); if (typeof al === 'string' && al) ak = al; } catch (e) {}
+  const cred = { email: ak + '@players.riptide-run.firebaseapp.com', password: 'riptide-' + pin + '-' + ak, returnSecureToken: true };
   let j;
   try { j = await authCall(IDT + 'signInWithPassword?key=' + FIREBASE_API_KEY, cred); }
   catch (e) {
@@ -2698,7 +2702,12 @@ async function pollAdmin() {
     const uid = me() && me().id;
     // each read on its own, so one blocked path can't stop the others (e.g. bans) from applying
     const get = p => api(p).catch(() => undefined);
-    const [c, a, rs, ban, msg, ex] = await Promise.all([get('cfg'), uid ? get('adm/' + uid) : null, uid ? get('rst/' + uid) : null, uid ? get('bans/' + uid) : null, uid ? get('msg/' + uid) : null, uid ? get('exc/' + uid) : null]);
+    const [c, a, rs, ban, msg, ex, rn] = await Promise.all([get('cfg'), uid ? get('adm/' + uid) : null, uid ? get('rst/' + uid) : null, uid ? get('bans/' + uid) : null, uid ? get('msg/' + uid) : null, uid ? get('exc/' + uid) : null, uid ? get('rn/' + uid) : null]);
+    // renamed by the admin
+    if (uid && rn && typeof rn === 'object' && typeof rn.name === 'string' && rn.name && rn.name !== me().name && +rn.t > (DATA.rnSeen || 0)) {
+      DATA.rnSeen = +rn.t; const old = me().name; DATA.player.name = rn.name.slice(0, 14); save(); refreshLabels(); if (LOBBY.code) api(lpath('p', uid, 'n'), 'PUT', DATA.player.name).catch(() => {});
+      notice('ACCOUNT', 'Your racer name was changed', `The admin renamed you from "${old}" to "${DATA.player.name}".\nSign in with your new name and the same PIN from now on.`);
+    }
     const before = JSON.stringify([CFG, ADM, EXC, BANNED, cash(), DATA.skin]);
     if (ex !== undefined) { const was = JSON.stringify(EXC); EXC = ex && typeof ex === 'object' ? ex : {}; if (uid && JSON.stringify(EXC) !== was) { if (fixEquipped()) applyMyLook(); const n = Object.values(EXC).reduce((k, o) => k + Object.keys(o || {}).length, 0); if (was !== '{}' || DATA.excSeen !== n) { if (n > (DATA.excSeen || 0)) notice('GIFT', '👑 You got an exclusive item!', 'The admin gave you something nobody can buy. Find it in the Garage.'); DATA.excSeen = n; save(); } } }
     if (c !== undefined) CFG = Object.assign({ msg: '', payMul: 1, feat: '', maint: false, ann: null }, c && typeof c === 'object' ? c : {});
@@ -2829,8 +2838,9 @@ function nameTag(n) {
   const w = Math.min(250, c.measureText(n).width + 30);
   c.fillStyle = 'rgba(6,22,34,.72)'; c.fillRect((256 - w) / 2, 10, w, 44);
   c.fillStyle = '#ffffff'; c.fillText(n, 128, 33);
-  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false }));
-  sp.scale.set(4, 1, 1); sp.position.y = 3.3; return sp;
+  // fixed on-screen size (sizeAttenuation off) so a boat right behind the camera doesn't get a giant label
+  const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true, depthWrite: false, sizeAttenuation: false, opacity: 0.9 }));
+  sp.scale.set(0.12, 0.03, 1); sp.position.y = 2.5; sp.renderOrder = 5; return sp;
 }
 function setPeer(pid, d, snap) {
   if (me() && pid === me().id) return;

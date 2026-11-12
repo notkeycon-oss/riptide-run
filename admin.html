@@ -141,7 +141,7 @@ tr.sus td{background:rgba(255,90,95,.1)}
 // Same database and key as riptide.html
 const DB = "https://riptide-run-default-rtdb.firebaseio.com";
 const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
-const RULES_MARK = 'rv5'; // bump together with database.rules.json
+const RULES_MARK = 'rv6'; // bump together with database.rules.json
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -267,6 +267,7 @@ const actionsHTML = scope => `
     <div class="box"><b>🎁 GIVE AN ITEM</b><div class="row"><select id="${scope}Cat">${Object.keys(CATALOG).map(c => `<option value="${c}">${CATNAME[c]}</option>`).join('')}</select><select id="${scope}Item"></select><button data-${scope}-item="1">GIVE</button></div></div>
     <div class="box"><b>🔓 UNLOCK EVERYTHING</b><div class="row"><button data-${scope}-all="1">GIVE ALL</button><button data-${scope}-all="0">TAKE BACK</button></div><p class="msg">Every paint, helmet, visor, flag and engine.</p></div>
     <div class="box"><b>🧹 REMOVE ADMIN GIFTS</b><button data-${scope}-despawn="1">REMOVE ALL ADMIN STUFF</button><p class="msg">Removes boosts, given money/mastery/items/unlocks and anything bought with given money. Keeps what was earned by playing.</p></div>
+    ${scope === 'one' ? `<div class="box"><b>✏ RENAME</b><div class="row"><input id="newName" maxlength="14" placeholder="New racer name" style="width:160px"><button data-one-rename="1">RENAME</button></div><p class="msg">Updates their profile and leaderboard times. They sign in with the new name and the same PIN.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box"><b>💬 MESSAGE / KICK</b><input id="oneMsg" maxlength="200" placeholder="Message or kick reason" style="width:100%"><div class="row" style="margin-top:6px"><button data-one-msg="1">SEND MESSAGE</button><button class="del" data-one-kick="1">KICK</button></div><p class="msg">Kick drops them out of their race or lobby to the menu.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box danger"><b>⛔ BAN</b><input id="banReason" maxlength="120" placeholder="Reason (shown to them)" style="width:100%"><div class="row" style="margin-top:6px"><select id="banLen"><option value="3600000">1 hour</option><option value="86400000">1 day</option><option value="604800000" selected>7 days</option><option value="2592000000">30 days</option><option value="0">Permanent</option></select><button class="del" data-one-ban="1">BAN</button><button data-one-unban="1">UNBAN</button></div></div>` : ''}
     <div class="box danger"><b>☠ RESET PROGRESS</b><button class="del" data-${scope}-reset="1">RESET PROGRESS</button><p class="msg">Wipes money, mastery, unlocks, medals and leaderboard times.</p></div>
@@ -330,6 +331,29 @@ function bind(scope, only) {
     }
     log(`Reset progress — ${scope === 'all' ? 'EVERYONE (' + list.length + ')' : pname(list[0])}`);
     if (scope === 'one') sel = null; await loadAll(); say(`Reset ${list.length} racer${list.length > 1 ? 's' : ''}.`);
+  });
+  q('rename').forEach(b => b.onclick = async () => {
+    const id = only[0], oldName = pname(id), nn = $('newName').value.trim().replace(/\s+/g, ' ');
+    if (!/^[A-Za-z0-9 _-]{2,14}$/.test(nn)) return say('Names are 2–14 letters, numbers, spaces, - or _.', false);
+    if (id.length < 20) return say("This is an old-style account — ask them to sign in once with the new version first, then rename.", false);
+    if (nn === oldName) return say('That is already their name.', false);
+    const key = s => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'), nk = key(nn), ok = key(oldName);
+    const owner = await db('names/' + nk);
+    if (owner && owner !== id) return say(`"${nn}" is already taken by another racer.`, false);
+    if (!confirm(`Rename ${oldName} to ${nn}?`)) return;
+    // their sign-in account is tied to the name they first signed up with: keep pointing at it
+    const emailKey = (await db('alias/' + ok)) || ok;
+    await db('names/' + nk, 'PUT', id); await db('alias/' + nk, 'PUT', emailKey);
+    if (ok !== nk) { if ((await db('names/' + ok)) === id) await db('names/' + ok, 'DELETE'); await db('alias/' + ok, 'DELETE'); }
+    await db(`players/${id}/name`, 'PUT', nn);
+    const lb = (await db('lb')) || {};
+    for (const run in lb) if (lb[run][id]) {
+      await db(`lb/${run}/${id}/n`, 'PUT', nn);
+      if (await db(`gh/${run}/${id}/n`)) await db(`gh/${run}/${id}/n`, 'PUT', nn);
+      const wr = await db(`wr/${run}/n`); if (wr === oldName) await db(`wr/${run}/n`, 'PUT', nn);
+    }
+    await db('rn/' + id, 'PUT', { name: nn, t: Date.now() });
+    log(`Renamed ${oldName} → ${nn}`); await loadAll(); say(`Renamed ${oldName} to ${nn}. They'll see it within a few seconds.`);
   });
   q('msg').forEach(b => b.onclick = async () => { const t = $('oneMsg').value.trim(); if (!t) return say('Type a message first.', false); await db('msg/' + only[0], 'PUT', { t: Date.now(), text: t }); log(`Messaged ${pname(only[0])}: "${t}"`); $('oneMsg').value = ''; say('Message sent to ' + pname(only[0]) + '.'); });
   q('kick').forEach(b => b.onclick = async () => { const t = $('oneMsg').value.trim(); await db('msg/' + only[0], 'PUT', { t: Date.now(), text: t || 'Kicked by an admin.', kick: true }); log(`Kicked ${pname(only[0])}${t ? ': "' + t + '"' : ''}`); say('Kicked ' + pname(only[0]) + '.'); });
