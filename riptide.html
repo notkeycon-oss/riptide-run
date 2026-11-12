@@ -923,9 +923,22 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
 // ================= save data =================
 const DEF_SET = { laps: 1, ghost: 'mine', splits: true, minimap: true, cam: 0, units: 'mph', volume: 2, quality: 2, shake: true, shadows: true };
+// each signed-in racer gets their own save slot on this device; the guest slot holds offline play
+const GUEST = 'riptide_run_v2', SLOT = id => 'rr_u_' + id;
+function readLS(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
+function writeLS(k, v) { try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); return true; } catch (e) { return false; } }
+function hasSlots() { try { for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i).startsWith('rr_u_')) return true; } catch (e) {} return false; }
 function loadData() {
-  let d = null;
-  try { d = JSON.parse(localStorage.getItem('riptide_run_v2') || 'null'); } catch (e) {}
+  let cur = ''; try { cur = localStorage.getItem('rr_cur') || ''; } catch (e) {}
+  let d = cur ? readLS(SLOT(cur)) : null;
+  if (!d) {
+    d = readLS(GUEST);
+    // older versions kept a single save that belonged to whoever was signed in: move it into that racer's slot
+    if (d && d.player && d.player.id) {
+      writeLS(SLOT(d.player.id), d); writeLS('rr_cur', d.player.id);
+      writeLS(GUEST, { settings: d.settings, sel: d.sel, maps: d.maps, prevName: d.player.name });
+    }
+  }
   if (!d) {
     d = { settings: {}, skin: 'classic', unlocked: { classic: true }, runs: {}, sel: 0 };
     try { const o = JSON.parse(localStorage.getItem('riptide_run_v1') || 'null'); if (o && o.best) d.runs['harbor:1'] = { best: o.best, splits: o.splits, ghost: o.ghost }; } catch (e) {}
@@ -946,9 +959,34 @@ function normData(d) {
 let DATA = loadData();
 const S = DATA.settings;
 const LOBBY = { code: null, racing: false, laps: 1 };
-function save() { try { localStorage.setItem('riptide_run_v2', JSON.stringify(DATA)); } catch (e) {
-  // storage full: drop ghosts and retry
-  try { for (const k in DATA.runs) delete DATA.runs[k].ghost; localStorage.setItem('riptide_run_v2', JSON.stringify(DATA)); } catch (e2) {} } }
+function save() {
+  const k = DATA.player && DATA.player.id ? SLOT(DATA.player.id) : GUEST;
+  writeLS('rr_cur', DATA.player && DATA.player.id ? DATA.player.id : '');
+  if (!writeLS(k, DATA)) { for (const r in DATA.runs) delete DATA.runs[r].ghost; writeLS(k, DATA); } // storage full: drop ghosts and retry
+}
+// switch the whole local save to another racer (or back to the guest save when player is null)
+function useAccount(player) {
+  const curId = DATA.player && DATA.player.id, newId = player && player.id;
+  if (curId === newId && player) { DATA.player = player; save(); return; }
+  save();
+  let d = newId ? readLS(SLOT(newId)) : readLS(GUEST);
+  if (!d && player) {
+    // upgrading from an old-style account with the same name: carry its save over
+    try { for (let i = 0; i < localStorage.length && !d; i++) { const k = localStorage.key(i); if (!k.startsWith('rr_u_') || k.length >= 25) continue; const o = readLS(k); if (o && o.player && String(o.player.name).toLowerCase() === String(player.name).toLowerCase()) d = o; } } catch (e) {}
+  }
+  if (!d && player) {
+    // first sign-in on this device: keep the progress made while playing as a guest (or under this name before)
+    const g = readLS(GUEST) || {};
+    const adopt = !curId && (!hasSlots() || String(g.prevName || '').toLowerCase() === String(player.name).toLowerCase());
+    if (adopt) { d = Object.assign({}, DATA); writeLS(GUEST, { settings: S, sel: DATA.sel, maps: DATA.maps }); }
+  }
+  d = d || { skin: 'classic', unlocked: { classic: true }, runs: {} };
+  d.settings = S; d.player = player || null; d.maps = DATA.maps; d.sel = DATA.sel; d.skipLogin = DATA.skipLogin;
+  if (!player) d.prevName = DATA.player ? DATA.player.name : d.prevName;
+  DATA = normData(d);
+  ADM = { speed: 1, cash: 0, xp: 0, all: false, ep: null }; BANNED = false;
+  save(); applyMyLook();
+}
 
 // ================= map meta (times, looks) =================
 const TIMES = {
@@ -2334,7 +2372,7 @@ async function authToken() {
   if (AUTH.token && Date.now() < AUTH.exp - 60000) return AUTH.token;
   if (!AUTH.busy) AUTH.busy = authCall(STS + FIREBASE_API_KEY, { grant_type: 'refresh_token', refresh_token: me().rt })
     .then(j => { takeAuth(j); if (j.refresh_token && DATA.player) { DATA.player.rt = j.refresh_token; save(); } return AUTH.token; })
-    .catch(e => { if (/TOKEN_EXPIRED|USER_DISABLED|USER_NOT_FOUND|INVALID_REFRESH_TOKEN/.test(e.message)) { DATA.player = null; save(); } return null; })
+    .catch(e => { if (/TOKEN_EXPIRED|USER_DISABLED|USER_NOT_FOUND|INVALID_REFRESH_TOKEN/.test(e.message)) useAccount(null); return null; })
     .finally(() => { AUTH.busy = null; });
   return AUTH.busy;
 }
@@ -2360,7 +2398,7 @@ async function signIn(name, pin) {
     const prof = await api('players/' + legacy);
     if (prof) mergeProfile(prof);
     clearMyLive();
-    DATA.player = { name, id: legacy }; save();
+    useAccount({ name, id: legacy });
     await pushProfile();
   };
   if (!SECURE) return legacyLogin();
@@ -2381,10 +2419,10 @@ async function signIn(name, pin) {
   }
   const uid = takeAuth(j);
   clearMyLive();
-  DATA.player = { name, id: uid, rt: j.refreshToken }; save();
+  useAccount({ name, id: uid, rt: j.refreshToken });
   if (owner !== uid) {
     try { await api('names/' + key, 'PUT', uid); }
-    catch (e) { DATA.player = null; AUTH.token = null; save(); throw new Error(/401/.test(e.message) ? "The server's database rules haven't been updated for the new accounts yet." : "Couldn't sign in. Try again."); }
+    catch (e) { AUTH.token = null; useAccount(null); throw new Error(/401/.test(e.message) ? "The server's database rules haven't been updated for the new accounts yet." : "Couldn't sign in. Try again."); }
   }
   const prof = await api('players/' + uid);
   if (prof) mergeProfile(prof);
@@ -2610,7 +2648,7 @@ function openLogin() {
 function closeLogin() { $('login').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMaps(); refreshLabels(); }
 $('playerChip').onclick = openLogin;
 $('loginSkip').onclick = () => { DATA.skipLogin = true; save(); closeLogin(); };
-$('logout').onclick = () => { clearMyLive(); DATA.player = null; AUTH.token = null; save(); closeLogin(); pollAdmin(); };
+$('logout').onclick = () => { clearMyLive(); AUTH.token = null; useAccount(null); closeLogin(); pollAdmin(); };
 $('loginGo').onclick = async () => {
   $('lerr').textContent = 'Signing in…'; $('loginGo').disabled = true;
   try { await signIn($('lname').value, $('lpin').value); $('lerr').textContent = ''; closeLogin(); NET.boards = {}; refreshBoards(); pollAdmin(); }
@@ -3256,7 +3294,7 @@ function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h
 addEventListener('resize', resize);
 applyQuality(false);
 loadMap(mapIdx); renderMaps(); refreshLabels();
-if (NET.on && SECURE && me() && !me().rt) { const n = me().name; DATA.player = null; save(); openLogin(); $('lname').value = n; $('lerr').textContent = 'Accounts got an upgrade — sign in once more with your PIN to keep your times.'; }
+if (NET.on && SECURE && me() && !me().rt) { const n = me().name; useAccount(null); openLogin(); $('lname').value = n; $('lerr').textContent = 'Accounts got an upgrade — sign in once more with your PIN to keep your times.'; }
 else if (NET.on) { if (!me() && !DATA.skipLogin) openLogin(); }
 if (NET.on) { refreshBoards(); pollAdmin(); }
 const UNIT = { mph: 2.237, kmh: 3.6, kn: 1.944 };
