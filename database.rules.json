@@ -2,7 +2,7 @@
   "rules": {
     ".read": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
     ".write": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
-    "rv6": {
+    "rv7": {
       ".read": true
     },
     "names": {
@@ -21,11 +21,26 @@
       ".read": true,
       "$run": {
         ".indexOn": [
-          "t"
+          "t",
+          "e"
         ],
         "$pid": {
           ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid",
           ".validate": "newData.hasChildren(['n','t']) && newData.child('t').isNumber() && newData.child('t').val() > 20 && newData.child('n').isString() && newData.child('n').val().length <= 16"
+        }
+      }
+    },
+    "lbt": {
+      ".read": true,
+      "$run": {
+        "$tier": {
+          ".indexOn": [
+            "t"
+          ],
+          "$pid": {
+            ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid",
+            ".validate": "newData.hasChildren(['n','t']) && newData.child('t').isNumber() && newData.child('t').val() > 20 && newData.child('n').isString() && newData.child('n').val().length <= 16"
+          }
         }
       }
     },
@@ -41,6 +56,16 @@
       "$run": {
         "$pid": {
           ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid"
+        }
+      }
+    },
+    "ght": {
+      ".read": true,
+      "$run": {
+        "$tier": {
+          "$pid": {
+            ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid"
+          }
         }
       }
     },

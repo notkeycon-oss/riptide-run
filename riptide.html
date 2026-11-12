@@ -2228,7 +2228,7 @@ function finishRace() {
   const online = NET.on && (!meta.custom || meta.code) && !adminRun && !offline();
   $('frank').textContent = !online ? '' : me() ? 'Posting to the online leaderboard…' : 'Sign in on the main menu to post your times online.';
   if (online && me()) submitRun(key, t, rec.length < 6000 ? rec : null, isPB ? splits.slice() : null).then(rank => {
-    $('frank').textContent = rank == null ? "Couldn't reach the leaderboard. Your time is saved on this computer." : rank ? `🌐 World rank #${rank}` : '🌐 Posted — not in the top 10 yet';
+    $('frank').textContent = rank == null ? "Couldn't reach the leaderboard. Your time is saved on this computer." : (rank.rank ? `🌐 World rank #${rank.rank}` : '🌐 Posted — not in the overall top 10 yet') + (rank.trank ? ` · #${rank.trank} on ${Core.TIERS[rank.eng].name} engines` : '');
     const wb = worldBest(key); if (!meta.custom) $('frec').textContent = fmt(Math.min(tg.rec, r.best, wb ? wb.t : Infinity));
     refreshLabels(); renderMaps();
   });
@@ -2775,12 +2775,37 @@ async function submitRun(key, t, ghost, sp) {
       // keep every racer's best ghost so anyone can race it from the leaderboard
       if (ghost) api(`gh/${key}/${me().id}`, 'PUT', { n: me().name, t: tt, e: eng, g: ghost, sp: sp || null }).catch(() => {});
     }
+    // per-engine-tier board: your best time with this engine
+    let trank = 0;
+    try {
+      const curT = await api(`lbt/${key}/t${eng}/${me().id}`);
+      if (!curT || tt < curT.t) {
+        await api(`lbt/${key}/t${eng}/${me().id}`, 'PUT', { n: me().name, t: tt, s: DATA.skin, e: eng, d: Date.now() });
+        if (ghost) api(`ght/${key}/t${eng}/${me().id}`, 'PUT', { n: me().name, t: tt, e: eng, g: ghost, sp: sp || null }).catch(() => {});
+      }
+      const tl = await fetchTierBoard(key, eng); trank = tl ? tl.findIndex(v => v.id === me().id) + 1 : 0;
+    } catch (e) {}
     const wr = await api(`wr/${key}/t`);
     if (ghost && (typeof wr !== 'number' || tt < wr)) await api('wr/' + key, 'PUT', { n: me().name, t: tt, g: ghost });
     await pushProfile();
     const list = await fetchBoard(key, true);
-    return list ? list.findIndex(v => v.id === me().id) + 1 : 0;
+    return { rank: list ? list.findIndex(v => v.id === me().id) + 1 : 0, trank, eng };
   } catch (e) { return null; }
+}
+// one engine tier's leaderboard: per-tier bests, plus older overall entries that were set with that engine
+async function fetchTierBoard(key, tier) {
+  const [a, b, top] = await Promise.all([
+    api(`lbt/${key}/t${tier}`, 'GET', undefined, '?orderBy=%22t%22&limitToFirst=20').catch(() => null),
+    api(`lb/${key}`, 'GET', undefined, `?orderBy=%22e%22&equalTo=${tier}`).catch(() => null),
+    fetchBoard(key, false)]);
+  if (!a && !b && !top) return null;
+  const best = new Map();
+  const take = (id, v) => { if (!v || typeof v.t !== 'number') return; const cur = best.get(id); if (!cur || v.t < cur.t) best.set(id, { id, n: v.n, t: v.t, s: v.s, e: tier }); };
+  for (const id in (a || {})) take(id, a[id]);
+  for (const id in (b || {})) take(id, b[id]);
+  for (const v of (top || [])) if ((v.e | 0) === tier) take(v.id, v);
+  const seen = new Set();
+  return [...best.values()].sort((x, y) => x.t - y.t).filter(v => { const k = String(v.n || '').toLowerCase(); if (seen.has(k)) return false; seen.add(k); return true; }).slice(0, 10);
 }
 // ---- live boats ----
 function joinLive(mapId) {
@@ -2907,20 +2932,24 @@ $('loginGo').onclick = async () => {
   catch (e) { $('lerr').textContent = e.message || 'Sign-in failed.'; }
   finally { $('loginGo').disabled = false; }
 };
-let boardMap = 0;
+let boardMap = 0, boardTier = 'all';
 const tierChip = e => `<span class="tier" style="background:${hexc(ENG_COL[e | 0])}" title="${Core.TIERS[e | 0].name} engine">T${(e | 0) + 1}</span>`;
 async function renderBoard() {
   const m = MAPS[boardMap], key = runKey(m);
   $('bTabs').innerHTML = MAPS.map((x, i) => x.custom && !x.code ? '' : `<button class="chip" data-i="${i}" style="${i === boardMap ? 'background:var(--accent);color:#14202a' : ''}">${esc(x.name)}</button>`).join('')
-    + (isLoop(m) ? `<span style="width:100%"></span>` + [1, 2, 3, 5].map(L => `<button class="chip" data-l="${L}" style="font-size:15px;${S.laps === L ? 'background:rgba(255,255,255,.3)' : ''}">${L} LAP${L > 1 ? 'S' : ''}</button>`).join('') : '');
+    + (isLoop(m) ? `<span style="width:100%"></span>` + [1, 2, 3, 5].map(L => `<button class="chip" data-l="${L}" style="font-size:15px;${S.laps === L ? 'background:rgba(255,255,255,.3)' : ''}">${L} LAP${L > 1 ? 'S' : ''}</button>`).join('') : '')
+    + `<span style="width:100%"></span><button class="chip" data-t="all" style="font-size:15px;${boardTier === 'all' ? 'background:var(--accent);color:#14202a' : ''}">ALL ENGINES</button>`
+    + Core.TIERS.map((T, k) => `<button class="chip" data-t="${k}" style="font-size:15px;border-color:${hexc(ENG_COL[k])};${boardTier === k ? `background:${hexc(ENG_COL[k])};color:#14202a` : ''}">T${k + 1} ${T.name}</button>`).join('');
   $('bTabs').querySelectorAll('button[data-i]').forEach(b => b.onclick = () => { boardMap = +b.dataset.i; renderBoard(); });
   $('bTabs').querySelectorAll('button[data-l]').forEach(b => b.onclick = () => { S.laps = +b.dataset.l; save(); refreshLabels(); renderMaps(); renderBoard(); });
-  $('bSub').textContent = (lapsFor(m) > 1 ? `${lapsFor(m)} laps · ` : '') + 'Top 10 — loading…';
-  const list = await fetchBoard(key, true);
-  if (boardMap !== MAPS.indexOf(m) || runKey(m) !== key) return;
+  $('bTabs').querySelectorAll('button[data-t]').forEach(b => b.onclick = () => { boardTier = b.dataset.t === 'all' ? 'all' : +b.dataset.t; renderBoard(); });
+  const tier = boardTier, tierTxt = tier === 'all' ? '' : `${Core.TIERS[tier].name} engines · `;
+  $('bSub').textContent = (lapsFor(m) > 1 ? `${lapsFor(m)} laps · ` : '') + tierTxt + 'Top 10 — loading…';
+  const list = tier === 'all' ? await fetchBoard(key, true) : await fetchTierBoard(key, tier);
+  if (boardMap !== MAPS.indexOf(m) || runKey(m) !== key || boardTier !== tier) return;
   const hex = id => { const s = SKINS.find(k => k.id === id) || SKINS[0]; return hexc(s.hull); };
-  $('bSub').textContent = (lapsFor(m) > 1 ? `${lapsFor(m)} laps · ` : '') + (list ? (list.length ? 'Top 10 · tap 👻 to race that run\'s ghost' : 'No times yet — be the first!') : "Couldn't reach the leaderboard.");
-  const mine = DATA.runs[key];
+  $('bSub').textContent = (lapsFor(m) > 1 ? `${lapsFor(m)} laps · ` : '') + tierTxt + (list ? (list.length ? 'Top 10 · tap 👻 to race that run\'s ghost' : tier === 'all' ? 'No times yet — be the first!' : `No ${Core.TIERS[tier].name} times yet — be the first!`) : "Couldn't reach the leaderboard.");
+  const mine0 = DATA.runs[key], mine = mine0 && (tier === 'all' || (mine0.e | 0) === tier) ? mine0 : null;
   const mineRow = mine && mine.best && mine.ghost ? `<div class="me"><span class="rk">★</span><span class="dot" style="background:${hex(DATA.skin)}"></span><span class="nm2">Your best (this device)</span><span>${fmt(mine.best)}</span><button class="gbtn" data-mine="1">👻 RACE</button></div>` : '';
   $('bList').innerHTML = (list || []).map((v, i) => `<div class="${me() && v.id === me().id ? 'me' : ''}"><span class="rk">${i + 1}</span><span class="dot" style="background:${hex(v.s)}"></span><span class="nm2">${esc(v.n)}</span>${tierChip(v.e)}<span>${fmt(v.t)}</span><button class="gbtn" data-id="${esc(v.id)}">👻 RACE</button></div>`).join('') + mineRow;
   $('bList').querySelectorAll('.gbtn').forEach(btn => btn.onclick = async () => {
@@ -2928,7 +2957,9 @@ async function renderBoard() {
     btn.disabled = true; btn.textContent = 'LOADING…';
     const v = list.find(x => x.id === btn.dataset.id);
     let gh = null;
-    try { gh = await api(`gh/${key}/${v.id}`); } catch (e) {}
+    // the ghost for this exact run: per-tier ghost first, then their overall-best ghost if it was set with this engine
+    if (tier !== 'all') { try { gh = await api(`ght/${key}/t${tier}/${v.id}`); } catch (e) {} }
+    if (!gh || !Array.isArray(gh.g)) { try { const g2 = await api(`gh/${key}/${v.id}`); if (g2 && (tier === 'all' || ((g2.e | 0) === tier && Math.abs(g2.t - v.t) < 0.02))) gh = g2; } catch (e) {} }
     if (!gh || !Array.isArray(gh.g)) { try { const w = await api('wr/' + key); if (w && w.n === v.n && Array.isArray(w.g)) gh = { n: w.n, t: w.t, g: w.g }; } catch (e) {} }
     if (!gh || !Array.isArray(gh.g) || !gh.g.length) { btn.textContent = 'NO GHOST'; return; }
     raceGhost(boardMap, { g: gh.g, n: gh.n || v.n, t: gh.t || v.t, e: gh.e | 0, sp: gh.sp || null, key });
