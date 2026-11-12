@@ -2677,7 +2677,7 @@ async function submitRun(key, t, ghost, sp) {
 function joinLive(mapId) {
   if (!NET.on || NET.liveMap === mapId) return;
   leaveLive();
-  NET.liveMap = mapId; NET.first = true; NET.joinedAt = performance.now();
+  NET.liveMap = mapId; NET.first = true; NET.joinedAt = performance.now(); NET.liveEvt = 0; NET.liveSig = {};
   if (!window.EventSource) return;
   try {
     const es = new EventSource(`${DB}/live/${mapId}.json`);
@@ -2688,6 +2688,18 @@ function joinLive(mapId) {
     NET.es = es;
   } catch (e) {}
 }
+// same backup as lobbies: if the live stream is blocked, fetch the other boats on this map directly
+setInterval(async () => {
+  if (!NET.on || !NET.liveMap || LOBBY.code || NET.livePolling || performance.now() - (NET.liveEvt || 0) < 3000) return;
+  if (!(state === 'racing' || state === 'countdown' || state === 'finished')) return;
+  NET.livePolling = true; const map = NET.liveMap;
+  try {
+    const d = await api('live/' + map);
+    if (NET.liveMap !== map) return;
+    for (const pid in (d || {})) { const sig = JSON.stringify(d[pid]); if (NET.liveSig[pid] !== sig) { NET.liveSig[pid] = sig; setPeer(pid, d[pid], false); } }
+    for (const pid in NET.peers) if (!d || !d[pid]) dropPeer(pid);
+  } catch (e) {} finally { NET.livePolling = false; }
+}, 1000);
 function clearMyLive() { if (NET.on && NET.liveMap && me()) api(`live/${NET.liveMap}/${me().id}`, 'DELETE').catch(() => {}); }
 function leaveLive() {
   if (NET.es) { NET.es.close(); NET.es = null; }
@@ -2698,6 +2710,7 @@ function leaveLive() {
 function onLive(ev) {
   let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
   if (!m || typeof m.path !== 'string') return;
+  NET.liveEvt = performance.now();
   const snap = NET.first; NET.first = false;
   const parts = m.path.split('/').filter(Boolean);
   if (!parts.length) {
@@ -2879,7 +2892,7 @@ $('lbJoin').onclick = async () => {
 };
 function enterLobby(code) {
   leaveLive();
-  Object.assign(LOBBY, { code, doc: null, round: 0, racing: false, out: false, fin: null, first: true });
+  Object.assign(LOBBY, { code, doc: null, round: 0, racing: false, out: false, fin: null, first: true, lastEvt: 0, pollT: 0, polling: false, xsig: {} });
   try {
     const es = new EventSource(`${DB}/lobbies/${code}.json`);
     const h = ev => onLobbyEvent(ev);
@@ -2889,7 +2902,27 @@ function enterLobby(code) {
     LOBBY.es = es;
   } catch (e) {}
   openLobbyPanel();
+  pollLobby(true);
 }
+// Backup for networks that block or buffer the live stream (school/office filters, some proxies):
+// whenever the stream has been quiet for a few seconds, fetch the whole lobby directly instead.
+async function pollLobby(force) {
+  if (!LOBBY.code || LOBBY.polling) return;
+  if (!force && LOBBY.doc && performance.now() - LOBBY.lastEvt < 2500) return;
+  LOBBY.polling = true;
+  const code = LOBBY.code;
+  try {
+    const d = await api('lobbies/' + code);
+    if (LOBBY.code !== code) return;
+    LOBBY.doc = d && typeof d === 'object' ? d : null;
+    const xs = (LOBBY.doc && LOBBY.doc.x) || {};
+    for (const id in xs) { const x = xs[id], sig = JSON.stringify(x); if (x && x.rn === LOBBY.round && LOBBY.xsig[id] !== sig) { LOBBY.xsig[id] = sig; setPeer(id, x, false); } }
+    for (const id in NET.peers) if (!xs[id]) dropPeer(id);
+    lobbyChanged();
+  } catch (e) {} finally { LOBBY.polling = false; }
+}
+// runs on its own timer so it keeps going at low frame rates or in a background tab
+setInterval(() => { if (!LOBBY.code) return; const now = performance.now(); if (now - (LOBBY.lastPoll || 0) >= (LOBBY.racing ? 300 : 1000)) { LOBBY.lastPoll = now; pollLobby(); } }, 100);
 // keep a local mirror of the lobby document from put/patch events
 function setAt(root, parts, val) {
   let o = root;
@@ -2899,6 +2932,7 @@ function setAt(root, parts, val) {
 function onLobbyEvent(ev) {
   let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
   if (!m || typeof m.path !== 'string') return;
+  LOBBY.lastEvt = performance.now();
   const parts = m.path.split('/').filter(Boolean);
   const snap = LOBBY.first; LOBBY.first = false;
   if (ev.type === 'put' && !parts.length) LOBBY.doc = m.data && typeof m.data === 'object' ? m.data : null;
@@ -2952,8 +2986,9 @@ addEventListener('pagehide', () => { if (LOBBY.code && me()) { api(lpath('p', my
 const isHost = () => LOBBY.doc && LOBBY.doc.h === myId();
 function lobbyMapIdx(d) { if (d.m === 'custom' && d.cd) return installCustom(d.cd, d.cn || 'Custom map', null, true); const i = MAPS.findIndex(m => m.id === d.m && !m.custom); return i < 0 ? 0 : i; }
 function renderRoom() {
-  const d = LOBBY.doc; if (!d || !d.p) return;
-  $('lrCode').textContent = LOBBY.code;
+  const d = LOBBY.doc;
+  $('lrCode').textContent = LOBBY.code || '----';
+  if (!d || !d.p) { $('lrPlayers').innerHTML = '<div><span class="nm2" style="color:var(--dim)">Connecting to the lobby…</span></div>'; $('lrHost').style.display = 'none'; $('lrInfo').textContent = ''; $('lrStart').classList.add('hidden'); $('lrReady').classList.add('hidden'); return; }
   const ids = Object.keys(d.p).sort((a, b) => (d.p[a].j || 0) - (d.p[b].j || 0));
   $('lrPlayers').innerHTML = ids.map(id => { const p = d.p[id], L = unpackLook(p.l); return `<div><span class="dot" style="background:${hexc((SKINS.find(s => s.id === L.skin) || SKINS[0]).hull)}"></span><span class="nm2">${id === d.h ? '👑 ' : ''}${esc(p.n)}${id === myId() ? ' (you)' : ''}</span>${tierChip(L.eng)}<span class="rd ${p.r || id === d.h ? 'ok' : ''}">${id === d.h ? 'HOST' : p.r ? 'READY' : 'NOT READY'}</span></div>`; }).join('');
   const host = isHost(), mi = MAPS.findIndex(m => m.custom ? d.m === 'custom' : m.id === d.m), mm = d.m === 'custom' ? { name: d.cn || 'Custom map', mode: d.cd && d.cd.ty === 'circuit' ? 'CIRCUIT' : 'SPRINT' } : MAPS[mi] || MAPS[0];
@@ -3133,7 +3168,7 @@ function sendLobbyX(force, dnf) {
   if (!LOBBY.code || !me() || (LOBBY.sending && !force)) return;
   const b = boat, q2 = x => Math.round(x * 100) / 100, q3 = x => Math.round(x * 1000) / 1000;
   LOBBY.sending = true;
-  api(lpath('x', myId()), 'PUT', { rn: LOBBY.round, n: me().name, l: packLook(myLook()), p: [q2(b.pos.x), q2(b.pos.y), q2(b.pos.z), q3(b.q.x), q3(b.q.y), q3(b.q.z), q3(b.q.w)], v: [q2(b.vel.x), q2(b.vel.z)], pr: Math.round(lobbyProgress() * 1000) / 1000, f: LOBBY.fin, o: LOBBY.out, dnf: !!dnf || undefined })
+  api(lpath('x', myId()), 'PUT', { rn: LOBBY.round, n: me().name, l: packLook(myLook()), p: [q2(b.pos.x), q2(b.pos.y), q2(b.pos.z), q3(b.q.x), q3(b.q.y), q3(b.q.z), q3(b.q.w)], v: [q2(b.vel.x), q2(b.vel.z)], pr: Math.round(lobbyProgress() * 1000) / 1000, k: (LOBBY.k = (LOBBY.k || 0) + 1) % 100000, f: LOBBY.fin, o: LOBBY.out, dnf: !!dnf || undefined })
     .catch(() => {}).finally(() => { LOBBY.sending = false; });
 }
 function lobbyTick(dt) {
