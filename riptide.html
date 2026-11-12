@@ -908,7 +908,7 @@ if (typeof module !== 'undefined') module.exports = Core;
 const ONLINE_DB = "https://riptide-run-default-rtdb.firebaseio.com";
 // Firebase "Web API key" (Project settings → General → Your apps). With it set, racers get real
 // Firebase accounts behind their name + PIN, so the database rules can make sure people only change their own data.
-const FIREBASE_API_KEY = "";
+const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
 if (!window.THREE) { document.getElementById('err').style.display = 'flex'; return; }
 const $ = id => document.getElementById(id);
 const fmt = s => { if (s == null || !isFinite(s)) return '—'; const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2); };
@@ -2327,15 +2327,16 @@ async function signIn(name, pin) {
   let owner;
   try { owner = await api('names/' + key); } catch (e) { throw new Error("Couldn't reach the online server. Check your connection, or play offline."); }
   const TAKEN = 'That name is taken — or the PIN is wrong.';
-  if (!SECURE) {
+  const legacyLogin = async () => {
     if (owner && owner !== legacy) throw new Error(TAKEN);
     if (!owner) await api('names/' + key, 'PUT', legacy);
     const prof = await api('players/' + legacy);
     if (prof) mergeProfile(prof);
     clearMyLive();
     DATA.player = { name, id: legacy }; save();
-    await pushProfile(); return;
-  }
+    await pushProfile();
+  };
+  if (!SECURE) return legacyLogin();
   // an old-style name can only be upgraded by someone who knows its PIN
   if (owner && isLegacyId(owner) && owner !== legacy) throw new Error(TAKEN);
   const cred = { email: key + '@players.riptide-run.firebaseapp.com', password: 'riptide-' + pin + '-' + key, returnSecureToken: true };
@@ -2345,9 +2346,11 @@ async function signIn(name, pin) {
     if (e.message === 'NETWORK') throw new Error("Couldn't reach the online server. Check your connection, or play offline.");
     if (/TOO_MANY_ATTEMPTS/.test(e.message)) throw new Error('Too many tries — wait a few minutes.');
     if (/USER_DISABLED/.test(e.message)) throw new Error('This racer has been banned.');
+    const off = m => /OPERATION_NOT_ALLOWED|CONFIGURATION_NOT_FOUND/.test(m);
+    if (off(e.message) && (!owner || isLegacyId(owner))) return legacyLogin();
     if (owner && !isLegacyId(owner)) throw new Error(TAKEN);
     try { j = await authCall(IDT + 'signUp?key=' + FIREBASE_API_KEY, cred); }
-    catch (e2) { throw new Error(/EMAIL_EXISTS/.test(e2.message) ? TAKEN : /OPERATION_NOT_ALLOWED/.test(e2.message) ? 'Online accounts are switched off on the server.' : "Couldn't sign in. Try again."); }
+    catch (e2) { if (off(e2.message)) return legacyLogin(); throw new Error(/EMAIL_EXISTS/.test(e2.message) ? TAKEN : "Couldn't sign in. Try again."); }
   }
   const uid = takeAuth(j);
   clearMyLive();
