@@ -141,7 +141,7 @@ tr.sus td{background:rgba(255,90,95,.1)}
 // Same database and key as riptide.html
 const DB = "https://riptide-run-default-rtdb.firebaseio.com";
 const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
-const RULES_MARK = 'rv4'; // bump together with database.rules.json
+const RULES_MARK = 'rv5'; // bump together with database.rules.json
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -211,6 +211,10 @@ const CATALOG = {
   flag: [['wave', 'Big Wave'], ['skull', 'Skull & Bones'], ['bolt', 'Lightning'], ['star', 'Lone Star'], ['flame', 'Hot Rod Flames'], ['champ', "Champion's Gold"]],
   eng: [[1, 'T2 Sport'], [2, 'T3 Race'], [3, 'T4 Pro'], [4, 'T5 Riptide']],
 };
+// admin-exclusive items: never for sale in the game, only given from here (kept in exc/{uid}, separate from gifts)
+const EXCL = [['paint', 'x_aurora', 'Aurora Prism', 'color-shifting paint + underglow'], ['paint', 'x_obsidian', 'Obsidian Ember', 'black paint, pulsing ember glow'], ['paint', 'x_gold24', '24K Gold', 'mirror gold + golden underglow'], ['paint', 'x_frost', 'Frostbite', 'ice paint, pulsing frost glow'],
+  ['helmet', 'x_halo', 'Halo', 'floating glowing halo'], ['helmet', 'x_blaze', 'Blaze Crest', 'flaming crest'], ['visor', 'x_prism', 'Prism Shift', 'color-cycling visor'], ['flag', 'x_staff', 'Staff Crest', 'purple & gold STAFF flag'], ['flag', 'x_phoenix', 'Phoenix', 'fiery phoenix flag']];
+let EXCD = {};
 const CATNAME = { paint: 'Paint', helmet: 'Helmet', visor: 'Visor', flag: 'Flag', eng: 'Engine' };
 const itemName = (cat, id) => ((CATALOG[cat] || []).find(x => String(x[0]) === String(id)) || [id, id])[1];
 const xpNeed = L => 250 + 100 * L, MAXXP = Array.from({ length: 29 }, (_, i) => xpNeed(i + 1)).reduce((a, b) => a + b, 0);
@@ -228,8 +232,8 @@ let P = {}, ADMD = {}, BANS = {}, sel = null;
 const isOn = p => p && p.on && Date.now() - (p.on.t || 0) < 90000;
 const banOn = b => !!b && (b === true || !b.until || b.until > Date.now());
 async function loadAll(auto) {
-  const [p, a, b] = await Promise.all([db('players'), db('adm'), db('bans')]);
-  P = p || {}; ADMD = a || {}; BANS = b || {};
+  const [p, a, b, x] = await Promise.all([db('players'), db('adm'), db('bans'), db('exc').catch(() => null)]);
+  P = p || {}; ADMD = a || {}; BANS = b || {}; EXCD = x || {};
   loadStats(); renderPlayers(); if (auto) return; renderAll(); if (sel) renderCard();
 }
 async function loadStats() {
@@ -239,12 +243,13 @@ async function loadStats() {
   $('stats').innerHTML = [['ONLINE NOW', online], ['RACERS', Object.keys(P).length], ['ACTIVE THIS WEEK', active], ['OPEN LOBBIES', lobbies], ['PUBLISHED MAPS', maps], ['BANNED', Object.values(BANS).filter(banOn).length]]
     .map(([l, v]) => `<div class="stat"><small>${l}</small><b>${v}</b></div>`).join('');
 }
-const giftTxt = a => !a ? '—' : [a.speed && a.speed !== 1 ? '⚡×' + a.speed : '', a.cash ? money(a.cash) : '', a.xp ? '+' + a.xp + ' XP' : '', a.all ? 'ALL UNLOCKED' : '', a.items ? Object.values(a.items).reduce((n, c) => n + Object.keys(c).length, 0) + ' items' : ''].filter(Boolean).join(' · ') || '—';
+const giftTxt0 = a => !a ? '—' : [a.speed && a.speed !== 1 ? '⚡×' + a.speed : '', a.cash ? money(a.cash) : '', a.xp ? '+' + a.xp + ' XP' : '', a.all ? 'ALL UNLOCKED' : '', a.items ? Object.values(a.items).reduce((n, c) => n + Object.keys(c).length, 0) + ' items' : ''].filter(Boolean).join(' · ') || '—';
+const giftTxt = (a, id) => { const n = id && EXCD[id] ? Object.values(EXCD[id]).reduce((k, o) => k + Object.keys(o || {}).length, 0) : 0; const t = giftTxt0(a); return n ? (t === '—' ? '' : t + ' · ') + '👑' + n : t; };
 function renderPlayers() {
   const q = $('search').value.trim().toLowerCase(), oo = $('onlyOnline').checked;
   const ids = Object.keys(P).filter(id => (!q || String(P[id].name || '').toLowerCase().includes(q)) && (!oo || isOn(P[id]))).sort((a, b) => (isOn(P[b]) - isOn(P[a])) || ((P[b].seen || 0) - (P[a].seen || 0)));
   $('pBody').innerHTML = ids.map(id => { const p = P[id], e = p.econ || {}; return `<tr data-id="${esc(id)}" class="${id === sel ? 'sel' : ''}"><td>${isOn(p) ? '<span class="dot" title="online now"></span>' : ''}${esc(p.name || '?')} ${banOn(BANS[id]) ? '<span class="tag" style="background:var(--bad)">BANNED</span>' : ''}${id.length < 20 ? ' <span class="tag">OLD</span>' : ''}</td>
-    <td>${levelOf(+e.xp || 0)}</td><td>${money((e.earned || 0) - (e.spent || 0))}</td><td>T${(e.engine | 0) + 1}</td><td>${giftTxt(ADMD[id])}</td><td>${isOn(p) ? '<b style="color:var(--good)">now</b> · ' + esc(p.on.s || '') : p.seen ? new Date(p.seen).toLocaleDateString() : '—'}</td></tr>`; }).join('') || '<tr><td colspan="6" class="msg">No racers match.</td></tr>';
+    <td>${levelOf(+e.xp || 0)}</td><td>${money((e.earned || 0) - (e.spent || 0))}</td><td>T${(e.engine | 0) + 1}</td><td>${giftTxt(ADMD[id], id)}</td><td>${isOn(p) ? '<b style="color:var(--good)">now</b> · ' + esc(p.on.s || '') : p.seen ? new Date(p.seen).toLocaleDateString() : '—'}</td></tr>`; }).join('') || '<tr><td colspan="6" class="msg">No racers match.</td></tr>';
   document.querySelectorAll('#pBody tr[data-id]').forEach(r => r.onclick = () => { sel = r.dataset.id; renderPlayers(); renderCard(); });
 }
 $('search').oninput = renderPlayers; $('onlyOnline').onchange = renderPlayers; $('reloadP').onclick = loadAll;
@@ -281,9 +286,17 @@ function renderCard() {
         <span>Look</span><span>${esc(p.skin || 'classic')} paint · ${esc(L.helmet || 'open')} helmet · ${esc(L.flag || '—')} flag</span>
         <span>Admin gifts</span><span>${giftTxt(a)}</span></div></div>
       <div class="box"><b>BEST TIMES</b><div class="kv">${runs.map(([k, r]) => `<span>${esc(k.replace(':', ' · ') + ' lap')}</span><span>${fmt(r.best)} ${'★'.repeat(r.medal || 0)}</span>`).join('') || '<span class="msg">No races yet</span>'}</div></div>
+      <div class="box" style="border:1px solid rgba(255,155,210,.4)"><b>👑 EXCLUSIVES</b><p class="msg" style="margin:0 0 6px">Only you can give these. "Remove admin gifts" doesn't touch them.</p>
+        ${EXCL.map(([c, k, n, d]) => { const has = !!(EXCD[sel] && EXCD[sel][c] && EXCD[sel][c][k]); return `<div class="row" style="justify-content:space-between;margin:3px 0"><span>${esc(n)} <small class="msg">${esc(CATNAME[c].toLowerCase())} · ${esc(d)}</small></span><button data-exc="${c}|${k}" class="${has ? 'on' : ''}">${has ? 'GIVEN ✓ — TAKE BACK' : 'GIVE'}</button></div>`; }).join('')}</div>
       <div class="box"><b>OWNS (BOUGHT/EARNED)</b><p class="msg" style="margin:0">${owned.map(esc).join(', ') || 'Nothing bought yet'}</p>${a && a.items ? `<b style="margin-top:8px">GIVEN ITEMS</b><div class="row">${Object.entries(a.items).flatMap(([c, o]) => Object.keys(o).map(k => `<button data-take="${c}|${esc(k)}" title="take back">${esc(itemName(c, k))} ✕</button>`)).join('')}</div>` : ''}</div>
     </div>` + actionsHTML('one');
   bind('one', [sel]);
+  document.querySelectorAll('[data-exc]').forEach(btn => btn.onclick = async () => {
+    const [c, k] = btn.dataset.exc.split('|'), n = (EXCL.find(e => e[1] === k) || [])[2], has = !!(EXCD[sel] && EXCD[sel][c] && EXCD[sel][c][k]);
+    if (has) { await db(`exc/${sel}/${c}/${k}`, 'DELETE'); log(`Took exclusive "${n}" from ${pname(sel)}`); }
+    else { await db(`exc/${sel}/${c}/${k}`, 'PUT', true); log(`Gave exclusive "${n}" to ${pname(sel)}`); }
+    await loadAll(); say(`${has ? 'Took back' : 'Gave'} ${n} ${has ? 'from' : 'to'} ${pname(sel)}.`);
+  });
   document.querySelectorAll('[data-take]').forEach(btn => btn.onclick = async () => { const [c, k] = btn.dataset.take.split('|'); const items = JSON.parse(JSON.stringify(ADMD[sel].items || {})); delete items[c][k]; if (!Object.keys(items[c]).length) delete items[c]; await gift(sel, { items: Object.keys(items).length ? items : null }); log(`Took back ${itemName(c, k)} from ${pname(sel)}`); loadAll(); });
 }
 function renderAll() { $('allCard').innerHTML = `<p class="msg" style="margin-top:0">Applies to all ${Object.keys(P).length} racers.</p>` + actionsHTML('all'); bind('all', null); }

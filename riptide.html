@@ -79,7 +79,9 @@ button.alt{margin-top:10px;font-size:16px;background:none;border:none;color:var(
 #garage .gcard .gfoot{position:sticky;bottom:-18px;margin:8px -16px -18px;padding:8px 16px 14px;background:linear-gradient(transparent,rgba(6,22,34,.95) 35%)}
 #garage .gcard button.go{margin-top:4px;width:100%}
 #garage #skins{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
-#garage .skin{min-width:0}#garage .skin b{overflow-wrap:anywhere}
+#garage .skin{min-width:0}
+.skin.excl{border-color:rgba(255,155,210,.35);background:linear-gradient(135deg,rgba(176,92,255,.14),rgba(255,61,154,.08))}
+.skin.excl.sel{border-color:#ff9bd2}#garage .skin b{overflow-wrap:normal;word-break:normal;font-size:16px;line-height:1.1}#garage .skin .price{font-size:15px}
 @media (max-width:760px){#garage{align-items:flex-end;justify-content:stretch;background:linear-gradient(transparent 45%,rgba(4,18,28,.6))}
   #garage .gcard{width:100%;height:54vh;border-radius:18px 18px 0 0;padding:10px 10px 14px}
   #garage .gcard h2{display:none}#garage #gTop{margin:0}#garage #gTop .pill{font-size:13px;padding:3px 9px}
@@ -1000,7 +1002,7 @@ function useAccount(player) {
   d.settings = S; d.player = player || null; d.maps = DATA.maps; d.sel = DATA.sel; d.skipLogin = DATA.skipLogin;
   if (!player) d.prevName = DATA.player ? DATA.player.name : d.prevName;
   DATA = normData(d);
-  ADM = { speed: 1, cash: 0, xp: 0, all: false, ep: null }; BANNED = false;
+  ADM = { speed: 1, cash: 0, xp: 0, all: false, ep: null }; EXC = {}; BANNED = false;
   save(); applyMyLook();
 }
 
@@ -1052,6 +1054,11 @@ const SKINS = [
   { id: 'thunder', name: 'Thunderbolt', hull: 0x16181d, stripe: 0xffd400, glow: true, bottom: 0x2a2d33, deck: 0x30343a, motor: 0x16181d, cap: 0xffd400, metal: 0.35, rough: 0.22, unlock: 'storm' },
   { id: 'surf', name: 'Surf Jaws', hull: 0x2ec4f1, stripe: 0xffffff, bottom: 0xff5d5d, deck: 0xfdf6e3, motor: 0xffffff, cap: 0xff5d5d, metal: 0.05, rough: 0.25, unlock: 'breakers' },
   { id: 'champion', name: 'Champion Chrome', hull: 0xe3e9f0, stripe: 0x3d7bff, glow: true, bottom: 0x1b1f27, deck: 0x1b1f27, motor: 0xe3e9f0, cap: 0x3d7bff, metal: 1.0, rough: 0.1, unlock: 'all' },
+  // admin exclusives: can't be bought or unlocked, only given from the admin panel
+  { id: 'x_aurora', name: 'Aurora Prism', hull: 0x7b2cbf, stripe: 0x00f5d4, glow: true, bottom: 0x10002b, deck: 0xf2f2ff, motor: 0x10002b, cap: 0x00f5d4, metal: 0.2, rough: 0.18, excl: true, anim: 'hue', under: 0x00f5d4, hullGlow: 0.25 },
+  { id: 'x_obsidian', name: 'Obsidian Ember', hull: 0x0c0c0e, stripe: 0xff4d00, glow: true, bottom: 0x1a0500, deck: 0x1c1c20, motor: 0x0c0c0e, cap: 0xff4d00, metal: 0.35, rough: 0.28, excl: true, anim: 'pulse', under: 0xff4d00 },
+  { id: 'x_gold24', name: '24K Gold', hull: 0xffc21a, stripe: 0xffffff, glow: true, bottom: 0x2a2000, deck: 0x111111, motor: 0xffc21a, cap: 0xffffff, metal: 0.35, rough: 0.2, excl: true, under: 0xffd23f, hullGlow: 0.4 },
+  { id: 'x_frost', name: 'Frostbite', hull: 0xdff6ff, stripe: 0x3fa9f5, glow: true, bottom: 0x0b2a4a, deck: 0xffffff, motor: 0xdff6ff, cap: 0x3fa9f5, metal: 0.45, rough: 0.1, excl: true, anim: 'pulse', under: 0x7ff5ff },
 ];
 // driver avatar catalog
 const HELMETS = [
@@ -1059,10 +1066,12 @@ const HELMETS = [
   { id: 'aero', name: 'Aero Fin', cost: 600, lvl: 2 }, { id: 'stripe', name: 'Twin Stripe', cost: 900, lvl: 3 },
   { id: 'shark', name: 'Shark Fin', cost: 2500, lvl: 8 }, { id: 'viking', name: 'Viking', cost: 4000, lvl: 12 },
   { id: 'crown', name: 'Crown Crest', cost: 6500, lvl: 16 },
+  { id: 'x_halo', name: 'Halo', excl: true }, { id: 'x_blaze', name: 'Blaze Crest', excl: true },
 ];
 const VISORS = [
   { id: 'smoke', name: 'Smoke', c: 0x23272c, e: 0 }, { id: 'gold', name: 'Gold Mirror', c: 0xd4a017, e: 0x3a2a00, cost: 400, lvl: 1 },
   { id: 'blue', name: 'Ice Mirror', c: 0x3fa9f5, e: 0x08304f, cost: 700, lvl: 3 }, { id: 'rainbow', name: 'Oil Slick', c: 0xb05cff, e: 0x2a0a50, cost: 1500, lvl: 9 },
+  { id: 'x_prism', name: 'Prism Shift', c: 0xff3d9a, e: 0x5a0a30, excl: true, anim: true },
 ];
 const COLORS = [0xffffff, 0x111317, 0xc8102e, 0xff6a13, 0xffd23f, 0x3ddc84, 0x12bfb8, 0x3d7bff, 0x7b2cbf, 0xff3d9a, 0x8a5a3b, 0x9aa3ab];
 const TONES = [0xf2d3bd, 0xe0ac8a, 0xc98f6b, 0xa0694a, 0x7a4b31, 0x4f2f1f];
@@ -1071,6 +1080,7 @@ const FLAGS = [
   { id: 'wave', name: 'Big Wave', cost: 700, lvl: 2 }, { id: 'skull', name: 'Skull & Bones', cost: 900, lvl: 3 },
   { id: 'bolt', name: 'Lightning', cost: 1200, lvl: 5 }, { id: 'star', name: 'Lone Star', cost: 1500, lvl: 7 },
   { id: 'flame', name: 'Hot Rod Flames', cost: 3000, lvl: 11 }, { id: 'champ', name: "Champion's Gold", unlock: 'all' },
+  { id: 'x_staff', name: 'Staff Crest', excl: true }, { id: 'x_phoenix', name: 'Phoenix', excl: true },
 ];
 // engine tiers: mastery level unlocks the right to buy, money buys it
 const ENGINES = [
@@ -1096,6 +1106,8 @@ const hexc = c => '#' + c.toString(16).padStart(6, '0');
 function E() { return DATA.econ; }
 // ---- admin layer: whatever the admin panel gives sits on top of real progress, so it can be removed cleanly ----
 let ADM = { speed: 1, cash: 0, xp: 0, all: false, ep: null };   // adm/{you}: written only by the admin
+let EXC = {};                                                     // exc/{you}: admin-exclusive items you've been given (kept separately from gifts)
+const ownsExcl = (cat, id) => !!((EXC[cat] && EXC[cat][id]) || (ADM.items && ADM.items[cat] && ADM.items[cat][id]));
 let CFG = { msg: '', payMul: 1, feat: '' };                       // cfg: global event settings
 let BANNED = false, BAN = null;
 const offline = () => BANNED || !!CFG.maint;   // online features switched off for this racer
@@ -1311,6 +1323,7 @@ function applySkin(id) { applySkinTo(BM, id); }
 function applySkinTo(BM, id) {
   const s = SKINS.find(k => k.id === id) || SKINS[0];
   BM.hull.color.setHex(s.hull); BM.hull.metalness = s.metal; BM.hull.roughness = s.rough;
+  BM.hull.emissive.setHex(s.hullGlow ? s.hull : 0); BM.hull.emissiveIntensity = s.hullGlow || 0;
   BM.stripe.color.setHex(s.stripe); BM.stripe.emissive.setHex(s.glow ? s.stripe : 0); BM.stripe.emissiveIntensity = s.glow ? 0.55 : 0;
   BM.bottom.color.setHex(s.bottom); BM.deck.color.setHex(s.deck);
   BM.motor.color.setHex(s.motor); BM.motor.metalness = s.id === 'champion' || s.id === 'gold' ? 0.8 : 0.1;
@@ -1450,10 +1463,36 @@ function flagTexture(id) {
   else if (id === 'bolt') { c.fillStyle = '#16181d'; c.fillRect(0, 0, W, Hh); c.fillStyle = '#ffd400'; c.beginPath(); [[150, 6], [84, 88], [126, 88], [100, 156], [176, 66], [132, 66]].forEach(p => c.lineTo(p[0], p[1])); c.fill(); }
   else if (id === 'star') { c.fillStyle = '#0f2a4a'; c.fillRect(0, 0, W, Hh); c.fillStyle = '#12bfb8'; c.fillRect(0, 118, W, 18); c.fillStyle = '#ffd23f'; c.fillRect(0, 140, W, 20); star(128, 62, 44, '#ffd23f'); }
   else if (id === 'flame') { c.fillStyle = '#111'; c.fillRect(0, 0, W, Hh); const g = c.createLinearGradient(0, 0, W, 0); g.addColorStop(0, '#ffd23f'); g.addColorStop(0.5, '#ff6a13'); g.addColorStop(1, '#c8102e'); c.fillStyle = g; c.beginPath(); c.moveTo(0, 30); for (let k = 0; k < 5; k++) { const y = 30 + k * 25; c.quadraticCurveTo(140 + k * 15, y - 18, 230 - k * 12, y + 4); c.quadraticCurveTo(120, y + 10, 0, y + 25); } c.lineTo(0, 30); c.fill(); }
+  else if (id === 'x_staff') { const g = c.createLinearGradient(0, 0, 0, Hh); g.addColorStop(0, '#3a0d6b'); g.addColorStop(1, '#14002b'); c.fillStyle = g; c.fillRect(0, 0, W, Hh); c.strokeStyle = '#ffd23f'; c.lineWidth = 8; c.strokeRect(8, 8, W - 16, Hh - 16);
+    c.fillStyle = '#ffd23f'; c.beginPath(); [[80, 70], [96, 38], [112, 62], [128, 30], [144, 62], [160, 38], [176, 70]].forEach(p => c.lineTo(p[0], p[1])); c.closePath(); c.fill(); c.fillRect(80, 70, 96, 10);
+    c.font = 'bold 34px sans-serif'; c.textAlign = 'center'; c.fillText('STAFF', 128, 126); }
+  else if (id === 'x_phoenix') { const g = c.createRadialGradient(128, 90, 10, 128, 80, 150); g.addColorStop(0, '#ffd23f'); g.addColorStop(0.45, '#ff6a13'); g.addColorStop(1, '#5a0a00'); c.fillStyle = g; c.fillRect(0, 0, W, Hh);
+    c.fillStyle = '#fff6d0'; c.beginPath(); c.moveTo(128, 120); c.quadraticCurveTo(70, 90, 30, 30); c.quadraticCurveTo(80, 60, 110, 70); c.quadraticCurveTo(120, 40, 128, 28); c.quadraticCurveTo(136, 40, 146, 70); c.quadraticCurveTo(176, 60, 226, 30); c.quadraticCurveTo(186, 90, 128, 120); c.fill();
+    c.beginPath(); c.moveTo(118, 118); c.lineTo(128, 150); c.lineTo(138, 118); c.fill(); }
   else if (id === 'champ') { const g = c.createLinearGradient(0, 0, W, Hh); g.addColorStop(0, '#fff2a8'); g.addColorStop(0.5, '#d9a92e'); g.addColorStop(1, '#8a6a10'); c.fillStyle = g; c.fillRect(0, 0, W, Hh); star(128, 80, 50, '#fffbe6'); c.strokeStyle = '#6b4f00'; c.lineWidth = 8; c.strokeRect(8, 8, W - 16, Hh - 16); }
   const t = new THREE.CanvasTexture(cv); t.anisotropy = 8; FLAGTEX[id] = t; return t;
 }
 const FLAGS_LIVE = []; // waving flag meshes
+let _glowTex = null;
+const GLOWTEX = () => _glowTex || (_glowTex = (() => { const cv = document.createElement('canvas'); cv.width = cv.height = 64; const c = cv.getContext('2d'); const g = c.createRadialGradient(32, 32, 0, 32, 32, 32); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(0.5, 'rgba(255,255,255,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(cv); })());
+// living colours for exclusive paints / visor
+function animateLooks(t) {
+  const list = [boatMesh]; for (const pid in NET.peers) if (NET.peers[pid].mesh) list.push(NET.peers[pid].mesh);
+  for (const g of list) {
+    const a = g.userData.anim; if (!a || !g.visible) continue;
+    const { M, skin } = a;
+    if (skin.anim === 'hue') { M.hull.color.setHSL((t * 0.06) % 1, 0.8, 0.45); M.hull.emissive.copy(M.hull.color); M.stripe.emissive.setHSL((t * 0.06 + 0.5) % 1, 1, 0.5); M.cap.emissive.copy(M.stripe.emissive); if (a.glow) a.glow.material.color.copy(M.stripe.emissive); }
+    if (skin.anim === 'pulse') { const k = 0.45 + 0.4 * Math.sin(t * 3.2); M.stripe.emissiveIntensity = k + 0.2; M.cap.emissiveIntensity = k; }
+    if (a.glow) {
+      a.glow.material.opacity = 0.6 + 0.2 * Math.sin(t * 2.4);
+      // keep the glow sitting on the water surface just under the hull
+      const wy = waveH(g.position.x, g.position.z, t) + 0.05, up = new THREE.Vector3(0, 1, 0).applyQuaternion(g.quaternion);
+      a.glow.position.y = (wy - g.position.y) / Math.max(0.5, up.y); a.glow.visible = g.position.y - wy < 3;
+    }
+    if (a.visor && a.visor.anim) { M.visor.color.setHSL((t * 0.12) % 1, 0.85, 0.55); M.visor.emissive.setHSL((t * 0.12) % 1, 0.9, 0.2); }
+    if (a.halo) { a.halo.rotation.z = t * 0.8; a.halo.position.y = a.halo.userData.y + Math.sin(t * 2) * 0.012; }
+  }
+}
 function dressBoat(grp, M, L) {
   const old = grp.getObjectByName('acc'); if (old) { grp.remove(old); old.traverse(o => { if (o.geometry) o.geometry.dispose(); }); const i = FLAGS_LIVE.findIndex(f => f.grp === grp); if (i >= 0) FLAGS_LIVE.splice(i, 1); }
   const acc = new THREE.Group(); acc.name = 'acc'; grp.add(acc);
@@ -1491,6 +1530,15 @@ function dressBoat(grp, M, L) {
     put(g, M.trim, 0, 0.135, 0, 1, 1, 1, 0, -Math.PI / 2, 0);
   }
   if (st === 'viking') { const horn = std(0xeee3c8, { roughness: 0.5 }); for (const s of [-1, 1]) { const c = new THREE.CatmullRomCurve3([new THREE.Vector3(0, 0, 0), new THREE.Vector3(s * 0.08, 0.06, 0), new THREE.Vector3(s * 0.12, 0.17, -0.02), new THREE.Vector3(s * 0.1, 0.25, -0.05)]); const tg = new THREE.TubeGeometry(c, 16, 0.03, 8, false); const p = tg.attributes.position; for (let i = 0; i < p.count; i++) { const k = Math.floor(i / 9) / 16; const cx = c.getPoint(k); p.setXYZ(i, cx.x + (p.getX(i) - cx.x) * (1 - k * 0.85), cx.y + (p.getY(i) - cx.y) * (1 - k * 0.85), cx.z + (p.getZ(i) - cx.z) * (1 - k * 0.85)); } tg.computeVertexNormals(); put(tg, horn, s * 0.12, 0.04, 0, 0.8, 0.8, 0.8); } }
+  if (st === 'x_halo') {
+    const hm = new THREE.MeshBasicMaterial({ color: 0xfff1a8 });
+    const h = put(new THREE.TorusGeometry(0.11, 0.013, 10, 40), hm, 0, 0.24, 0, 1, 1, 1, Math.PI / 2); h.name = 'halo'; h.userData.y = h.position.y; h.castShadow = false;
+    const gl = new THREE.Mesh(new THREE.PlaneGeometry(0.42, 0.42), new THREE.MeshBasicMaterial({ map: GLOWTEX(), color: 0xffe27a, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false })); gl.rotation.x = -Math.PI / 2; h.add(gl); gl.rotation.set(0, 0, 0);
+  }
+  if (st === 'x_blaze') {
+    const fm = std(0xff6a13, { emissive: 0xff3d00, emissiveIntensity: 0.9, roughness: 0.4 }), fm2 = std(0xffd23f, { emissive: 0xffa000, emissiveIntensity: 0.9 });
+    for (let k = 0; k < 5; k++) { const z = -0.08 + k * 0.05, hgt = 0.16 - Math.abs(k - 1.2) * 0.025; put(new THREE.ConeGeometry(0.03, hgt, 10), k % 2 ? fm2 : fm, 0, 0.14 + hgt / 2 - 0.02, z, 1, 1, 0.6, 0.35 + k * 0.08); }
+  }
   if (st === 'crown') { const gm = std(0xffd23f, { metalness: 0.9, roughness: 0.2, emissive: 0x3a2a00 }); for (let k = 0; k < 7; k++) { const a = k / 7 * Math.PI * 2; put(new THREE.ConeGeometry(0.025, 0.08, 8), gm, Math.cos(a) * 0.09, 0.15, Math.sin(a) * 0.09); } put(new THREE.TorusGeometry(0.095, 0.014, 8, 28), gm, 0, 0.12, 0, 1, 1, 1, Math.PI / 2); }
   // engine tier band on the cowling (follows motor steering)
   const motor = grp.getObjectByName('motor');
@@ -1507,7 +1555,14 @@ function dressBoat(grp, M, L) {
     const fl = new THREE.Mesh(fg, fm); fl.rotation.y = -Math.PI / 2; fl.position.set(-0.78, SHEER(0.05) + 1.42, HZ(0.05)); fl.castShadow = true; acc.add(fl);
     FLAGS_LIVE.push({ grp, mesh: fl, base: Float32Array.from(fg.attributes.position.array) });
   }
-  grp.traverse(o => { if (o.isMesh && o.material !== M.glass) o.castShadow = true; });
+  // exclusive paints: neon underglow on the water
+  const sk = SKINS.find(k => k.id === L.skin) || SKINS[0];
+  if (sk.under) {
+    const ug = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 9), new THREE.MeshBasicMaterial({ map: GLOWTEX(), color: sk.under, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, fog: true }));
+    ug.rotation.x = -Math.PI / 2; ug.position.set(0, -0.32, 0.2); ug.renderOrder = 3; ug.name = 'underglow'; acc.add(ug);
+  }
+  grp.userData.anim = { M, skin: sk, visor: VISORS.find(x => x.id === L.visor) || VISORS[0], glow: acc.getObjectByName('underglow'), halo: acc.getObjectByName('halo') };
+  grp.traverse(o => { if (o.isMesh && o.material !== M.glass && o.name !== 'underglow') o.castShadow = true; });
 }
 function animateFlags(t) {
   for (const f of FLAGS_LIVE) {
@@ -2138,6 +2193,7 @@ let gTab = 'paint', gPending = null;
 function itemState(cat, it) {
   const L = levelOf(totalXp()).L;
   let own;
+  if (it.excl) return { own: ownsExcl(cat, it.id), lvlLock: false, cost: 0, canBuy: false, excl: true };
   if (cat === 'eng') own = owns('eng', it.k);
   else if (it.unlock === 'all') own = !!DATA.unlocked.champion || ADM.all || owns(cat, it.id);
   else if (it.unlock) own = !!DATA.unlocked[it.id] || ADM.all || owns(cat, it.id);
@@ -2151,14 +2207,17 @@ function itemCard(cat, it, equipped, sw, extra = '') {
   const req = it.unlock === 'all' ? 'Gold on every map' : it.unlock ? `Gold on ${(MAPS.find(m => m.id === it.unlock) || {}).name}` : '';
   let right = '';
   if (equipped) right = '<span class="price" style="color:var(--accent)">✓</span>';
-  else if (st.own) right = '';
+  else if (st.own) right = it.excl ? '<span class="price" style="color:#ff9bd2">👑</span>' : '';
+  else if (it.excl) right = '<span class="price lk">👑</span>';
   else if (it.unlock) right = `<span class="price lk">🔒</span>`;
   else if (st.lvlLock) right = `<span class="price lk">🔒 LV ${it.lvl}</span>`;
   else right = `<span class="price ${st.canBuy ? '' : 'lk'}">${gPending === cat + ':' + (it.id ?? it.k) ? 'CONFIRM?' : money(st.cost)}</span>`;
-  const sub = equipped ? 'Equipped' : st.own ? 'Tap to equip' : it.unlock ? '🔒 ' + req : st.lvlLock ? `Reach mastery ${it.lvl}, then ${money(st.cost)}` : st.canBuy ? 'Tap to buy' : `Need ${money(st.cost - cash())} more`;
-  return `<div class="skin ${st.own ? '' : 'lock'} ${equipped ? 'sel' : ''} ${gPending === cat + ':' + (it.id ?? it.k) ? 'buy' : ''}" data-cat="${cat}" data-id="${it.id ?? it.k}">
+  const sub = equipped ? (it.excl ? '👑 Exclusive · equipped' : 'Equipped') : st.own ? (it.excl ? '👑 Exclusive · tap to equip' : 'Tap to equip') : it.excl ? '👑 Admin exclusive — can\'t be bought' : it.unlock ? '🔒 ' + req : st.lvlLock ? `Reach mastery ${it.lvl}, then ${money(st.cost)}` : st.canBuy ? 'Tap to buy' : `Need ${money(st.cost - cash())} more`;
+  return `<div class="skin ${st.own ? '' : 'lock'} ${equipped ? 'sel' : ''} ${it.excl ? 'excl' : ''} ${gPending === cat + ':' + (it.id ?? it.k) ? 'buy' : ''}" data-cat="${cat}" data-id="${it.id ?? it.k}">
     ${sw}<div style="min-width:0"><b>${it.name}</b><small>${sub}</small>${extra}</div>${right}</div>`;
 }
+// owned exclusives first, then the normal catalogue, then exclusives you don't have yet
+const exclOrder = (cat, list) => [...list.filter(x => x.excl && ownsExcl(cat, x.id)), ...list.filter(x => !x.excl), ...list.filter(x => x.excl && !ownsExcl(cat, x.id))];
 function swatches(key, list, cur) { return `<div class="swrow">${list.map((c, i) => `<button data-sw="${key}" data-v="${key === 'tone' ? i : c}" class="${(key === 'tone' ? i : c) === cur ? 'on' : ''}" style="background:${hexc(c)}"></button>`).join('')}</div>`; }
 function renderSkins() {
   const tabs = [['paint', 'PAINT'], ['driver', 'DRIVER'], ['flag', 'FLAG'], ['eng', 'ENGINE']];
@@ -2168,17 +2227,17 @@ function renderSkins() {
   let h = '';
   if (gTab === 'paint') {
     $('gSub').innerHTML = 'Buy paint jobs with race money, or earn the special ones with a <b style="color:var(--gold)">GOLD</b> medal.';
-    h = SKINS.map(s => itemCard('paint', s, DATA.skin === s.id, `<div class="sw" style="background:linear-gradient(135deg,${hexc(s.hull)} 0 55%,${hexc(s.stripe)} 55% 68%,${hexc(s.bottom)} 68%)"></div>`)).join('');
+    h = exclOrder('paint', SKINS).map(s => itemCard('paint', s, DATA.skin === s.id, `<div class="sw" style="background:linear-gradient(135deg,${hexc(s.hull)} 0 55%,${hexc(s.stripe)} 55% 68%,${hexc(s.bottom)} 68%)"></div>`)).join('');
   } else if (gTab === 'driver') {
     $('gSub').innerHTML = 'Your racer — everyone in your lobby sees this.';
-    h = `<div class="sect">HELMET</div>` + HELMETS.map(x => itemCard('helmet', x, L.helmet === x.id, `<div class="sw" style="background:${hexc(L.hc)};display:flex;align-items:center;justify-content:center;font-size:20px">⛑</div>`)).join('')
+    h = `<div class="sect">HELMET</div>` + exclOrder('helmet', HELMETS).map(x => itemCard('helmet', x, L.helmet === x.id, `<div class="sw" style="background:${hexc(L.hc)};display:flex;align-items:center;justify-content:center;font-size:20px">⛑</div>`)).join('')
       + `<div class="sect">HELMET COLOR</div>` + swatches('hc', COLORS, L.hc)
-      + `<div class="sect">VISOR</div>` + VISORS.map(x => itemCard('visor', x, L.visor === x.id, `<div class="sw" style="background:${hexc(x.c)}"></div>`)).join('')
+      + `<div class="sect">VISOR</div>` + exclOrder('visor', VISORS).map(x => itemCard('visor', x, L.visor === x.id, `<div class="sw" style="background:${hexc(x.c)}"></div>`)).join('')
       + `<div class="sect">RACE SUIT</div>` + swatches('suit', COLORS, L.suit)
       + `<div class="sect">SKIN TONE</div>` + swatches('tone', TONES, L.tone);
   } else if (gTab === 'flag') {
     $('gSub').innerHTML = 'A flag on a stern pole. It flaps harder the faster you go.';
-    h = FLAGS.map(x => itemCard('flag', x, L.flag === x.id, x.id === 'none' ? '<div class="sw" style="background:rgba(255,255,255,.08)"></div>' : `<div class="sw" style="background:url(${flagTexture(x.id).image.toDataURL()}) center/cover"></div>`)).join('');
+    h = exclOrder('flag', FLAGS).map(x => itemCard('flag', x, L.flag === x.id, x.id === 'none' ? '<div class="sw" style="background:rgba(255,255,255,.08)"></div>' : `<div class="sw" style="background:url(${flagTexture(x.id).image.toDataURL()}) center/cover"></div>`)).join('');
   } else {
     const lv = levelOf(totalXp()).L;
     $('gSub').innerHTML = `Mastery unlocks each engine; money buys it. Mastery grows every race (you're level <b>${lv}</b>). Lobbies can force equal engines.`;
@@ -2539,8 +2598,9 @@ async function pollAdmin() {
     const uid = me() && me().id;
     // each read on its own, so one blocked path can't stop the others (e.g. bans) from applying
     const get = p => api(p).catch(() => undefined);
-    const [c, a, rs, ban, msg] = await Promise.all([get('cfg'), uid ? get('adm/' + uid) : null, uid ? get('rst/' + uid) : null, uid ? get('bans/' + uid) : null, uid ? get('msg/' + uid) : null]);
-    const before = JSON.stringify([CFG, ADM, BANNED, cash(), DATA.skin]);
+    const [c, a, rs, ban, msg, ex] = await Promise.all([get('cfg'), uid ? get('adm/' + uid) : null, uid ? get('rst/' + uid) : null, uid ? get('bans/' + uid) : null, uid ? get('msg/' + uid) : null, uid ? get('exc/' + uid) : null]);
+    const before = JSON.stringify([CFG, ADM, EXC, BANNED, cash(), DATA.skin]);
+    if (ex !== undefined) { const was = JSON.stringify(EXC); EXC = ex && typeof ex === 'object' ? ex : {}; if (uid && JSON.stringify(EXC) !== was) { if (fixEquipped()) applyMyLook(); const n = Object.values(EXC).reduce((k, o) => k + Object.keys(o || {}).length, 0); if (was !== '{}' || DATA.excSeen !== n) { if (n > (DATA.excSeen || 0)) notice('GIFT', '👑 You got an exclusive item!', 'The admin gave you something nobody can buy. Find it in the Garage.'); DATA.excSeen = n; save(); } } }
     if (c !== undefined) CFG = Object.assign({ msg: '', payMul: 1, feat: '', maint: false, ann: null }, c && typeof c === 'object' ? c : {});
     if (ban !== undefined) {
       const was = BANNED; BAN = banActive(ban) ? ban : null; BANNED = !!BAN;
@@ -2565,11 +2625,11 @@ async function pollAdmin() {
         if (msg.kick) { if (LOBBY.code) await leaveLobby(); else if (state !== 'menu') { hidePanels(); toMenu(); } }
         notice(msg.kick ? 'KICKED' : 'MESSAGE FROM THE ADMIN', msg.kick ? 'You were kicked by an admin' : 'Admin', String(msg.text || ''));
       }
-    } else ADM = { speed: 1, cash: 0, xp: 0, all: false, items: null, ep: null };
+    } else { ADM = { speed: 1, cash: 0, xp: 0, all: false, items: null, ep: null }; EXC = {}; }
     // announcements pop up once for everyone
     if (CFG.ann && +CFG.ann.t > (DATA.annSeen || 0)) { DATA.annSeen = +CFG.ann.t; save(); if (Date.now() - CFG.ann.t < 864e5) notice('ANNOUNCEMENT', '📣 Announcement', String(CFG.ann.text || '')); }
     if (CFG.maint && LOBBY.code) leaveLobby();
-    if (JSON.stringify([CFG, ADM, BANNED, cash(), DATA.skin]) !== before) { save(); refreshLabels(); if (state === 'menu') renderMaps(); if (open('garage')) renderSkins(); }
+    if (JSON.stringify([CFG, ADM, EXC, BANNED, cash(), DATA.skin]) !== before) { save(); refreshLabels(); if (state === 'menu') renderMaps(); if (open('garage')) renderSkins(); }
     // "online now" heartbeat for the admin panel
     if (uid && !BANNED) { pollAdmin.hb = (pollAdmin.hb || 0) + 1; if (pollAdmin.hb % 4 === 1) api(`players/${uid}/on`, 'PUT', { t: SV0, m: MAPS[mapIdx].id, s: LOBBY.code ? 'lobby ' + LOBBY.code : state }).catch(() => {}); }
   } catch (e) {}
@@ -3411,7 +3471,7 @@ function frame(now) {
   boatMesh.position.set(b.pos.x, b.pos.y, b.pos.z); boatMesh.quaternion.set(b.q.x, b.q.y, b.q.z, b.q.w);
   boatMesh.userData.motor.rotation.y = b.steer * 0.55;
   boatMesh.userData.prop.rotation.z += dt * b.rpm * 60 * Math.sign(b.throttle || 1);
-  boatMesh.userData.speed = speed; animateFlags(simT);
+  boatMesh.userData.speed = speed; animateFlags(simT); animateLooks(simT);
   { const wh = waveH(b.pos.x, b.pos.z, simT), hgt = Math.max(0, b.pos.y - wh); blob.position.set(b.pos.x, wh + 0.05, b.pos.z); const bf0 = Core.qrot(b.q, { x: 0, y: 0, z: -1 }); blob.rotation.set(-Math.PI / 2, Math.atan2(-bf0.x, -bf0.z), 0); blob.material.opacity = Math.max(0, 1 - hgt / 8); blob.scale.setScalar(1 + hgt * 0.08); }
   if (b.boostT > 0 && b.propWet) { const p0 = Core.qrot(b.q, { x: 0, y: -0.2, z: 3.1 }); for (let i = 0; i < 3; i++) spawn(b.pos.x + p0.x, b.pos.y + p0.y, b.pos.z + p0.z, (Math.random() - .5) * 3 + b.vel.x * 0.2, 2 + Math.random() * 3, (Math.random() - .5) * 3 + b.vel.z * 0.2, 0.7, 0.5, 0); }
   // keep the shadow camera centred on the action
