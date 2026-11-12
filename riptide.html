@@ -1279,15 +1279,39 @@ function surface(nu, nv, fn) {
 // batch many static pieces into one mesh per material (fewer draw calls)
 class Batch {
   constructor() { this.parts = new Map(); }
-  add(geo, mat, m) { if (!this.parts.has(mat)) this.parts.set(mat, []); const g = (geo.index ? geo.toNonIndexed() : geo.clone()); g.applyMatrix4(m); this.parts.get(mat).push(g); }
+  add(geo, mat, m) {
+    const cell = Math.floor(m.elements[12] / 140) + ',' + Math.floor(m.elements[14] / 140); // neighbourhood chunk, so culling works
+    if (!this.parts.has(mat)) this.parts.set(mat, new Map()); const cells = this.parts.get(mat); if (!cells.has(cell)) cells.set(cell, []);
+    const g = (geo.index ? geo.toNonIndexed() : geo.clone()); g.applyMatrix4(m); cells.get(cell).push(g);
+  }
   build(group) {
-    for (const [mat, list] of this.parts) {
+    for (const [mat, cells] of this.parts) for (const list of cells.values()) {
       let n = 0; for (const g of list) n += g.attributes.position.count;
-      const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3); let o = 0;
-      for (const g of list) { pos.set(g.attributes.position.array, o * 3); if (!g.attributes.normal) g.computeVertexNormals(); nor.set(g.attributes.normal.array, o * 3); o += g.attributes.position.count; g.dispose(); }
-      const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); bg.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+      const hasCol = list.every(g => g.attributes.color);
+      const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3), col = hasCol ? new Float32Array(n * 3) : null; let o = 0;
+      for (const g of list) { pos.set(g.attributes.position.array, o * 3); if (!g.attributes.normal) g.computeVertexNormals(); nor.set(g.attributes.normal.array, o * 3); if (col) col.set(g.attributes.color.array, o * 3); o += g.attributes.position.count; g.dispose(); }
+      const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); bg.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); if (col) bg.setAttribute('color', new THREE.BufferAttribute(col, 3));
       group.add(new THREE.Mesh(bg, mat));
     }
+  }
+}
+// Combine the direct child meshes of `parent` into one mesh per material (same look, far fewer draw calls)
+function mergeMeshes(parent) {
+  const groups = new Map();
+  for (const ch of parent.children.slice()) if (ch.isMesh && !ch.children.length) { if (!groups.has(ch.material)) groups.set(ch.material, []); groups.get(ch.material).push(ch); }
+  for (const [mat, list] of groups) {
+    if (list.length < 2) continue;
+    let nv = 0, ni = 0; const parts = [];
+    for (const m of list) {
+      m.updateMatrix(); const g = m.geometry.clone(); g.applyMatrix4(m.matrix); if (!g.attributes.normal) g.computeVertexNormals();
+      const n = g.attributes.position.count, idx = g.index ? g.index.array : Array.from({ length: n }, (_, i) => i);
+      parts.push({ g, idx }); nv += n; ni += idx.length;
+    }
+    const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), ind = new Uint32Array(ni); let vo = 0, io = 0;
+    for (const { g, idx } of parts) { pos.set(g.attributes.position.array, vo * 3); nor.set(g.attributes.normal.array, vo * 3); for (let i = 0; i < idx.length; i++) ind[io + i] = idx[i] + vo; vo += g.attributes.position.count; io += idx.length; g.dispose(); }
+    const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); bg.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); bg.setIndex(new THREE.BufferAttribute(ind, 1));
+    for (const m of list) parent.remove(m);
+    parent.add(new THREE.Mesh(bg, mat));
   }
 }
 const M4 = (x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
@@ -1447,6 +1471,7 @@ function buildBoat() {
   mAdd(new THREE.BoxGeometry(0.03, 0.22, 0.28), BM.motor, 0, -0.95, 0.48);
   const prop = new THREE.Group(); prop.name = 'prop'; prop.position.set(0, -0.8, 0.74); motor.add(prop);
   for (let i = 0; i < 3; i++) { const bl = new THREE.Mesh(sph, BM.chrome); bl.scale.set(0.07, 0.17, 0.015); bl.position.set(Math.sin(i * 2.094) * 0.13, Math.cos(i * 2.094) * 0.13, 0); bl.rotation.z = -i * 2.094; bl.rotation.y = 0.5; prop.add(bl); }
+  mergeMeshes(grp); mergeMeshes(motor); mergeMeshes(prop);
     return grp;
 }
 // ---- accessories: helmet style, visor, flag, engine-tier band (rebuilt when the look changes) ----
@@ -1613,11 +1638,25 @@ function buoyGeo() {
   return new THREE.LatheGeometry(pts, 20);
 }
 const BUOY_G = buoyGeo(), BAND_G = new THREE.CylinderGeometry(0.615, 0.615, 0.2, 20);
+const BUOY_CACHE = {}, BUOY_MAT = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.45 });
 function makeBuoy(color) {
-  const g = new THREE.Group();
-  g.add(new THREE.Mesh(BUOY_G, std(color, { roughness: 0.45 })));
-  const band = new THREE.Mesh(BAND_G, std(0xffffff, { roughness: 0.4 })); band.position.y = 0.5; g.add(band);
-  return g;
+  if (!BUOY_CACHE[color]) {
+    const body = new THREE.Mesh(BUOY_G), band = new THREE.Mesh(BAND_G); band.position.y = 0.5;
+    const tmp = new THREE.Group(); tmp.add(body, band);
+    const paint = (m, c) => { const n = m.geometry.attributes.position.count, col = new Float32Array(n * 3), cc = new THREE.Color(c); for (let i = 0; i < n; i++) cc.toArray(col, i * 3); m.geometry = m.geometry.clone(); m.geometry.setAttribute('color', new THREE.BufferAttribute(col, 3)); };
+    paint(body, color); paint(band, 0xffffff);
+    body.material = band.material = BUOY_MAT;
+    mergeMeshesWithColor(tmp); BUOY_CACHE[color] = tmp.children[0].geometry; BUOY_CACHE[color].userData.keep = true;
+  }
+  const g = new THREE.Group(); g.add(new THREE.Mesh(BUOY_CACHE[color], BUOY_MAT)); return g;
+}
+function mergeMeshesWithColor(parent) {
+  const list = parent.children.slice(); let nv = 0, ni = 0; const parts = [];
+  for (const m of list) { m.updateMatrix(); const g = m.geometry.clone(); g.applyMatrix4(m.matrix); if (!g.attributes.normal) g.computeVertexNormals(); const n = g.attributes.position.count; const idx = g.index ? g.index.array : Array.from({ length: n }, (_, i) => i); parts.push({ g, idx }); nv += n; ni += idx.length; }
+  const pos = new Float32Array(nv * 3), nor = new Float32Array(nv * 3), col = new Float32Array(nv * 3), ind = new Uint32Array(ni); let vo = 0, io = 0;
+  for (const { g, idx } of parts) { pos.set(g.attributes.position.array, vo * 3); nor.set(g.attributes.normal.array, vo * 3); col.set(g.attributes.color.array, vo * 3); for (let i = 0; i < idx.length; i++) ind[io + i] = idx[i] + vo; vo += g.attributes.position.count; io += idx.length; }
+  const bg = new THREE.BufferGeometry(); bg.setAttribute('position', new THREE.BufferAttribute(pos, 3)); bg.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); bg.setAttribute('color', new THREE.BufferAttribute(col, 3)); bg.setIndex(new THREE.BufferAttribute(ind, 1));
+  for (const m of list) parent.remove(m); parent.add(new THREE.Mesh(bg, BUOY_MAT));
 }
 function islandHeight(kind, R, a, q, seed) {
   const n = fbm(Math.cos(a) * 1.7 + seed, Math.sin(a) * 1.7 + seed, q * 2.2, 4);
@@ -1668,9 +1707,16 @@ function buildWorld(i) {
   Core.setWaves(meta.waves);
   if (!worldCache[meta.id] || meta.custom) worldCache[meta.id] = meta.build();
   world = worldCache[meta.id];
-  if (W3) { W3.group.traverse(o => { if (o.geometry && o.geometry !== BUOY_G && o.geometry !== BAND_G) o.geometry.dispose(); }); scene.remove(W3.group); }
+  if (W3) { W3.group.traverse(o => { if (o.geometry && o.geometry !== BUOY_G && o.geometry !== BAND_G && !o.geometry.userData.keep) o.geometry.dispose(); }); scene.remove(W3.group); }
   const group = new THREE.Group(); scene.add(group);
-  W3 = { group, bobbers: [], rings: [], flags: [], beacons: [], rain: null };
+  W3 = { group, bobbers: [], rings: [], flags: [], beacons: [], rain: null, inst: [] };
+  // things that bob on the waves but look identical (gate buoys of one colour, logs) are drawn as one instanced mesh each
+  const bobGroup = (geo, mat, list, base) => {
+    if (!list.length) return;
+    const im = new THREE.InstancedMesh(geo, mat, list.length); im.frustumCulled = false; group.add(im); W3.inst.push(im);
+    list.forEach((it, i) => { const o = new THREE.Object3D(); o.rotation.y = it.yaw || 0; W3.bobbers.push({ obj: o, x: it.x, z: it.z, off: it.off, tilt: it.tilt, inst: { im, i, base } }); });
+  };
+  const gateBuoys = { [0xe23b3b]: [], [0x1fae5b]: [] };
   const rr = seeded(1234 + i * 77);
   // environment
   scene.fog.color.setHex(env.fog); scene.fog.density = env.fogD;
@@ -1685,12 +1731,9 @@ function buildWorld(i) {
   // rocks (smooth, noise-sculpted, 4 variants)
   const geos = rockGeos(env.rock), rmat = std(0xffffff, { vertexColors: true, roughness: 0.92 });
   const buckets = [[], [], [], []]; world.rocks.forEach((o, k) => buckets[k % 4].push(o));
-  buckets.forEach((list, k) => {
-    if (!list.length) return;
-    const im = new THREE.InstancedMesh(geos[k], rmat, list.length);
-    list.forEach((o, j) => { im.setMatrixAt(j, M4(o.x, -o.r * 0.28, o.z, (rr() - 0.5) * 0.3, rr() * 6.28, (rr() - 0.5) * 0.3, o.r * 1.02, o.r * (0.65 + rr() * 0.45), o.r * 1.02)); });
-    group.add(im);
-  });
+  const rockBatch = new Batch();
+  buckets.forEach((list, k) => list.forEach(o => rockBatch.add(geos[k], rmat, M4(o.x, -o.r * 0.28, o.z, (rr() - 0.5) * 0.3, rr() * 6.28, (rr() - 0.5) * 0.3, o.r * 1.02, o.r * (0.65 + rr() * 0.45), o.r * 1.02))));
+  rockBatch.build(group); geos.forEach(g => g.dispose());
   // islands
   const batch = new Batch();
   const trunkM = std(0x6b4a2f, { roughness: 0.9 }), pineM = std(0x2f5f36, { roughness: 0.85 }), frondM = std(0x4f8f3a, { roughness: 0.7, side: THREE.DoubleSide }), coconutM = std(0x5a3d1e);
@@ -1725,12 +1768,12 @@ function buildWorld(i) {
   batch.build(group);
   // logs
   const logM = std(0x5a3d26, { roughness: 0.9 }), logG = new THREE.CylinderGeometry(0.4, 0.45, 5, 10);
-  world.logs.forEach(lg => { const m = new THREE.Mesh(logG, logM); m.rotation.z = Math.PI / 2; const g = new THREE.Group(); g.add(m); g.rotation.y = -lg.yaw; group.add(g); W3.bobbers.push({ obj: g, x: lg.x, z: lg.z, off: -0.18, tilt: 0 }); });
+  bobGroup(logG, logM, world.logs.map(lg => ({ x: lg.x, z: lg.z, off: -0.18, tilt: 0, yaw: -lg.yaw })), new THREE.Matrix4().makeRotationZ(Math.PI / 2));
   // checkpoints
   world.cps.forEach((c, k) => {
     c.buoys = [];
     if (c.kind === 'gate') {
-      for (const s of [-1, 1]) { const o = makeBuoy(s < 0 ? 0xe23b3b : 0x1fae5b); const x = c.x - c.tz * c.hw * s, z = c.z + c.tx * c.hw * s; group.add(o); W3.bobbers.push({ obj: o, x, z, off: -0.1, tilt: 1 }); c.buoys.push({ x, z }); }
+      for (const s of [-1, 1]) { const x = c.x - c.tz * c.hw * s, z = c.z + c.tx * c.hw * s; gateBuoys[s < 0 ? 0xe23b3b : 0x1fae5b].push({ x, z, off: -0.1, tilt: 1 }); c.buoys.push({ x, z }); }
     } else {
       const o = makeBuoy(0xff7a1a); const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 3.2, 6), std(0xdddddd)); pole.position.y = 2.9; o.add(pole);
       const flag = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.8), std(0xff7a1a, { side: THREE.DoubleSide, emissive: 0x552200 })); flag.position.set(0.68, 4.0, 0); o.add(flag);
@@ -1746,6 +1789,7 @@ function buildWorld(i) {
       c.buoys.push({ x: c.x - c.tz * c.side * 7, z: c.z + c.tx * c.side * 7 });
     }
   });
+  for (const col of [0xe23b3b, 0x1fae5b]) bobGroup(makeBuoy(col).children[0].geometry, BUOY_MAT, gateBuoys[col]);
   // start / finish arches
   const arch = (c) => {
     const g = new THREE.Group();
@@ -1787,7 +1831,7 @@ function buildWorld(i) {
       }
       for (let k = 0; k < SEG; k++) for (let j = 0; j < ROWS; j++) { const a = k * (ROWS + 1) + j, b = a + ROWS + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
       const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(col, 3)); g.setIndex(idx); g.computeVertexNormals();
-      group.add(new THREE.Mesh(g, std(0xffffff, { vertexColors: true, roughness: 1, side: THREE.DoubleSide })));
+      const mm = new THREE.Mesh(g, std(0xffffff, { vertexColors: true, roughness: 1, side: THREE.DoubleSide })); mm.name = 'far'; group.add(mm);
     }
   }
   // kicker ramps: striped deck on floats
@@ -1818,7 +1862,7 @@ function buildWorld(i) {
     const drops = []; for (let k = 0; k < N; k++) drops.push({ x: (rr() - 0.5) * 60, y: rr() * 30, z: (rr() - 0.5) * 60 });
     W3.rain = { ls, drops, pos };
   }
-  group.traverse(o => { if (o.isMesh || o.isInstancedMesh) { o.castShadow = true; o.receiveShadow = true; } });
+  group.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && o.name !== 'far') { o.castShadow = true; o.receiveShadow = true; } });
   W3.lightT = 6; skyMat.uniforms.uFlash.value = 0; $('flash').style.opacity = 0;
   if (!meta.custom) { DATA.sel = i; save(); }
 }
@@ -2299,12 +2343,16 @@ function openSettings(from) { settingsFrom = from; renderSettings(); $('settings
 function closeSettings() { $('settings').classList.add('hidden'); $(settingsFrom).classList.remove('hidden'); }
 // render at the screen's real resolution (the old cap of 1x made high-DPI screens look blurry);
 // DYN.scale drops it a bit automatically if the frame rate can't keep up
-const DYN = { scale: 1, slowT: 0, fastT: 0 };
+const DYN = { scale: 1, slowT: 0, fastT: 0, avg: 1 / 60, cool: 0 };
 function pixelRatio() { const dpr = window.devicePixelRatio || 1; return Math.max(0.6, Math.min(dpr, [1, 1.5, 2][S.quality]) * DYN.scale); }
+// tracks a smoothed frame time; steps the render resolution down quickly when the machine can't keep up, back up slowly when it can
 function dynRes(dt) {
-  if (dt > 1 / 38) { DYN.slowT += dt; DYN.fastT = 0; } else if (dt < 1 / 55) { DYN.fastT += dt; DYN.slowT = Math.max(0, DYN.slowT - dt); }
-  if (DYN.slowT > 3 && DYN.scale > 0.6) { DYN.scale = Math.max(0.6, DYN.scale - 0.15); DYN.slowT = 0; renderer.setPixelRatio(pixelRatio()); resize(); }
-  else if (DYN.fastT > 8 && DYN.scale < 1) { DYN.scale = Math.min(1, DYN.scale + 0.1); DYN.fastT = 0; renderer.setPixelRatio(pixelRatio()); resize(); }
+  if (dt <= 0 || dt >= 0.05) { if (dt >= 0.05) DYN.slowT += 0.05; return; }
+  DYN.avg += (dt - DYN.avg) * 0.08; DYN.cool -= dt;
+  if (DYN.avg > 1 / 45) { DYN.slowT += dt; DYN.fastT = 0; } else if (DYN.avg < 1 / 58) { DYN.fastT += dt; DYN.slowT = Math.max(0, DYN.slowT - dt); } else DYN.slowT = Math.max(0, DYN.slowT - dt * 0.5);
+  if (DYN.cool > 0) return;
+  if (DYN.slowT > 1.2 && pixelRatio() > 0.6) { DYN.scale = Math.max(0.5, DYN.scale - 0.1); DYN.slowT = 0; DYN.cool = 1; renderer.setPixelRatio(pixelRatio()); resize(); }
+  else if (DYN.fastT > 6 && DYN.scale < 1) { DYN.scale = Math.min(1, DYN.scale + 0.1); DYN.fastT = 0; DYN.cool = 2; renderer.setPixelRatio(pixelRatio()); resize(); }
 }
 function applyQuality(rebuild) {
   DYN.scale = 1;
@@ -3453,6 +3501,14 @@ $('edBrowse').onclick = async () => {
 addEventListener('resize', () => { ED.dirty = true; });
 
 // ================= main loop =================
+// HUD writes only touch the page when the value actually changes (saves layout work on slow machines)
+const UIC = {};
+const uiE = x => typeof x === 'string' ? (UIC[x] || (UIC[x] = $(x))) : x;
+function uiT(id, v) { const e = uiE(id); v = String(v); if (e.textContent !== v) e.textContent = v; }
+function uiH(id, v) { const e = uiE(id); if (e._h !== v) { e._h = v; e.innerHTML = v; } }
+function uiS(id, k, v) { const e = uiE(id); if (e.style[k] !== v) e.style[k] = v; }
+let frameNo = 0;
+const BOBM = new THREE.Matrix4();
 let acc = 0, last = performance.now(), spawnAcc = 0;
 const r3 = x => Math.round(x * 1000) / 1000;
 function resize() { const w = innerWidth, h = innerHeight; renderer.setSize(w, h, false); camera.aspect = w / h; camera.updateProjectionMatrix(); pU.uScale.value = renderer.getDrawingBufferSize(new THREE.Vector2()).y * 0.5 / Math.tan(camera.fov * Math.PI / 360); }
@@ -3531,7 +3587,9 @@ function frame(now) {
     const h = waveH(o.x, o.z, simT), e = 0.6;
     o.obj.position.set(o.x, h + o.off, o.z);
     if (o.tilt) { o.obj.rotation.x = (waveH(o.x, o.z + e, simT) - h) / e * 0.6; o.obj.rotation.z = -(waveH(o.x + e, o.z, simT) - h) / e * 0.6; }
+    if (o.inst) { o.obj.updateMatrix(); if (o.inst.base) BOBM.multiplyMatrices(o.obj.matrix, o.inst.base); else BOBM.copy(o.obj.matrix); o.inst.im.setMatrixAt(o.inst.i, BOBM); }
   }
+  for (const im of W3.inst) im.instanceMatrix.needsUpdate = true;
   for (const g of W3.rings) { g.m.position.set(g.r.x, waveH(g.r.x, g.r.z, simT) + 2.6, g.r.z); g.m.rotation.y = g.r.yaw + simT * 0.6; }
   for (const bm of W3.beacons) bm.rotation.y = simT * 0.8;
   if (W3.rain) {
@@ -3547,7 +3605,7 @@ function frame(now) {
     let fl = 0;
     if (W3.lightT < 0) { W3.lightT = 7 + Math.random() * 9; W3.boltT = 0.35; noiseHit(0.9, 180, 2.8, 0.4 + Math.random() * 1.2); }
     if (W3.boltT > 0) { W3.boltT -= dt; fl = (W3.boltT > 0.25 || (W3.boltT < 0.15 && W3.boltT > 0.08)) ? 1 : 0; }
-    skyMat.uniforms.uFlash.value = fl * 0.6; hemi.intensity = W3.hemiBase + fl * 1.5; $('flash').style.opacity = fl * 0.18;
+    skyMat.uniforms.uFlash.value = fl * 0.6; hemi.intensity = W3.hemiBase + fl * 1.5; uiS('flash', 'opacity', String(fl * 0.18));
   }
   // next-target beams
   const racing = state === 'racing' || state === 'countdown';
@@ -3562,32 +3620,32 @@ function frame(now) {
   const up = Core.qrot(b.q, { x: 0, y: 1, z: 0 });
   if (up.y < 0.2 && state === 'racing') { flipT += dt; if (flipT > 2.5) { flipT = 0; resetToCheckpoint(); flash('RESET', '#fff', 700); } } else flipT = 0;
   // HUD
-  $('spd').textContent = Math.round(speed * UNIT[S.units]);
-  $('thr').firstChild.style.width = Math.abs(b.throttle) * 100 + '%';
-  $('tnow').textContent = fmt(total());
-  $('pen').textContent = R && R.penalty ? `+${R.penalty}s penalty` : '';
+  uiT('spd', Math.round(speed * UNIT[S.units]));
+  uiS($('thr').firstChild, 'width', Math.round(Math.abs(b.throttle) * 100) + '%');
+  uiT('tnow', fmt(total()));
+  uiT('pen', R && R.penalty ? `+${R.penalty}s penalty` : '');
   const showHud = state !== 'menu';
-  for (const id of ['timer', 'gatebox', 'speedo']) $(id).style.visibility = showHud ? 'visible' : 'hidden';
-  $('mini').style.visibility = showHud && S.minimap ? 'visible' : 'hidden';
-  $('hint').style.visibility = (state === 'countdown' || (state === 'racing' && raceT < 8)) && !isTouch ? 'visible' : 'hidden';
-  $('touch').style.visibility = racing ? 'visible' : 'hidden';
-  $('hudBtns').style.visibility = racing || state === 'finished' ? 'visible' : 'hidden';
-  $('bPause').style.display = $('bRestart').style.display = LOBBY.racing ? 'none' : '';
+  for (const id of ['timer', 'gatebox', 'speedo']) uiS(id, 'visibility', showHud ? 'visible' : 'hidden');
+  uiS('mini', 'visibility', showHud && S.minimap ? 'visible' : 'hidden');
+  uiS('hint', 'visibility', (state === 'countdown' || (state === 'racing' && raceT < 8)) && !isTouch ? 'visible' : 'hidden');
+  uiS('touch', 'visibility', racing ? 'visible' : 'hidden');
+  uiS('hudBtns', 'visibility', racing || state === 'finished' ? 'visible' : 'hidden');
+  uiS('bPause', 'display', LOBBY.racing ? 'none' : ''); uiS('bRestart', 'display', LOBBY.racing ? 'none' : '');
   // boost meter
-  const bb = $('boostbar'); bb.firstChild.style.width = (b.boostT > 0 ? b.boostT / TUNE.dur : b.charge) * 100 + '%';
+  const bb = $('boostbar'); uiS(bb.firstChild, 'width', Math.round((b.boostT > 0 ? b.boostT / TUNE.dur : b.charge) * 200) / 2 + '%');
   bb.className = b.boostT > 0 ? 'on' : b.charge >= 1 ? 'ready' : '';
-  $('boostlbl').innerHTML = b.boostT > 0 ? '<b style="color:var(--accent)">BOOSTING</b>' : b.charge >= 1 ? `<b>BOOST READY</b> · ${isTouch ? '⚡' : 'SPACE'}` : 'BOOST ' + Math.round(b.charge * 100) + '%';
-  $('draft').style.opacity = LOBBY.racing && b.draft > 0.05 ? 1 : 0;
-  $('vsghost').style.visibility = showHud ? 'visible' : 'hidden';
+  uiH('boostlbl', b.boostT > 0 ? '<b style="color:var(--accent)">BOOSTING</b>' : b.charge >= 1 ? `<b>BOOST READY</b> · ${isTouch ? '⚡' : 'SPACE'}` : 'BOOST ' + Math.round(b.charge * 100) + '%');
+  uiS('draft', 'opacity', LOBBY.racing && b.draft > 0.05 ? '1' : '0');
+  uiS('vsghost', 'visibility', showHud ? 'visible' : 'hidden');
   updatePeers(dt);
   if (LOBBY.code) lobbyTick(dt); else sendLive(dt);
   $('pos').classList.toggle('hidden', !(LOBBY.racing && showHud));
-  $('netchip').style.visibility = NET.on && showHud ? 'visible' : 'hidden';
-  if (NET.on) $('netchip').innerHTML = NET.status === 'online' ? `<b>●</b> ONLINE${LOBBY.code ? ' · LOBBY ' + LOBBY.code : NET.count ? ` · ${NET.count} other${NET.count > 1 ? 's' : ''} on this map` : ''}${me() ? '' : ' · not signed in'}` : '● OFFLINE';
+  uiS('netchip', 'visibility', NET.on && showHud ? 'visible' : 'hidden');
+  if (NET.on) uiH('netchip', NET.status === 'online' ? `<b>●</b> ONLINE${LOBBY.code ? ' · LOBBY ' + LOBBY.code : NET.count ? ` · ${NET.count} other${NET.count > 1 ? 's' : ''} on this map` : ''}${me() ? '' : ' · not signed in'}` : '● OFFLINE');
   if (racing && tgt) {
     const tx = tgt.x - b.pos.x, tz = tgt.z - b.pos.z;
     const ang = Math.atan2(camDir.x * tz - camDir.z * tx, camDir.x * tx + camDir.z * tz);
-    $('arrow').style.transform = `rotate(${ang}rad)`;
+    uiS('arrow', 'transform', `rotate(${ang.toFixed(3)}rad)`);
     let main = '', sub = '';
     if (R.rings) { main = `RINGS ${R.got} / ${R.rings.length}`; sub = 'NEAREST RING'; }
     else {
@@ -3600,15 +3658,18 @@ function frame(now) {
       }
       if (c.kind === 'flag') sub = c.side > 0 ? 'PASS ON RIGHT ▶' : '◀ PASS ON LEFT';
     }
-    $('gatetxt').textContent = main; $('gatesub').textContent = sub;
-    $('gatedist').textContent = Math.round(Math.hypot(tx, tz)) + ' m';
+    uiT('gatetxt', main); uiT('gatesub', sub);
+    uiT('gatedist', Math.round(Math.hypot(tx, tz)) + ' m');
     const along = (fw.x * tx + fw.z * tz) / (Math.hypot(tx, tz) || 1);
     if (state === 'racing' && !R.rings && along < -0.35 && b.fwd > 4) wrongT += dt; else wrongT = Math.max(0, wrongT - dt * 2);
-    $('wrong').style.display = wrongT > 1.2 ? 'block' : 'none';
-  } else $('wrong').style.display = 'none';
+    uiS('wrong', 'display', wrongT > 1.2 ? 'block' : 'none');
+  } else uiS('wrong', 'display', 'none');
   if (S.minimap && showHud) drawMini();
   updateAudio(b, speed);
   dynRes(dt);
+  // a full-screen menu is covering the 3D view: drawing it at half rate looks the same and frees up the machine
+  frameNo++;
+  if (state === 'menu' && (open('menu') || open('lobby') || open('board') || open('settings') || open('login')) && (frameNo & 1)) return;
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
