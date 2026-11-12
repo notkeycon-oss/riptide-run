@@ -2,19 +2,88 @@
   "rules": {
     ".read": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
     ".write": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
-    "names": { "$name": { ".read": true,
-      ".write": "auth != null && newData.val() === auth.uid && (!data.exists() || data.val() === auth.uid || data.val().length < 20)" } },
-    "players": { "$pid": { ".read": true, ".write": "auth != null && auth.uid === $pid" } },
-    "lb": { ".read": true, "$run": { ".indexOn": ["t"], "$pid": { ".write": "auth != null && auth.uid === $pid",
-      ".validate": "newData.hasChildren(['n','t']) && newData.child('t').isNumber() && newData.child('t').val() > 20 && newData.child('n').isString() && newData.child('n').val().length <= 16" } } },
-    "wr": { ".read": true, "$run": {
-      ".write": "auth != null && newData.exists() && (!data.exists() || newData.child('t').val() < data.child('t').val())",
-      ".validate": "newData.child('t').isNumber() && newData.child('t').val() > 20" } },
-    "gh": { ".read": true, "$run": { "$pid": { ".write": "auth != null && auth.uid === $pid" } } },
-    "live": { ".read": true, "$map": { "$pid": { ".write": "auth != null && (auth.uid === $pid || !newData.exists())" } } },
-    "time": { "$pid": { ".read": true, ".write": "auth != null && auth.uid === $pid" } },
-    "lobbies": { "$code": { ".read": true, ".write": "auth != null" } },
-    "maps": { ".read": true, "$code": {
-      ".write": "auth != null && newData.exists() && newData.child('au').val() === auth.uid && (!data.exists() || data.child('au').val() === auth.uid)" } }
+    "names": {
+      "$name": {
+        ".read": true,
+        ".write": "auth != null && !root.child('bans').child(auth.uid).exists() && newData.val() === auth.uid && (!data.exists() || data.val() === auth.uid || data.val().length < 20)"
+      }
+    },
+    "players": {
+      "$pid": {
+        ".read": true,
+        ".write": "auth != null && !root.child('bans').child(auth.uid).exists() && auth.uid === $pid"
+      }
+    },
+    "lb": {
+      ".read": true,
+      "$run": {
+        ".indexOn": [
+          "t"
+        ],
+        "$pid": {
+          ".write": "auth != null && !root.child('bans').child(auth.uid).exists() && auth.uid === $pid",
+          ".validate": "newData.hasChildren(['n','t']) && newData.child('t').isNumber() && newData.child('t').val() > 20 && newData.child('n').isString() && newData.child('n').val().length <= 16"
+        }
+      }
+    },
+    "wr": {
+      ".read": true,
+      "$run": {
+        ".write": "auth != null && !root.child('bans').child(auth.uid).exists() && newData.exists() && (!data.exists() || newData.child('t').val() < data.child('t').val())",
+        ".validate": "newData.child('t').isNumber() && newData.child('t').val() > 20"
+      }
+    },
+    "gh": {
+      ".read": true,
+      "$run": {
+        "$pid": {
+          ".write": "auth != null && !root.child('bans').child(auth.uid).exists() && auth.uid === $pid"
+        }
+      }
+    },
+    "live": {
+      ".read": true,
+      "$map": {
+        "$pid": {
+          ".write": "auth != null && (auth.uid === $pid || !newData.exists())"
+        }
+      }
+    },
+    "time": {
+      "$pid": {
+        ".read": true,
+        ".write": "auth != null && auth.uid === $pid"
+      }
+    },
+    "lobbies": {
+      "$code": {
+        ".read": true,
+        ".write": "auth != null && !root.child('bans').child(auth.uid).exists()"
+      }
+    },
+    "maps": {
+      ".read": true,
+      "$code": {
+        ".write": "auth != null && !root.child('bans').child(auth.uid).exists() && newData.exists() && newData.child('au').val() === auth.uid && (!data.exists() || data.child('au').val() === auth.uid)"
+      }
+    },
+    "adm": {
+      "$pid": {
+        ".read": true
+      }
+    },
+    "rst": {
+      "$pid": {
+        ".read": true
+      }
+    },
+    "bans": {
+      "$pid": {
+        ".read": true
+      }
+    },
+    "cfg": {
+      ".read": true
+    }
   }
 }

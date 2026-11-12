@@ -31,6 +31,13 @@ td input{width:110px;padding:4px 8px}
 .uid{font-family:ui-monospace,monospace;font-size:15px;background:rgba(0,0,0,.3);padding:6px 10px;border-radius:6px;user-select:all;word-break:break-all}
 .tag{font-size:13px;font-weight:800;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.15)}
 .hidden{display:none!important}
+.tabs button.on{background:var(--accent);color:#14202a;border-color:var(--accent)}
+tbody#pBody tr{cursor:pointer}tbody#pBody tr:hover{background:rgba(255,255,255,.05)}tbody#pBody tr.sel{background:rgba(255,210,63,.12)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;margin-top:10px}
+.box{background:rgba(0,0,0,.18);border-radius:10px;padding:12px}.box b{display:block;margin-bottom:8px;letter-spacing:1px}
+.box .row button{padding:5px 12px}.box input{width:120px}
+button.on{background:var(--accent);color:#14202a;border-color:var(--accent)}
+.danger{border:1px solid rgba(255,90,95,.4)}
 </style>
 </head>
 <body>
@@ -54,17 +61,43 @@ td input{width:110px;padding:4px 8px}
 
   <div id="panel" class="hidden">
     <div class="row" style="justify-content:space-between;margin-top:10px"><span class="msg" id="who"></span><button id="logout">SIGN OUT</button></div>
+    <div class="stats" id="stats" style="margin-top:12px"></div>
+    <div class="row tabs" id="tabs" style="margin-top:18px"></div>
+    <div class="msg" id="flashMsg"></div>
 
-    <h2>OVERVIEW</h2>
-    <div class="stats" id="stats"></div>
+    <section data-tab="players">
+      <div class="card">
+        <div class="row"><input id="search" placeholder="Search racers…" style="flex:1;min-width:180px"><button id="reloadP">RELOAD</button></div>
+        <table><thead><tr><th>RACER</th><th>MASTERY</th><th>MONEY</th><th>ENGINE</th><th>ADMIN GIFTS</th><th>LAST SEEN</th></tr></thead><tbody id="pBody"></tbody></table>
+      </div>
+      <div class="card hidden" id="pCard"></div>
+      <h2>EVERYONE</h2>
+      <div class="card" id="allCard"></div>
+    </section>
 
-    <h2>LEADERBOARDS</h2>
-    <div class="card">
-      <div class="row"><select id="runSel"></select><button id="reload">RELOAD</button><button id="dedupe">REMOVE OLD-ACCOUNT DUPLICATES</button></div>
-      <div class="msg" id="lbMsg"></div>
-      <div id="wrBox"></div>
-      <table><thead><tr><th>#</th><th>RACER</th><th>TIME (s)</th><th>ENGINE</th><th>POSTED</th><th></th></tr></thead><tbody id="lbBody"></tbody></table>
-    </div>
+    <section data-tab="events" class="hidden">
+      <div class="card">
+        <div class="set"><b>Main-menu message</b><input id="cfgMsg" maxlength="120" placeholder="e.g. Double money all weekend!" style="width:100%;margin-top:6px"></div>
+        <div class="set" style="margin-top:12px"><b>Money &amp; mastery multiplier</b><div class="row" id="cfgMul" style="margin-top:6px"></div></div>
+        <div class="set" style="margin-top:12px"><b>Featured map (pays ×1.5)</b><div style="margin-top:6px"><select id="cfgFeat"></select></div></div>
+        <div class="row" style="margin-top:14px"><button class="go" id="cfgSave">SAVE EVENT SETTINGS</button><button id="cfgClear">CLEAR ALL</button></div>
+        <p class="msg">Players pick these up within about 10 seconds.</p>
+      </div>
+    </section>
+
+    <section data-tab="boards" class="hidden">
+      <div class="card">
+        <div class="row"><select id="runSel"></select><button id="reload">RELOAD</button><button id="dedupe">REMOVE OLD-ACCOUNT DUPLICATES</button></div>
+        <div class="msg" id="lbMsg"></div>
+        <div id="wrBox"></div>
+        <table><thead><tr><th>#</th><th>RACER</th><th>TIME (s)</th><th>ENGINE</th><th>POSTED</th><th></th></tr></thead><tbody id="lbBody"></tbody></table>
+      </div>
+    </section>
+
+    <section data-tab="world" class="hidden">
+      <h2>PUBLISHED MAPS</h2><div class="card"><table><tbody id="mapBody"></tbody></table></div>
+      <h2>LOBBIES</h2><div class="card"><div class="row"><button class="del" id="killLobbies">CLOSE ALL LOBBIES</button></div><table><tbody id="lobBody"></tbody></table></div>
+    </section>
   </div>
 </div>
 <script>
@@ -114,15 +147,110 @@ async function start() {
     $('loginBox').classList.remove('hidden'); $('loginMsg').textContent = 'Could not reach the database.'; return;
   }
   $('panel').classList.remove('hidden'); $('who').textContent = 'Signed in as ' + (A.email || A.uid);
-  loadStats(); loadRuns();
+  tab('players'); loadAll();
+}
+const MAPS = [['harbor', 'Harbor Point'], ['canyon', 'Red Rock Canyon'], ['lagoon', 'Coral Lagoon'], ['storm', 'Storm Point'], ['breakers', 'Breakers Bay']];
+const TIERS = ['STOCK', 'SPORT', 'RACE', 'PRO', 'RIPTIDE'];
+const xpNeed = L => 250 + 100 * L, MAXXP = Array.from({ length: 29 }, (_, i) => xpNeed(i + 1)).reduce((a, b) => a + b, 0);
+function levelOf(xp) { let L = 1; while (L < 30 && xp >= xpNeed(L)) { xp -= xpNeed(L); L++; } return L; }
+const money = n => '$' + Math.round(n || 0).toLocaleString('en-US');
+function say(t, ok = true) { $('flashMsg').textContent = t; $('flashMsg').className = 'msg ' + (ok ? 'ok' : 'bad'); }
+const TABS = [['players', 'PLAYERS'], ['events', 'EVENTS'], ['boards', 'LEADERBOARDS'], ['world', 'MAPS & LOBBIES']];
+function tab(t) {
+  $('tabs').innerHTML = TABS.map(([k, l]) => `<button data-t="${k}" class="${k === t ? 'on' : ''}">${l}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t));
+  document.querySelectorAll('section[data-tab]').forEach(s => s.classList.toggle('hidden', s.dataset.tab !== t));
+  if (t === 'boards') loadRuns(); if (t === 'world') loadWorld(); if (t === 'events') loadCfg();
+}
+let P = {}, ADMD = {}, BANS = {}, sel = null;
+async function loadAll() {
+  const [p, a, b] = await Promise.all([db('players'), db('adm'), db('bans')]);
+  P = p || {}; ADMD = a || {}; BANS = b || {};
+  loadStats(); renderPlayers(); renderAll(); if (sel) renderCard();
 }
 async function loadStats() {
   const count = async p => { try { return Object.keys((await db(p, 'GET', undefined, '&shallow=true')) || {}).length; } catch (e) { return '?'; } };
-  const [players, lobbies, maps] = await Promise.all([count('players'), count('lobbies'), count('maps')]);
-  let entries = 0, runs = 0; try { const lb = await db('lb'); for (const k in lb || {}) { runs++; entries += Object.keys(lb[k]).length; } } catch (e) {}
-  $('stats').innerHTML = [['RACERS', players], ['LEADERBOARD TIMES', entries], ['LEADERBOARDS', runs], ['OPEN LOBBIES', lobbies], ['PUBLISHED MAPS', maps]]
+  const [lobbies, maps] = await Promise.all([count('lobbies'), count('maps')]);
+  let entries = 0; try { const lb = await db('lb', 'GET', undefined, '&shallow=true'); for (const k in lb || {}) entries += Object.keys((await db('lb/' + k, 'GET', undefined, '&shallow=true')) || {}).length; } catch (e) {}
+  const week = Date.now() - 7 * 864e5, active = Object.values(P).filter(x => x && x.seen > week).length;
+  $('stats').innerHTML = [['RACERS', Object.keys(P).length], ['ACTIVE THIS WEEK', active], ['LEADERBOARD TIMES', entries], ['OPEN LOBBIES', lobbies], ['PUBLISHED MAPS', maps], ['BANNED', Object.keys(BANS).length]]
     .map(([l, v]) => `<div class="stat"><small>${l}</small><b>${v}</b></div>`).join('');
 }
+const giftTxt = a => !a ? '—' : [a.speed && a.speed !== 1 ? '⚡×' + a.speed : '', a.cash ? money(a.cash) : '', a.xp ? '+' + a.xp + ' XP' : '', a.all ? 'ALL UNLOCKED' : ''].filter(Boolean).join(' · ') || '—';
+function renderPlayers() {
+  const q = $('search').value.trim().toLowerCase();
+  const ids = Object.keys(P).filter(id => !q || String(P[id].name || '').toLowerCase().includes(q)).sort((a, b) => (P[b].seen || 0) - (P[a].seen || 0));
+  $('pBody').innerHTML = ids.map(id => { const p = P[id], e = p.econ || {}; return `<tr data-id="${esc(id)}" class="${id === sel ? 'sel' : ''}"><td>${esc(p.name || '?')} ${BANS[id] ? '<span class="tag" style="background:var(--bad)">BANNED</span>' : ''}${id.length < 20 ? ' <span class="tag">OLD</span>' : ''}</td>
+    <td>${levelOf(+e.xp || 0)}</td><td>${money((e.earned || 0) - (e.spent || 0))}</td><td>T${(e.engine | 0) + 1}</td><td>${giftTxt(ADMD[id])}</td><td>${p.seen ? new Date(p.seen).toLocaleDateString() : '—'}</td></tr>`; }).join('') || '<tr><td colspan="6" class="msg">No racers yet.</td></tr>';
+  document.querySelectorAll('#pBody tr[data-id]').forEach(r => r.onclick = () => { sel = r.dataset.id; renderPlayers(); renderCard(); });
+}
+$('search').oninput = renderPlayers; $('reloadP').onclick = loadAll;
+// admin gifts live in adm/{uid}; a new "ep" (epoch) starts a fresh batch, deleting the node removes them all
+async function gift(id, patch) {
+  const cur = ADMD[id] || {}; const next = Object.assign({ ep: cur.ep || Date.now() }, cur, patch);
+  await db('adm/' + id, 'PUT', next); ADMD[id] = next;
+}
+const actionsHTML = (scope) => `
+  <div class="grid">
+    <div class="box"><b>⚡ SPEED BOOST</b><div class="row">${[1, 1.25, 1.5, 2, 3].map(m => `<button data-${scope}-speed="${m}">${m === 1 ? 'OFF' : '×' + m}</button>`).join('')}</div><p class="msg">Boosted runs never count as records.</p></div>
+    <div class="box"><b>💰 GIVE MONEY</b><div class="row"><input type="number" id="${scope}Cash" placeholder="amount"><button data-${scope}-cash="custom">GIVE</button></div><div class="row" style="margin-top:6px">${[1000, 10000, 100000].map(v => `<button data-${scope}-cash="${v}">+${money(v)}</button>`).join('')}</div></div>
+    <div class="box"><b>⭐ GIVE MASTERY</b><div class="row">${[1000, 5000, 20000].map(v => `<button data-${scope}-xp="${v}">+${v.toLocaleString()} XP</button>`).join('')}<button data-${scope}-xp="max">MAX LEVEL</button></div></div>
+    <div class="box"><b>🔓 UNLOCK EVERYTHING</b><div class="row"><button data-${scope}-all="1">GIVE ALL</button><button data-${scope}-all="0">TAKE BACK</button></div><p class="msg">Every paint, helmet, visor, flag and engine.</p></div>
+    <div class="box"><b>🧹 REMOVE ADMIN GIFTS</b><button data-${scope}-despawn="1">REMOVE ALL ADMIN STUFF</button><p class="msg">Takes away boosts, given money/mastery/unlocks and anything bought with given money. Keeps what they earned by playing.</p></div>
+    <div class="box danger"><b>☠ DANGER</b><div class="row"><button class="del" data-${scope}-reset="1">RESET PROGRESS</button>${scope === 'one' ? '<button class="del" data-one-ban="1">BAN / UNBAN</button>' : ''}</div><p class="msg">Reset wipes money, mastery, unlocks, medals and leaderboard times.</p></div>
+  </div>`;
+function renderCard() {
+  const p = P[sel]; if (!p) { $('pCard').classList.add('hidden'); return; }
+  const e = p.econ || {}, a = ADMD[sel];
+  $('pCard').classList.remove('hidden');
+  $('pCard').innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">${esc(p.name)}</h2><span class="uid">${esc(sel)}</span></div>
+    <p class="msg">Earned by playing: ${money((e.earned || 0) - (e.spent || 0))} · mastery ${levelOf(+e.xp || 0)} · T${(e.engine | 0) + 1} ${TIERS[e.engine | 0]} engine · ${Object.values(p.runs || {}).filter(r => r.medal === 3).length} golds${BANS[sel] ? ' · <b style="color:var(--bad)">BANNED</b>' : ''}</p>
+    <p class="msg">Admin gifts: <b style="color:var(--ink)">${giftTxt(a)}</b></p>` + actionsHTML('one');
+  bind('one', [sel]);
+}
+function renderAll() { $('allCard').innerHTML = `<p class="msg" style="margin-top:0">Applies to all ${Object.keys(P).length} racers.</p>` + actionsHTML('all'); bind('all', null); }
+function bind(scope, only) {
+  const ids = () => only || Object.keys(P);
+  const each = async (fn, label) => { const list = ids(); if (scope === 'all' && !confirm(`${label} for ALL ${list.length} racers?`)) return; for (const id of list) await fn(id); await loadAll(); say(`${label} — done${scope === 'all' ? ` for ${list.length} racers` : ' for ' + (P[only[0]] || {}).name}.`); };
+  const q = k => document.querySelectorAll(`[data-${scope}-${k}]`);
+  q('speed').forEach(b => b.onclick = () => { const m = +b.getAttribute(`data-${scope}-speed`); each(id => gift(id, { speed: m }), m === 1 ? 'Speed boost off' : `Speed boost ×${m}`); });
+  q('cash').forEach(b => b.onclick = () => { const v = b.getAttribute(`data-${scope}-cash`), n = v === 'custom' ? Math.round(+$(scope + 'Cash').value) : +v; if (!n) return say('Type an amount first.', false); each(id => gift(id, { cash: Math.max(0, ((ADMD[id] || {}).cash || 0) + n) }), `Gave ${money(n)}`); });
+  q('xp').forEach(b => b.onclick = () => { const v = b.getAttribute(`data-${scope}-xp`); each(id => gift(id, { xp: v === 'max' ? Math.max(0, MAXXP - (+(P[id].econ || {}).xp || 0)) : ((ADMD[id] || {}).xp || 0) + +v }), v === 'max' ? 'Max mastery' : `Gave ${(+v).toLocaleString()} XP`); });
+  q('all').forEach(b => b.onclick = () => { const on = b.getAttribute(`data-${scope}-all`) === '1'; each(id => gift(id, { all: on }), on ? 'Unlocked everything' : 'Took back unlock-all'); });
+  q('despawn').forEach(b => b.onclick = async () => { if (scope === 'one' && !confirm('Remove all admin gifts from ' + P[only[0]].name + '?')) return; each(id => db('adm/' + id, 'DELETE'), 'Removed admin gifts'); });
+  q('reset').forEach(b => b.onclick = async () => {
+    const list = ids(); const word = scope === 'all' ? 'RESET ALL' : 'RESET';
+    if (prompt(`This wipes ${scope === 'all' ? 'EVERY racer\'s' : P[list[0]].name + '\'s'} progress and leaderboard times. Type ${word} to confirm.`) !== word) return;
+    const lb = (await db('lb')) || {};
+    for (const id of list) {
+      await db('rst/' + id, 'PUT', Date.now()); await db('adm/' + id, 'DELETE'); await db('players/' + id, 'DELETE');
+      for (const k in lb) if (lb[k][id]) { await db(`lb/${k}/${id}`, 'DELETE'); await db(`gh/${k}/${id}`, 'DELETE'); }
+    }
+    sel = scope === 'one' ? null : sel; await loadAll(); say(`Reset ${list.length} racer${list.length > 1 ? 's' : ''}.`);
+  });
+  q('ban').forEach(b => b.onclick = async () => { const id = only[0]; if (BANS[id]) await db('bans/' + id, 'DELETE'); else { if (!confirm('Ban ' + P[id].name + ' from all online features?')) return; await db('bans/' + id, 'PUT', true); } await loadAll(); say(BANS[id] ? 'Banned ' + P[id].name + '.' : 'Unbanned ' + P[id].name + '.'); });
+}
+// ---- events ----
+let cfgMul = 1;
+async function loadCfg() {
+  const c = (await db('cfg')) || {};
+  $('cfgMsg').value = c.msg || ''; cfgMul = +c.payMul || 1;
+  $('cfgFeat').innerHTML = '<option value="">Automatic (changes daily)</option>' + MAPS.map(([id, n]) => `<option value="${id}">${n}</option>`).join(''); $('cfgFeat').value = c.feat || '';
+  renderMul();
+}
+function renderMul() { $('cfgMul').innerHTML = [1, 2, 3, 5].map(m => `<button data-m="${m}" class="${m === cfgMul ? 'on' : ''}">${m === 1 ? 'NORMAL' : '×' + m}</button>`).join(''); $('cfgMul').querySelectorAll('button').forEach(b => b.onclick = () => { cfgMul = +b.dataset.m; renderMul(); }); }
+$('cfgSave').onclick = async () => { await db('cfg', 'PUT', { msg: $('cfgMsg').value.trim(), payMul: cfgMul, feat: $('cfgFeat').value }); say('Event settings saved.'); };
+$('cfgClear').onclick = async () => { await db('cfg', 'DELETE'); loadCfg(); say('Event settings cleared.'); };
+// ---- maps & lobbies ----
+async function loadWorld() {
+  const [m, l] = await Promise.all([db('maps'), db('lobbies')]);
+  $('mapBody').innerHTML = Object.entries(m || {}).map(([k, v]) => `<tr><td><b>${esc(v.n)}</b> <small class="msg">by ${esc(v.a)}</small></td><td><span class="uid">${esc(k)}</span></td><td>${v.d ? new Date(v.d).toLocaleDateString() : ''}</td><td><button class="del" data-dm="${esc(k)}">DELETE</button></td></tr>`).join('') || '<tr><td class="msg">No published maps.</td></tr>';
+  $('lobBody').innerHTML = Object.entries(l || {}).map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td>${Object.values(v.p || {}).map(p => esc(p.n)).join(', ') || '<span class="msg">empty</span>'}</td><td>${esc(v.md || '')} · ${esc(v.m || '')}</td><td><button class="del" data-dl="${esc(k)}">CLOSE</button></td></tr>`).join('') || '<tr><td class="msg">No lobbies right now.</td></tr>';
+  document.querySelectorAll('[data-dm]').forEach(b => b.onclick = async () => { if (!confirm('Delete map ' + b.dataset.dm + '?')) return; await db('maps/' + b.dataset.dm, 'DELETE'); loadWorld(); say('Map deleted.'); });
+  document.querySelectorAll('[data-dl]').forEach(b => b.onclick = async () => { await db('lobbies/' + b.dataset.dl, 'DELETE'); loadWorld(); say('Lobby closed.'); });
+}
+$('killLobbies').onclick = async () => { if (!confirm('Close every lobby?')) return; await db('lobbies', 'DELETE'); loadWorld(); say('All lobbies closed.'); };
+// ---- leaderboards ----
 async function loadRuns() {
   const keys = Object.keys((await db('lb', 'GET', undefined, '&shallow=true')) || {}).sort();
   const cur = $('runSel').value;
@@ -130,19 +258,18 @@ async function loadRuns() {
   if (keys.includes(cur)) $('runSel').value = cur;
   loadBoard();
 }
-$('runSel').onchange = loadBoard; $('reload').onclick = () => { loadStats(); loadRuns(); };
+$('runSel').onchange = () => loadBoard(); $('reload').onclick = loadRuns;
 let board = [];
 async function loadBoard() {
   const key = $('runSel').value; if (!key) { $('lbBody').innerHTML = ''; return; }
-  $('lbMsg').textContent = 'Loading…'; $('lbMsg').className = 'msg';
   const [d, wr] = await Promise.all([db('lb/' + key), db('wr/' + key)]);
   board = Object.entries(d || {}).map(([id, v]) => Object.assign({ id }, v)).sort((a, b) => a.t - b.t);
   $('wrBox').innerHTML = wr && typeof wr.t === 'number' ? `<div class="row" style="margin-top:8px">World-record ghost: <b>${esc(wr.n)}</b> ${fmt(wr.t)} <button class="del" id="wrDel">DELETE RECORD GHOST</button></div>` : '';
   if ($('wrDel')) $('wrDel').onclick = async () => { if (!confirm('Delete the world-record ghost for ' + key + '?')) return; await db('wr/' + key, 'DELETE'); loadBoard(); };
-  $('lbBody').innerHTML = board.map((v, i) => `<tr><td>${i + 1}</td><td>${esc(v.n)} ${v.id.length < 20 ? '<span class="tag" title="Entry from before secure accounts">OLD</span>' : ''}</td>
+  $('lbBody').innerHTML = board.map((v, i) => `<tr><td>${i + 1}</td><td>${esc(v.n)} ${v.id.length < 20 ? '<span class="tag">OLD</span>' : ''}</td>
     <td><input type="number" step="0.01" min="20" value="${v.t}" data-i="${i}"> <small style="color:var(--dim)">${fmt(v.t)}</small></td><td>T${(v.e | 0) + 1}</td>
     <td>${v.d ? new Date(v.d).toLocaleString() : '—'}</td><td class="row"><button data-save="${i}">SAVE</button><button class="del" data-del="${i}">DELETE</button></td></tr>`).join('');
-  $('lbMsg').textContent = board.length + ' time' + (board.length === 1 ? '' : 's');
+  $('lbMsg').textContent = board.length + ' time' + (board.length === 1 ? '' : 's'); $('lbMsg').className = 'msg';
   document.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => {
     const v = board[+b.dataset.save], t = Math.round(parseFloat(document.querySelector(`input[data-i="${b.dataset.save}"]`).value) * 100) / 100;
     if (!(t > 20)) { $('lbMsg').textContent = 'Times must be over 20 seconds.'; $('lbMsg').className = 'msg bad'; return; }
@@ -151,17 +278,16 @@ async function loadBoard() {
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
     const v = board[+b.dataset.del]; if (!confirm(`Delete ${v.n}'s ${fmt(v.t)} (and their ghost)?`)) return;
     await db(`lb/${key}/${v.id}`, 'DELETE'); await db(`gh/${key}/${v.id}`, 'DELETE');
-    await loadBoard(); loadStats(); $('lbMsg').textContent = `Deleted ${v.n}'s time.`; $('lbMsg').className = 'msg ok';
+    await loadBoard(); $('lbMsg').textContent = `Deleted ${v.n}'s time.`; $('lbMsg').className = 'msg ok';
   });
 }
-// racers who upgraded to secure accounts can have an OLD copy of the same time left behind
 $('dedupe').onclick = async () => {
   const lb = await db('lb') || {}; let n = 0;
   for (const key in lb) {
     const fresh = new Set(Object.entries(lb[key]).filter(([id]) => id.length >= 20).map(([, v]) => String(v.n).toLowerCase()));
     for (const [id, v] of Object.entries(lb[key])) if (id.length < 20 && fresh.has(String(v.n).toLowerCase())) { await db(`lb/${key}/${id}`, 'DELETE'); await db(`gh/${key}/${id}`, 'DELETE'); n++; }
   }
-  await loadBoard(); loadStats(); $('lbMsg').textContent = `Removed ${n} duplicate old entr${n === 1 ? 'y' : 'ies'}.`; $('lbMsg').className = 'msg ok';
+  await loadBoard(); $('lbMsg').textContent = `Removed ${n} duplicate old entr${n === 1 ? 'y' : 'ies'}.`; $('lbMsg').className = 'msg ok';
 };
 try { const s = JSON.parse(sessionStorage.getItem('rr_admin') || 'null'); if (s && s.rt && FIREBASE_API_KEY) { Object.assign(A, s); token().then(start).catch(() => {}); } } catch (e) {}
 </script>
