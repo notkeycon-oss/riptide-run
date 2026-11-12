@@ -1314,10 +1314,29 @@ function mergeMeshes(parent) {
     parent.add(new THREE.Mesh(bg, mat));
   }
 }
+// palm leaf: a drooping strip along +X with a V-fold down the middle, tapering to a point
+const LEAF_G = (() => {
+  const g = new THREE.PlaneGeometry(1, 1, 10, 4), p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const t = p.getX(i) + 0.5, a = p.getY(i) * 2, L = 2.7, w = 0.62 * Math.sin(Math.PI * Math.min(1, t * 1.15)) * (1 - t * 0.4);
+    p.setXYZ(i, t * L, 0.5 * t - 1.6 * t * t + Math.abs(a) * 0.08, a * w);
+  }
+  g.computeVertexNormals(); return g;
+})();
 const M4 = (x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), new THREE.Quaternion().setFromEuler(new THREE.Euler(rx, ry, rz)), new THREE.Vector3(sx, sy, sz));
 const std = (c, o = {}) => new THREE.MeshStandardMaterial(Object.assign({ color: c, roughness: 0.75, metalness: 0.0 }, o));
 
 // ================= boat model =================
+// box with rounded edges (used for seats, console): push each vertex out from a shrunken inner box
+function rbox(w, h, d, r, seg = 3) {
+  const g = new THREE.BoxGeometry(w, h, d, seg * 2, seg * 2, seg * 2), p = g.attributes.position, v = new THREE.Vector3(), c = new THREE.Vector3();
+  const ix = w / 2 - r, iy = h / 2 - r, iz = d / 2 - r;
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i); c.set(clamp(v.x, -ix, ix), clamp(v.y, -iy, iy), clamp(v.z, -iz, iz));
+    v.sub(c); if (v.lengthSq() > 0) v.setLength(r); v.add(c); p.setXYZ(i, v.x, v.y, v.z);
+  }
+  g.computeVertexNormals(); return g;
+}
 function makeBoatMats(BM) {
   BM.hull = new THREE.MeshPhysicalMaterial({ color: 0xc8102e, roughness: 0.28, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, side: THREE.DoubleSide });
   BM.stripe = std(0xffffff, { roughness: 0.3, side: THREE.DoubleSide });
@@ -1339,6 +1358,7 @@ function makeBoatMats(BM) {
   BM.engBand = std(0x9aa3ab, { roughness: 0.3, metalness: 0.5 });
   BM.flag = new THREE.MeshStandardMaterial({ roughness: 0.8, side: THREE.DoubleSide });
   BM.pants = std(0x1d2733, { roughness: 0.8 });
+  BM.navR = new THREE.MeshBasicMaterial({ color: 0xff2a2a }); BM.navG = new THREE.MeshBasicMaterial({ color: 0x2aff6a });
   return BM;
 }
 const BM = makeBoatMats({}); // boat materials (skinnable)
@@ -1432,18 +1452,49 @@ function buildBoat() {
     add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 30, 0.022, 6, false), BM.chrome);
     for (const u of [0.6, 0.75, 0.9]) { const st = add(new THREE.CylinderGeometry(0.015, 0.015, 0.22, 6), BM.chrome); st.position.set(side * Math.max(0.02, HW(u) - 0.12), SHEER(u) + 0.11, HZ(u)); }
   }
-  // console, wheel, seats
-  const con = add(new THREE.BoxGeometry(0.62, 0.62, 0.55), BM.deck); con.position.set(0.5, 0.42, zf + 0.45);
-  const dash = add(new THREE.BoxGeometry(0.6, 0.04, 0.4), BM.dark); dash.position.set(0.5, 0.74, zf + 0.42); dash.rotation.x = 0.5;
-  const wh = add(new THREE.TorusGeometry(0.17, 0.025, 8, 20), BM.dark); wh.position.set(0.5, 0.86, zf + 0.72); wh.rotation.x = -0.6;
-  const cushion = new THREE.SphereGeometry(1, 18, 10);
-  for (const x of [0.5, -0.5]) {
-    const c1 = add(cushion, BM.seat); c1.position.set(x, 0.42, zf + 1.25); c1.scale.set(0.3, 0.13, 0.3);
-    const c2 = add(cushion, BM.seat); c2.position.set(x, 0.72, zf + 1.52); c2.scale.set(0.3, 0.3, 0.1); c2.rotation.x = -0.2;
-    const ped = add(new THREE.CylinderGeometry(0.06, 0.08, 0.3, 8), BM.chrome); ped.position.set(x, 0.25, zf + 1.28);
+  // windshield frame
+  { const pts = []; for (let i = 0; i <= 16; i++) { const t = Math.PI - 1.05 + i / 16 * 2.1; pts.push(new THREE.Vector3(Math.sin(t) * 1.15, sh5 + 0.51, zf + 0.88 + Math.cos(t) * 1.15 * 0.55)); }
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.018, 6, false), BM.chrome);
+    for (const t of [Math.PI - 1.05, Math.PI + 1.05, Math.PI]) { const p = add(new THREE.CylinderGeometry(0.014, 0.014, 0.5, 6), BM.chrome); p.position.set(Math.sin(t) * 1.15, sh5 + 0.27, zf + 0.88 + Math.cos(t) * 1.15 * 0.55); } }
+  // console with gauges, throttle and a spoked wheel
+  const con = add(rbox(0.62, 0.62, 0.55, 0.06), BM.deck); con.position.set(0.5, 0.42, zf + 0.45);
+  const dash = add(rbox(0.6, 0.05, 0.42, 0.02), BM.dark); dash.position.set(0.5, 0.75, zf + 0.42); dash.rotation.x = 0.5;
+  for (const gx of [-0.16, 0.16]) {
+    const rim = add(new THREE.TorusGeometry(0.045, 0.008, 6, 18), BM.chrome); rim.position.set(0.5 + gx, 0.79, zf + 0.39); rim.rotation.x = -1.07;
+    const face = add(new THREE.CircleGeometry(0.042, 18), BM.glass); face.position.set(0.5 + gx, 0.792, zf + 0.392); face.rotation.x = -1.07;
   }
-  const bench = add(cushion, BM.seat); bench.position.set(0, 0.42, 2.25); bench.scale.set(0.85, 0.14, 0.3);
-  const benchB = add(cushion, BM.seat2); benchB.position.set(0, 0.32, 2.25); benchB.scale.set(0.9, 0.16, 0.34);
+  const lever = add(new THREE.CylinderGeometry(0.012, 0.012, 0.2, 6), BM.chrome); lever.position.set(0.82, 0.86, zf + 0.5); lever.rotation.x = -0.4;
+  const knob = add(new THREE.SphereGeometry(0.03, 10, 8), BM.cap); knob.position.set(0.82, 0.95, zf + 0.46);
+  const wh = add(new THREE.TorusGeometry(0.17, 0.022, 8, 28), BM.dark); wh.position.set(0.5, 0.86, zf + 0.72); wh.rotation.x = -0.6;
+  const hub = add(new THREE.CylinderGeometry(0.035, 0.035, 0.04, 12), BM.chrome); hub.position.copy(wh.position); hub.rotation.x = -0.6 + Math.PI / 2;
+  for (let k = 0; k < 3; k++) { const sp = add(new THREE.BoxGeometry(0.16, 0.014, 0.01), BM.chrome); sp.position.copy(wh.position); sp.rotation.set(-0.6, 0, 0); sp.rotateZ(k * 2.094 + 0.52); sp.translateX(0.085); }
+  // sport bucket seats on chrome pedestals
+  for (const x of [0.5, -0.5]) {
+    const base = add(rbox(0.5, 0.11, 0.46, 0.05), BM.seat); base.position.set(x, 0.42, zf + 1.25);
+    const back = add(rbox(0.5, 0.5, 0.11, 0.05), BM.seat); back.position.set(x, 0.7, zf + 1.5); back.rotation.x = -0.18;
+    for (const s of [-1, 1]) { const bol = add(rbox(0.07, 0.42, 0.13, 0.03), BM.seat); bol.position.set(x + s * 0.23, 0.72, zf + 1.47); bol.rotation.set(-0.18, s * 0.25, 0); }
+    const pipe = add(rbox(0.36, 0.3, 0.02, 0.01), BM.seat2); pipe.position.set(x, 0.72, zf + 1.442); pipe.rotation.x = -0.18;
+    const ped = add(new THREE.CylinderGeometry(0.05, 0.07, 0.3, 12), BM.chrome); ped.position.set(x, 0.24, zf + 1.28);
+    const plate = add(new THREE.CylinderGeometry(0.14, 0.14, 0.02, 16), BM.chrome); plate.position.set(x, 0.11, zf + 1.28);
+  }
+  // rear bench with backrest
+  const bench = add(rbox(1.72, 0.14, 0.5, 0.06), BM.seat); bench.position.set(0, 0.4, 2.22);
+  const benchBase = add(rbox(1.8, 0.28, 0.56, 0.04), BM.seat2); benchBase.position.set(0, 0.22, 2.24);
+  const benchBack = add(rbox(1.72, 0.3, 0.1, 0.05), BM.seat); benchBack.position.set(0, 0.62, 2.48); benchBack.rotation.x = 0.15;
+  // ski-tow pylon, deck cleats, bow navigation lights, lifting strakes under the hull
+  const pyl = add(new THREE.CylinderGeometry(0.03, 0.04, 0.55, 10), BM.chrome); pyl.position.set(0, 0.72, 1.85);
+  const pylTop = add(new THREE.TorusGeometry(0.05, 0.015, 6, 14), BM.chrome); pylTop.position.set(0, 1.0, 1.85); pylTop.rotation.x = Math.PI / 2;
+  for (const [u, side] of [[0.82, -1], [0.82, 1], [0.06, -1], [0.06, 1]]) {
+    const cl = add(new THREE.CylinderGeometry(0.014, 0.014, 0.14, 6), BM.chrome); cl.rotation.x = Math.PI / 2; cl.position.set(side * (HW(u) - 0.16), SHEER(u) + 0.06, HZ(u));
+    const cb = add(new THREE.CylinderGeometry(0.012, 0.02, 0.05, 6), BM.chrome); cb.position.set(side * (HW(u) - 0.16), SHEER(u) + 0.03, HZ(u));
+  }
+  for (const side of [-1, 1]) {
+    const nl = add(new THREE.SphereGeometry(0.035, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), side < 0 ? BM.navR : BM.navG); nl.position.set(side * (HW(0.9) - 0.03), SHEER(0.9) + 0.035, HZ(0.9));
+    for (const v of [0.18, 0.34]) {
+      const pts = []; for (let i = 0; i <= 14; i++) { const u = 0.04 + i / 14 * 0.78; const p = hullPt(u, v, side); pts.push(new THREE.Vector3(p[0] * 1.01, p[1] - 0.012, p[2])); }
+      add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 40, 0.018, 4, false), BM.bottom);
+    }
+  }
   // driver: lathe torso, shoulders, bent arms reaching to the wheel, legs
   const torsoG = new THREE.LatheGeometry([[0, 0], [0.2, 0.02], [0.23, 0.18], [0.24, 0.36], [0.26, 0.46], [0.2, 0.54], [0.08, 0.58], [0, 0.58]].map(p => new THREE.Vector2(p[0], p[1])), 20);
   const torso = add(torsoG, BM.jacket); torso.position.set(0.5, 0.55, zf + 1.24); torso.scale.set(1, 1, 0.78); torso.rotation.x = -0.12;
@@ -1642,10 +1693,11 @@ const BUOY_CACHE = {}, BUOY_MAT = new THREE.MeshStandardMaterial({ vertexColors:
 function makeBuoy(color) {
   if (!BUOY_CACHE[color]) {
     const body = new THREE.Mesh(BUOY_G), band = new THREE.Mesh(BAND_G); band.position.y = 0.5;
-    const tmp = new THREE.Group(); tmp.add(body, band);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 8)); lamp.position.y = 1.66;
+    const cage = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.03, 12)); cage.position.y = 1.6;
+    const tmp = new THREE.Group(); tmp.add(body, band, lamp, cage);
     const paint = (m, c) => { const n = m.geometry.attributes.position.count, col = new Float32Array(n * 3), cc = new THREE.Color(c); for (let i = 0; i < n; i++) cc.toArray(col, i * 3); m.geometry = m.geometry.clone(); m.geometry.setAttribute('color', new THREE.BufferAttribute(col, 3)); };
-    paint(body, color); paint(band, 0xffffff);
-    body.material = band.material = BUOY_MAT;
+    paint(body, color); paint(band, 0xffffff); paint(lamp, 0xfff2a0); paint(cage, 0x2a2d33);
     mergeMeshesWithColor(tmp); BUOY_CACHE[color] = tmp.children[0].geometry; BUOY_CACHE[color].userData.keep = true;
   }
   const g = new THREE.Group(); g.add(new THREE.Mesh(BUOY_CACHE[color], BUOY_MAT)); return g;
@@ -1755,7 +1807,7 @@ function buildWorld(i) {
         const top = new THREE.Vector3(x + Math.cos(la) * lean * h, y + h, z + Math.sin(la) * lean * h);
         const curve = new THREE.QuadraticBezierCurve3(new THREE.Vector3(x, y, z), new THREE.Vector3(x + Math.cos(la) * lean * h * 0.2, y + h * 0.6, z + Math.sin(la) * lean * h * 0.2), top);
         batch.add(new THREE.TubeGeometry(curve, 8, 0.2, 6, false), trunkM, new THREE.Matrix4());
-        for (let f = 0; f < 7; f++) { const fa = f / 7 * 6.283 + rr(); batch.add(frondG, frondM, M4(top.x + Math.cos(fa) * 1.5, top.y - 0.35, top.z + Math.sin(fa) * 1.5, 0, -fa, -0.45, 1.8, 0.05, 0.4)); }
+        for (let f = 0; f < 10; f++) { const fa = f / 10 * 6.283 + rr() * 0.4; batch.add(LEAF_G, frondM, M4(top.x, top.y - 0.05, top.z, 0, -fa, 0.15 + rr() * 0.35, 1 + rr() * 0.3, 1, 1)); }
         for (let c = 0; c < 3; c++) batch.add(cocoG, coconutM, M4(top.x + (rr() - 0.5) * 0.4, top.y - 0.3, top.z + (rr() - 0.5) * 0.4, 0, 0, 0, 0.17, 0.17, 0.17));
       }
     }
