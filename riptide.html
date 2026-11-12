@@ -73,7 +73,20 @@ button.alt{margin-top:10px;font-size:16px;background:none;border:none;color:var(
 .seg{display:flex;background:rgba(255,255,255,.08);border-radius:999px;padding:3px;gap:2px}
 .seg button{border:none;background:none;color:var(--dim);font-size:16px;font-weight:700;letter-spacing:1px;padding:5px 12px;border-radius:999px}
 .seg button.on{background:var(--accent);color:#14202a}
-#garage{align-items:flex-end;background:linear-gradient(transparent 40%,rgba(4,18,28,.75))}
+#garage{align-items:stretch;justify-content:flex-end;padding:0;background:linear-gradient(90deg,transparent 45%,rgba(4,18,28,.55))}
+#garage .gcard{width:min(470px,44vw);max-width:none;height:100%;margin:0;border-radius:18px 0 0 18px;overflow-y:auto;display:flex;flex-direction:column;padding:18px 16px}
+#garage .gcard #skins{flex:1;align-content:start}
+#garage .gcard .gfoot{position:sticky;bottom:-18px;margin:8px -16px -18px;padding:8px 16px 14px;background:linear-gradient(transparent,rgba(6,22,34,.95) 35%)}
+#garage .gcard button.go{margin-top:4px;width:100%}
+#garage #skins{grid-template-columns:repeat(auto-fill,minmax(190px,1fr))}
+#garage .skin{min-width:0}#garage .skin b{overflow-wrap:anywhere}
+@media (max-width:760px){#garage{align-items:flex-end;justify-content:stretch;background:linear-gradient(transparent 45%,rgba(4,18,28,.6))}
+  #garage .gcard{width:100%;height:54vh;border-radius:18px 18px 0 0;padding:10px 10px 14px}
+  #garage .gcard h2{display:none}#garage #gTop{margin:0}#garage #gTop .pill{font-size:13px;padding:3px 9px}
+  #garage #gTabs{flex-wrap:nowrap;gap:5px;margin-top:6px!important}#garage #gTabs .chip{font-size:14px;padding:4px 10px;letter-spacing:1px}
+  #garage #gSub{font-size:14px;margin-top:4px!important}
+  #garage #skins{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px}#garage .skin{padding:7px;gap:7px}#garage .skin b{font-size:15px}#garage .sw{width:30px;height:30px}
+  #garage .skin .price{font-size:14px}#garage .gcard .gfoot{bottom:-14px;margin:6px -10px -14px;padding:6px 10px 10px}#garage .gcard button.go{font-size:22px;padding:6px}}
 #skins{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:8px 0}
 .skin{background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.08);border-radius:12px;padding:10px;cursor:pointer;display:flex;gap:10px;align-items:center;text-align:left}
 .skin.sel{border-color:var(--accent)}
@@ -255,13 +268,13 @@ input.tx:focus{border-color:var(--accent)}
 </div>
 
 <div class="panel hidden" id="garage">
-  <div class="card wide" style="margin:auto auto 0;max-height:62vh;overflow-y:auto">
+  <div class="card gcard" id="gCard">
     <h2 style="margin-bottom:4px">GARAGE</h2>
     <div class="topbar" id="gTop"></div>
     <div class="row" id="gTabs" style="margin-top:6px"></div>
     <div class="sub" id="gSub" style="margin:8px 0 0"></div>
     <div id="skins"></div>
-    <button class="go" id="garDone">DONE</button>
+    <div class="gfoot"><button class="go" id="garDone">DONE</button></div>
   </div>
 </div>
 
@@ -2309,7 +2322,7 @@ function drawMini() {
 const camDir = new THREE.Vector3(0, 0, -1), tmpV = new THREE.Vector3(), lookV = new THREE.Vector3();
 let orbit = 0;
 let spec = null; // spectating another racer (lobby): peer id
-const GFOCUS = { paint: [0, 0.4, 0, 8.5, 2.8], driver: [0.5, 1.15, HZ(0.5) + 1.2, 2.6, 0.75], flag: [-0.78, 1.5, HZ(0.05), 3.6, 0.9], eng: [0, 0.6, HZ(0) + 0.4, 3.2, 0.8] };
+const GFOCUS = { paint: [0, 0.4, 0, 7, 2.4], driver: [0.5, 1.15, HZ(0.5) + 1.2, 2.6, 0.75], flag: [-0.78, 1.5, HZ(0.05), 3.6, 0.9], eng: [0, 0.6, HZ(0) + 0.4, 3.2, 0.8] };
 function updateCamera(dt, speed) {
   let b = boat;
   if (spec && NET.peers[spec] && NET.peers[spec].mesh) { const p = NET.peers[spec]; b = { pos: p.pos, q: p.q }; speed = Math.hypot(p.v[0], p.v[1]); }
@@ -2322,14 +2335,22 @@ function updateCamera(dt, speed) {
     orbit += dt * 0.12;
     const garage = !$('garage').classList.contains('hidden');
     // the garage card covers the bottom of the screen: shift the picture up so the boat sits above it
-    const vy = garage ? innerHeight * 0.27 : 0;
-    if ((camera.view ? camera.view.offsetY : 0) !== vy) { if (vy) camera.setViewOffset(innerWidth, innerHeight, 0, vy, innerWidth, innerHeight); else camera.clearViewOffset(); }
+    // the garage panel covers the right side (or the bottom on phones): shift the picture so the boat sits in the open space
+    let vx = 0, vy = 0, fit = 1;
+    if (garage) {
+      const r = $('gCard').getBoundingClientRect();
+      if (r.top > innerHeight * 0.25) { vy = Math.round((innerHeight - r.top) / 2); fit = r.top / innerHeight; }
+      else { vx = Math.round(r.width / 2); fit = (innerWidth - r.width) / innerWidth; }
+    }
+    const cv = camera.view && camera.view.enabled ? camera.view : null;
+    if ((cv ? cv.offsetX : 0) !== vx || (cv ? cv.offsetY : 0) !== vy || (cv && cv.fullWidth !== innerWidth)) { if (vx || vy) camera.setViewOffset(innerWidth, innerHeight, vx, vy, innerWidth, innerHeight); else camera.clearViewOffset(); }
     if (garage) {
       const [fx, fy, fz, rad, hh] = GFOCUS[garageFocus] || GFOCUS.paint;
       const q = new THREE.Quaternion(b.q.x, b.q.y, b.q.z, b.q.w);
       const fp = new THREE.Vector3(fx, fy, fz).applyQuaternion(q).add(bp);
       const yaw = Math.atan2(f.x, f.z), oa = garageFocus === 'driver' ? yaw + 0.55 + Math.sin(orbit * 3) * 0.45 : garageFocus === 'flag' || garageFocus === 'eng' ? yaw + Math.sin(orbit * 3) * 1.1 : orbit;
-      tmpV.set(Math.sin(oa) * rad, hh, Math.cos(oa) * rad).add(fp);
+      const zoom = 1 / Math.max(0.45, Math.min(1, fit * 1.35));
+      tmpV.set(Math.sin(oa) * rad * zoom, hh * zoom, Math.cos(oa) * rad * zoom).add(fp);
       camera.position.lerp(tmpV, camSnap ? 1 : 1 - Math.exp(-3 * dt)); lookV.lerp(fp, camSnap ? 1 : 1 - Math.exp(-4 * dt)); camera.lookAt(lookV);
     } else {
       tmpV.set(Math.cos(orbit) * 13, 3.4, Math.sin(orbit) * 13).add(bp);
