@@ -969,7 +969,8 @@ function normData(d) {
   d.econ = Object.assign({ earned: 0, spent: 0, xp: 0, engine: 0, own: {}, daily: { last: '', streak: 0 } }, d.econ || {});
   d.econ.own = Object.assign({ eng: { 0: true } }, d.econ.own);
   d.econ = Object.assign({ admCash: 0, admSpent: 0, admXp: 0, admEp: null, ownAdm: {} }, d.econ);
-  d.look = Object.assign({ helmet: 'open', hc: 0xffffff, visor: 'smoke', suit: 0xff6a13, tone: 2, flag: 'check' }, d.look || {});
+  d.look = Object.assign({ helmet: 'open', hc: 0xffffff, visor: 'smoke', suit: 0xff6a13, tone: 2, flag: 'check', fx: 'none' }, d.look || {});
+  d.stats = Object.assign({ stockGold: {}, recs: {}, air: 0, bestStreak: 0, wins: 0, fxSeen: {} }, d.stats || {});
   d.maps = d.maps || {};
   if (d.settings.ghost === true) d.settings.ghost = 'mine'; if (d.settings.ghost === false) d.settings.ghost = 'off';
   return d;
@@ -1075,6 +1076,27 @@ const VISORS = [
 ];
 const COLORS = [0xffffff, 0x111317, 0xc8102e, 0xff6a13, 0xffd23f, 0x3ddc84, 0x12bfb8, 0x3d7bff, 0x7b2cbf, 0xff3d9a, 0x8a5a3b, 0x9aa3ab];
 const TONES = [0xf2d3bd, 0xe0ac8a, 0xc98f6b, 0xa0694a, 0x7a4b31, 0x4f2f1f];
+// boat effects: earned through tough achievements (never for sale), plus admin exclusives
+const EFFECTS = [
+  { id: 'none', name: 'No effect' },
+  { id: 'flames', name: 'Afterburner', desc: 'Flames wrap around your hull.', req: 'stockgold' },
+  { id: 'sparks', name: 'Static Charge', desc: 'Electric sparks crackle over the hull.', req: 'records' },
+  { id: 'smoke', name: 'Stunt Smoke', desc: 'An airshow smoke trail in your stripe colour.', req: 'air' },
+  { id: 'stardust', name: 'Stardust', desc: 'A glittering gold trail.', req: 'streak' },
+  { id: 'aurora', name: 'Aurora Wake', desc: 'A colour-shifting wake.', req: 'wins' },
+  { id: 'x_inferno', name: 'Blue Inferno', desc: 'Blue-white hellfire with rising embers.', excl: true },
+  { id: 'x_galaxy', name: 'Galaxy Orbit', desc: 'A ring of stars orbiting your boat.', excl: true },
+  { id: 'x_storm', name: 'Storm Caller', desc: 'Violet lightning crackling over the hull.', excl: true },
+  { id: 'x_royal', name: 'Royal Aura', desc: 'A golden halo of sparkles.', excl: true },
+];
+const FXREQ = {
+  stockgold: { need: 5, have: () => Object.keys(DATA.stats.stockGold).length, text: n => `Gold on every map with the STOCK engine · ${n}/5` },
+  records: { need: 3, have: () => Object.keys(DATA.stats.recs).length, text: n => `Beat the course record on 3 maps · ${n}/3` },
+  air: { need: 180, have: () => Math.floor(DATA.stats.air), text: n => `180 s of clean-landing airtime · ${n}/180 s` },
+  streak: { need: 14, have: () => DATA.stats.bestStreak, text: n => `A 14-day daily streak · best ${n}/14` },
+  wins: { need: 20, have: () => DATA.stats.wins, text: n => `Win 20 online races (2+ racers) · ${n}/20` },
+};
+const fxEarned = id => { const e = EFFECTS.find(x => x.id === id); if (!e || !e.req) return false; const r = FXREQ[e.req]; return r.have() >= r.need; };
 const FLAGS = [
   { id: 'none', name: 'No flag' }, { id: 'check', name: 'Checkered' }, { id: 'pennant', name: 'Red Pennant' },
   { id: 'wave', name: 'Big Wave', cost: 700, lvl: 2 }, { id: 'skull', name: 'Skull & Bones', cost: 900, lvl: 3 },
@@ -1144,11 +1166,18 @@ function payout(meta, t, opts = {}) {
   return { cash: c, xp: x, lines };
 }
 // apply a payout; returns level-up rewards
+// effect achievements: call after any stat changes; pops up newly earned effects
+function checkFx() {
+  const st = DATA.stats, got = [];
+  for (const e of EFFECTS) if (e.req && fxEarned(e.id) && !st.fxSeen[e.id]) { st.fxSeen[e.id] = true; got.push(e.name); }
+  if (got.length) { save(); setTimeout(() => notice('UNLOCKED', '✨ New boat effect!', `You earned: ${got.join(', ')}.\nEquip it in Garage → Effects.`), 1800); }
+  return got;
+}
 function award(p) {
   // runs with an admin speed boost pay into the admin layer, so removing admin gifts takes them away too
   const e = E(), adm = boosted(), before = levelOf(totalXp()).L;
   if (adm) { e.admCash += p.cash; e.admXp += p.xp; } else { e.earned += p.cash; e.xp += p.xp; }
-  const di = dailyInfo(); if (di.fresh && p.cash) { e.daily = { last: today(), streak: di.streak }; }
+  const di = dailyInfo(); if (di.fresh && p.cash) { e.daily = { last: today(), streak: di.streak }; DATA.stats.bestStreak = Math.max(DATA.stats.bestStreak, di.streak); }
   const after = levelOf(totalXp()).L, ups = [];
   for (let L = before + 1; L <= after; L++) { const bonus = 150 * L; if (adm) e.admCash += bonus; else e.earned += bonus; ups.push({ L, bonus }); }
   save(); pushProfile();
@@ -1384,11 +1413,11 @@ function applyLookTo(BM, L) {
 }
 const myLook = () => Object.assign({}, DATA.look, { skin: DATA.skin, eng: E().engine });
 // compact look for the network
-const packLook = L => [L.skin, L.helmet, L.hc, L.visor, L.suit, L.tone, L.flag, L.eng | 0];
+const packLook = L => [L.skin, L.helmet, L.hc, L.visor, L.suit, L.tone, L.flag, L.eng | 0, L.fx || 'none'];
 function unpackLook(a) {
   if (!Array.isArray(a)) return { skin: 'classic', helmet: 'open', hc: 0xffffff, visor: 'smoke', suit: 0xff6a13, tone: 2, flag: 'none', eng: 0 };
   const ok = (list, id, d) => list.some(x => x.id === id) ? id : d;
-  return { skin: ok(SKINS, a[0], 'classic'), helmet: ok(HELMETS, a[1], 'open'), hc: +a[2] || 0, visor: ok(VISORS, a[3], 'smoke'), suit: +a[4] || 0, tone: clamp(a[5] | 0, 0, 5), flag: ok(FLAGS, a[6], 'none'), eng: clamp(a[7] | 0, 0, 4) };
+  return { skin: ok(SKINS, a[0], 'classic'), helmet: ok(HELMETS, a[1], 'open'), hc: +a[2] || 0, visor: ok(VISORS, a[3], 'smoke'), suit: +a[4] || 0, tone: clamp(a[5] | 0, 0, 5), flag: ok(FLAGS, a[6], 'none'), eng: clamp(a[7] | 0, 0, 4), fx: ok(EFFECTS, a[8], 'none') };
 }
 // a boat for another racer, dressed in their look
 function lookedClone(L) {
@@ -1992,6 +2021,93 @@ function updateParticles(dt, t) {
   pGeo.attributes.position.needsUpdate = pGeo.attributes.aA.needsUpdate = pGeo.attributes.aS.needsUpdate = true;
 }
 
+// ================= boat effects (flames, sparks, trails...) =================
+// two small particle pools for every boat's effect: one glowing (additive), one solid (smoke). 2 draw calls total.
+const FX = (() => {
+  const make = additive => {
+    const N = 1100, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), al = new Float32Array(N), sz = new Float32Array(N);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aC', new THREE.BufferAttribute(col, 3)); g.setAttribute('aA', new THREE.BufferAttribute(al, 1)); g.setAttribute('aS', new THREE.BufferAttribute(sz, 1));
+    const m = new THREE.ShaderMaterial({ uniforms: pU, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
+      vertexShader: 'attribute float aA,aS;attribute vec3 aC;uniform float uScale;varying float vA;varying vec3 vC;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aS*uScale/max(-mv.z,0.5);vA=aA;vC=aC;gl_Position=projectionMatrix*mv;}',
+      fragmentShader: additive ? 'varying float vA;varying vec3 vC;void main(){float d=length(gl_PointCoord-.5);float a=smoothstep(.5,.05,d)*vA;if(a<.01)discard;gl_FragColor=vec4(vC*a,a);}'
+        : 'varying float vA;varying vec3 vC;void main(){float d=length(gl_PointCoord-.5);float a=smoothstep(.5,.2,d)*vA;if(a<.01)discard;gl_FragColor=vec4(vC,a);}' });
+    const pts = new THREE.Points(g, m); pts.frustumCulled = false; pts.renderOrder = 4; scene.add(pts);
+    return { N, pos, col, al, sz, g, list: [] };
+  };
+  return { A: make(true), S: make(false) };
+})();
+const _q = new THREE.Quaternion(), _v = new THREE.Vector3(), _c = new THREE.Color();
+function fxSpawn(pool, x, y, z, vx, vy, vz, life, size, grow, r, g, b, alpha = 1, grav = 0, tw = 0) {
+  if (pool.list.length >= pool.N) return;
+  pool.list.push({ x, y, z, vx, vy, vz, life, max: life, size, grow, r, g, b, alpha, grav, tw, ph: Math.random() * 6.28 });
+}
+// emit one boat's effect for this frame. o = { pos, q, vx, vz, acc, stripe }
+function fxEmit(id, o, dt, t) {
+  if (!id || id === 'none') return;
+  _q.set(o.q.x, o.q.y, o.q.z, o.q.w);
+  const W = (x, y, z) => _v.set(x, y, z).applyQuaternion(_q).add(o.pos);
+  const R = () => Math.random(), sp = Math.hypot(o.vx, o.vz);
+  const rate = { flames: 110, sparks: 80, smoke: sp > 3 ? 20 : 6, stardust: 60, aurora: sp > 2 ? 55 : 12, x_inferno: 150, x_galaxy: 120, x_storm: 90, x_royal: 95 }[id] || 0;
+  o.acc = (o.acc || 0) + dt * rate;
+  let n = Math.min(12, Math.floor(o.acc)); o.acc -= n;
+  const edge = () => { const u = 0.04 + R() * 0.92, s = R() < 0.5 ? -1 : 1; const p = hullPt(u, 1, s); return [p[0] * 1.04, p[1] + 0.05, p[2], s]; };
+  while (n-- > 0) {
+    if (id === 'flames' || id === 'x_inferno') {
+      const [x, y, z, sd] = edge(), w = W(x, y, z), blue = id === 'x_inferno', k = R();
+      if (blue) _c.setRGB(0.35 + k * 0.5, 0.6 + k * 0.4, 1); else _c.setRGB(1, 0.45 + k * 0.45, 0.08 + k * 0.2);
+      fxSpawn(FX.A, w.x, w.y, w.z, o.vx * 0.9 + (R() - 0.5) * 0.6, (blue ? 2.6 : 1.8) + R() * 1.6, o.vz * 0.9 + (R() - 0.5) * 0.6, 0.34 + R() * 0.3, (blue ? 0.9 : 0.8) + R() * 0.4, -0.9, _c.r, _c.g, _c.b, 0.9);
+      if (blue && R() < 0.12) { const e = W(x, y + 0.2, z); fxSpawn(FX.A, e.x, e.y, e.z, o.vx * 0.6 + (R() - 0.5), 5 + R() * 3, o.vz * 0.6 + (R() - 0.5), 1.1, 0.18, 0, 1, 0.75, 0.4, 1, -3); }
+    } else if (id === 'sparks' || id === 'x_storm') {
+      const [x, y, z] = edge(), w = W(x, y, z), a = R() * 6.28, b = R() * 3, purple = id === 'x_storm';
+      fxSpawn(FX.A, w.x, w.y, w.z, o.vx + Math.cos(a) * b * 1.6, 1 + R() * 3, o.vz + Math.sin(a) * b * 1.6, 0.18 + R() * 0.18, 0.42 + R() * 0.2, -0.6, purple ? 0.85 : 0.7, purple ? 0.55 : 0.9, 1, 1, -8);
+    } else if (id === 'smoke') {
+      const w = W((R() - 0.5) * 0.6, 0.4, 3.0); _c.setHex(o.stripe || 0xffffff).lerp(new THREE.Color(1, 1, 1), 0.25);
+      fxSpawn(FX.S, w.x, w.y, w.z, o.vx * 0.15 + (R() - 0.5) * 0.6, 0.5 + R() * 0.5, o.vz * 0.15 + (R() - 0.5) * 0.6, 2.0 + R() * 0.5, 0.8, 0.9, _c.r, _c.g, _c.b, 0.38);
+    } else if (id === 'stardust') {
+      const w = W((R() - 0.5) * 2.2, 0.3 + R() * 0.8, -1.5 + R() * 4.5), gold = R() < 0.7;
+      fxSpawn(FX.A, w.x, w.y, w.z, o.vx * 0.25 + (R() - 0.5) * 0.5, 0.2 + R() * 0.5, o.vz * 0.25 + (R() - 0.5) * 0.5, 1.3 + R() * 0.6, 0.34 + R() * 0.16, 0, 1, gold ? 0.82 : 1, gold ? 0.35 : 1, 1, 0, 1);
+    } else if (id === 'aurora') {
+      const lat = (R() - 0.5) * 2, w = W(lat, 0.15, 2.9); _c.setHSL((t * 0.15 + lat * 0.12 + 1) % 1, 1, 0.55);
+      fxSpawn(FX.A, w.x, w.y, w.z, o.vx * 0.1 + (R() - 0.5) * 0.3, 0.25 + R() * 0.3, o.vz * 0.1 + (R() - 0.5) * 0.3, 1.6 + R() * 0.5, 0.7, 0.9, _c.r, _c.g, _c.b, 0.55);
+    } else if (id === 'x_galaxy') {
+      const a = R() * 6.28, r = 3.4 + R() * 0.5, w = W(Math.cos(a) * r, 0.9 + Math.sin(a * 3 + t) * 0.25, Math.sin(a) * r * 1.3);
+      const tx = -Math.sin(a), tz = Math.cos(a); const k = R(); _c.setRGB(0.55 + k * 0.45, 0.45 + k * 0.4, 1);
+      _v.set(tx * 3.5, 0, tz * 3.5).applyQuaternion(_q);
+      fxSpawn(FX.A, w.x, w.y, w.z, o.vx + _v.x, 0, o.vz + _v.z, 0.8 + R() * 0.4, 0.5 + R() * 0.25, -0.2, _c.r, _c.g, _c.b, 1, 0, 1);
+    } else if (id === 'x_royal') {
+      const a = R() * 6.28, w = W(0.5 + Math.cos(a) * 0.55, 1.75, HZ(0.5) + 1.19 + Math.sin(a) * 0.55), up = R() < 0.4;
+      _v.set(-Math.sin(a) * 1.5, 0, Math.cos(a) * 1.5).applyQuaternion(_q);
+      fxSpawn(FX.A, w.x, w.y, w.z, o.vx + (up ? 0 : _v.x), up ? 1 + R() : 0.15, o.vz + (up ? 0 : _v.z), 0.9 + R() * 0.5, 0.32 + R() * 0.14, 0, 1, 0.85, 0.35, 1, 0, 1);
+    }
+  }
+  // storm caller: an occasional lightning arc between two points on the hull
+  if (id === 'x_storm' && (o.arcT = (o.arcT || 0) - dt) <= 0) {
+    o.arcT = 0.2 + Math.random() * 0.4;
+    const [ax, ay, az] = edge(), [bx, by, bz] = edge();
+    for (let k = 0; k <= 14; k++) { const f = k / 14, j = Math.sin(f * Math.PI) * 0.35; const w = W(ax + (bx - ax) * f + (Math.random() - 0.5) * j, ay + 0.3 + (by - ay) * f + Math.random() * j, az + (bz - az) * f + (Math.random() - 0.5) * j);
+      fxSpawn(FX.A, w.x, w.y, w.z, o.vx, 0, o.vz, 0.16, 0.5, 0, 0.92, 0.85, 1, 1); }
+  }
+}
+function fxUpdate(dt) {
+  for (const pool of [FX.A, FX.S]) {
+    const L = pool.list; let n = 0;
+    for (let i = L.length - 1; i >= 0; i--) {
+      const p = L[i]; p.life -= dt;
+      if (p.life <= 0) { L[i] = L[L.length - 1]; L.pop(); continue; }
+      p.vy += p.grav * dt; p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt; p.size = Math.max(0.02, p.size + p.grow * dt);
+    }
+    for (const p of L) {
+      const f = p.life / p.max; let a = p.alpha * Math.min(1, f * 2.5) * Math.min(1, (1 - f) * 10 + 0.2);
+      if (p.tw) a *= 0.55 + 0.45 * Math.sin(p.life * 18 + p.ph);
+      pool.pos[n * 3] = p.x; pool.pos[n * 3 + 1] = p.y; pool.pos[n * 3 + 2] = p.z;
+      pool.col[n * 3] = p.r; pool.col[n * 3 + 1] = p.g; pool.col[n * 3 + 2] = p.b; pool.al[n] = a; pool.sz[n] = p.size; n++;
+    }
+    pool.g.setDrawRange(0, n);
+    for (const k of ['position', 'aC', 'aA', 'aS']) pool.g.attributes[k].needsUpdate = true;
+  }
+}
+
 // ================= audio =================
 let AC = null, eng = null;
 const VOL = [0, 0.22, 0.5, 0.85];
@@ -2205,9 +2321,15 @@ function finishRace() {
   const allGold = MAPS.filter(m => !m.custom).every(m => Object.keys(DATA.runs).some(k => k.startsWith(m.id + ':') && DATA.runs[k].medal === 3));
   const champ = SKINS.find(s => s.unlock === 'all');
   if (!adminRun && allGold && !DATA.unlocked[champ.id]) { DATA.unlocked[champ.id] = true; unlocked.push(champ); unlocked.push({ name: "Champion's Gold flag" }); }
+  // effect achievements (real runs only: no admin boost, no custom maps)
+  if (!adminRun && !meta.custom) {
+    if (tier === 3 && E().engine === 0 && TUNE === Core.TIERS[0]) DATA.stats.stockGold[meta.id] = true;
+    if (t < tg.rec) DATA.stats.recs[meta.id] = true;
+  }
   // money + mastery
   const pay = payout(meta, t, adminRun ? {} : { pb: isPB && !!prevBest, newMedal: tier > oldMedal ? tier : 0, oldMedal });
   const ups = award(pay);
+  checkFx();
   save();
   $('fmap').textContent = meta.name.toUpperCase() + (R.laps > 1 ? ` · ${R.laps} LAPS` : '') + (ghostPick ? ` · VS ${ghostPick.n.toUpperCase()}` : '');
   $('ftime').textContent = fmt(t);
@@ -2290,6 +2412,7 @@ function itemState(cat, it) {
   const L = levelOf(totalXp()).L;
   let own;
   if (it.excl) return { own: ownsExcl(cat, it.id), lvlLock: false, cost: 0, canBuy: false, excl: true };
+  if (cat === 'fx') return { own: it.id === 'none' || fxEarned(it.id) || owns('fx', it.id), lvlLock: false, cost: 0, canBuy: false };
   if (cat === 'eng') own = owns('eng', it.k);
   else if (it.unlock === 'all') own = !!DATA.unlocked.champion || ADM.all || owns(cat, it.id);
   else if (it.unlock) own = !!DATA.unlocked[it.id] || ADM.all || owns(cat, it.id);
@@ -2305,18 +2428,20 @@ function itemCard(cat, it, equipped, sw, extra = '') {
   if (equipped) right = '<span class="price" style="color:var(--accent)">✓</span>';
   else if (st.own) right = it.excl ? '<span class="price" style="color:#ff9bd2">👑</span>' : '';
   else if (it.excl) right = '<span class="price lk">👑</span>';
+  else if (it.req) { const r = FXREQ[it.req]; right = `<span class="price lk">🔒 ${Math.min(r.have(), r.need)}/${r.need}</span>`; }
   else if (it.unlock) right = `<span class="price lk">🔒</span>`;
   else if (st.lvlLock) right = `<span class="price lk">🔒 LV ${it.lvl}</span>`;
   else right = `<span class="price ${st.canBuy ? '' : 'lk'}">${gPending === cat + ':' + (it.id ?? it.k) ? 'CONFIRM?' : money(st.cost)}</span>`;
-  const sub = equipped ? (it.excl ? '👑 Exclusive · equipped' : 'Equipped') : st.own ? (it.excl ? '👑 Exclusive · tap to equip' : 'Tap to equip') : it.excl ? '👑 Admin exclusive — can\'t be bought' : it.unlock ? '🔒 ' + req : st.lvlLock ? `Reach mastery ${it.lvl}, then ${money(st.cost)}` : st.canBuy ? 'Tap to buy' : `Need ${money(st.cost - cash())} more`;
+  const sub = equipped ? (it.excl ? '👑 Exclusive · equipped' : 'Equipped') : st.own ? (it.excl ? '👑 Exclusive · tap to equip' : 'Tap to equip') : it.req ? '🔒 ' + FXREQ[it.req].text(Math.min(FXREQ[it.req].have(), FXREQ[it.req].need)) : it.excl ? '👑 Admin exclusive — can\'t be bought' : it.unlock ? '🔒 ' + req : st.lvlLock ? `Reach mastery ${it.lvl}, then ${money(st.cost)}` : st.canBuy ? 'Tap to buy' : `Need ${money(st.cost - cash())} more`;
   return `<div class="skin ${st.own ? '' : 'lock'} ${equipped ? 'sel' : ''} ${it.excl ? 'excl' : ''} ${gPending === cat + ':' + (it.id ?? it.k) ? 'buy' : ''}" data-cat="${cat}" data-id="${it.id ?? it.k}">
     ${sw}<div style="min-width:0"><b>${it.name}</b><small>${sub}</small>${extra}</div>${right}</div>`;
 }
 // owned exclusives first, then the normal catalogue, then exclusives you don't have yet
-const exclOrder = (cat, list) => [...list.filter(x => x.excl && ownsExcl(cat, x.id)), ...list.filter(x => !x.excl), ...list.filter(x => x.excl && !ownsExcl(cat, x.id))];
+// owned exclusives first, then the normal catalogue. Exclusives you don't own aren't shown at all.
+const exclOrder = (cat, list) => [...list.filter(x => x.excl && ownsExcl(cat, x.id)), ...list.filter(x => !x.excl)];
 function swatches(key, list, cur) { return `<div class="swrow">${list.map((c, i) => `<button data-sw="${key}" data-v="${key === 'tone' ? i : c}" class="${(key === 'tone' ? i : c) === cur ? 'on' : ''}" style="background:${hexc(c)}"></button>`).join('')}</div>`; }
 function renderSkins() {
-  const tabs = [['paint', 'PAINT'], ['driver', 'DRIVER'], ['flag', 'FLAG'], ['eng', 'ENGINE']];
+  const tabs = [['paint', 'PAINT'], ['driver', 'DRIVER'], ['flag', 'FLAG'], ['fx', 'EFFECTS'], ['eng', 'ENGINE']];
   $('gTabs').innerHTML = tabs.map(([k, l]) => `<button class="chip" data-t="${k}" style="${k === gTab ? 'background:var(--accent);color:#14202a' : ''}">${l}</button>`).join('');
   $('gTabs').querySelectorAll('button').forEach(b => b.onclick = () => { gTab = b.dataset.t; gPending = null; renderSkins(); });
   const L = DATA.look;
@@ -2331,6 +2456,10 @@ function renderSkins() {
       + `<div class="sect">VISOR</div>` + exclOrder('visor', VISORS).map(x => itemCard('visor', x, L.visor === x.id, `<div class="sw" style="background:${hexc(x.c)}"></div>`)).join('')
       + `<div class="sect">RACE SUIT</div>` + swatches('suit', COLORS, L.suit)
       + `<div class="sect">SKIN TONE</div>` + swatches('tone', TONES, L.tone);
+  } else if (gTab === 'fx') {
+    $('gSub').innerHTML = 'Effects can\'t be bought — each one is earned with a tough achievement.';
+    const ic = { none: '·', flames: '🔥', sparks: '⚡', smoke: '💨', stardust: '✨', aurora: '🌈', x_inferno: '💙', x_galaxy: '🌌', x_storm: '🌩', x_royal: '👑' };
+    h = exclOrder('fx', EFFECTS).map(x => itemCard('fx', x, (L.fx || 'none') === x.id, `<div class="sw" style="display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(255,255,255,.08)">${ic[x.id] || '✨'}</div>`, x.desc ? `<small style="display:block">${x.desc}</small>` : '')).join('');
   } else if (gTab === 'flag') {
     $('gSub').innerHTML = 'A flag on a stern pole. It flaps harder the faster you go.';
     h = exclOrder('flag', FLAGS).map(x => itemCard('flag', x, L.flag === x.id, x.id === 'none' ? '<div class="sw" style="background:rgba(255,255,255,.08)"></div>' : `<div class="sw" style="background:url(${flagTexture(x.id).image.toDataURL()}) center/cover"></div>`)).join('');
@@ -2352,7 +2481,7 @@ function renderSkins() {
 }
 function lookChanged() { save(); applyMyLook(); renderSkins(); pushProfile(); if (LOBBY.code) lobbyPushMe(); }
 function garageClick(cat, id) {
-  const list = { paint: SKINS, helmet: HELMETS, visor: VISORS, flag: FLAGS }[cat];
+  const list = { paint: SKINS, helmet: HELMETS, visor: VISORS, flag: FLAGS, fx: EFFECTS }[cat];
   const it = cat === 'eng' ? { k: +id, cost: ENGINES[+id].cost, lvl: ENGINES[+id].lvl } : list.find(x => x.id === id);
   const st = itemState(cat, it), key = cat + ':' + id;
   if (!st.own) {
@@ -2483,7 +2612,7 @@ function drawMini() {
 const camDir = new THREE.Vector3(0, 0, -1), tmpV = new THREE.Vector3(), lookV = new THREE.Vector3();
 let orbit = 0;
 let spec = null; // spectating another racer (lobby): peer id
-const GFOCUS = { paint: [0, 0.4, 0, 7, 2.4], driver: [0.5, 1.15, HZ(0.5) + 1.2, 2.6, 0.75], flag: [-0.78, 1.5, HZ(0.05), 3.6, 0.9], eng: [0, 0.6, HZ(0) + 0.4, 3.2, 0.8] };
+const GFOCUS = { fx: [0, 0.8, 0, 8.5, 3], paint: [0, 0.4, 0, 7, 2.4], driver: [0.5, 1.15, HZ(0.5) + 1.2, 2.6, 0.75], flag: [-0.78, 1.5, HZ(0.05), 3.6, 0.9], eng: [0, 0.6, HZ(0) + 0.4, 3.2, 0.8] };
 function updateCamera(dt, speed) {
   let b = boat;
   if (spec && NET.peers[spec] && NET.peers[spec].mesh) { const p = NET.peers[spec]; b = { pos: p.pos, q: p.q }; speed = Math.hypot(p.v[0], p.v[1]); }
@@ -2665,6 +2794,7 @@ function mergeProfile(p) {
     if (remoteAhead) { if (owns('eng', pe.engine | 0)) e.engine = pe.engine | 0; if (p.look) Object.assign(DATA.look, p.look); if (p.skin && DATA.unlocked[p.skin]) DATA.skin = p.skin; }
   } else if (p.skin && DATA.unlocked[p.skin] && DATA.skin === 'classic') DATA.skin = p.skin;
   DATA.rsSeen = Math.max(DATA.rsSeen || 0, +p.rs || 0);
+  if (p.stats && typeof p.stats === 'object') { const a = DATA.stats, b = p.stats; Object.assign(a.stockGold, b.stockGold || {}); Object.assign(a.recs, b.recs || {}); Object.assign(a.fxSeen, b.fxSeen || {}); a.air = Math.max(a.air, +b.air || 0); a.wins = Math.max(a.wins, +b.wins || 0); a.bestStreak = Math.max(a.bestStreak, +b.bestStreak || 0); }
   applyMyLook();
   save();
 }
@@ -2672,11 +2802,11 @@ async function pushProfile() {
   if (!NET.on || !me()) return;
   const runs = {}; for (const k in DATA.runs) { const r = DATA.runs[k]; if (r.best || r.medal) runs[k] = { best: r.best || 0, medal: r.medal || 0 }; }
   if (BANNED) return;
-  try { await api('players/' + me().id, 'PUT', { name: me().name, runs, unlocked: DATA.unlocked, skin: DATA.skin, econ: E(), look: DATA.look, rs: DATA.rsSeen || 0, seen: Date.now() }); } catch (e) {}
+  try { await api('players/' + me().id, 'PUT', { name: me().name, runs, unlocked: DATA.unlocked, skin: DATA.skin, econ: E(), look: DATA.look, stats: DATA.stats, rs: DATA.rsSeen || 0, seen: Date.now() }); } catch (e) {}
 }
 // ---- admin panel hooks: gifts, speed boost, resets, bans and event settings (polled every few seconds) ----
 function ownedNow(cat, id) {
-  const list = { paint: SKINS, helmet: HELMETS, visor: VISORS, flag: FLAGS }[cat];
+  const list = { paint: SKINS, helmet: HELMETS, visor: VISORS, flag: FLAGS, fx: EFFECTS }[cat];
   if (cat === 'eng') return itemState('eng', { k: id, cost: 1, lvl: 0 }).own;
   const it = list.find(x => x.id === id); return !!it && itemState(cat, it).own;
 }
@@ -2684,7 +2814,7 @@ function fixEquipped() {
   let ch = false;
   if (!ownedNow('paint', DATA.skin)) { DATA.skin = 'classic'; ch = true; }
   if (!ownedNow('eng', E().engine)) { let k = 0; for (let i = 0; i < 5; i++) if (ownedNow('eng', i)) k = i; E().engine = k; ch = true; }
-  for (const [cat, d] of [['helmet', 'open'], ['visor', 'smoke'], ['flag', 'check']]) if (!ownedNow(cat, DATA.look[cat])) { DATA.look[cat] = d; ch = true; }
+  for (const [cat, d] of [['helmet', 'open'], ['visor', 'smoke'], ['flag', 'check'], ['fx', 'none']]) if (!ownedNow(cat, DATA.look[cat])) { DATA.look[cat] = d; ch = true; }
   return ch;
 }
 function resetProgress(rs) {
@@ -3269,7 +3399,8 @@ function lobbyDone(place, t, laps) {
   let pay;
   if (t != null) pay = payout(meta, t, { place, field });
   else { const diff = DIFF[meta.id] || 1, c = Math.round(45 * diff * Math.max(laps, 0)) + Math.round([0, 160, 100, 60, 30][place] || 15) * (field > 1 ? 1 : 0), x = 40 * Math.max(laps, 0) + 25; pay = { cash: meta.custom ? 0 : c, xp: x, lines: [[laps ? `Survived ${laps} lap${laps > 1 ? 's' : ''} · P${place} of ${field}` : `Did not finish · P${place}`, meta.custom ? 0 : c, x]] }; }
-  LOBBY.pay = pay; LOBBY.ups = award(pay);
+  if (place === 1 && t != null && field >= 2 && !boosted() && !LOBBY.out) DATA.stats.wins++;
+  LOBBY.pay = pay; LOBBY.ups = award(pay); checkFx();
   if (LOBBY.out) { flash('KNOCKED OUT', 'var(--bad)', 1800); beep(180, 0.6, 'sawtooth', 0.2); }
   else if (place === 1) { flash('WINNER!', 'var(--accent)', 1800); beep(1320, 0.2); setTimeout(() => beep(1760, 0.4), 200); }
   setTimeout(() => { if (LOBBY.code && LOBBY.racing && !spec) showResults(); }, 1600);
@@ -3645,6 +3776,7 @@ function frame(now) {
   const b = boat, speed = Math.hypot(b.vel.x, b.vel.z);
   if (b.boostFired) { b.boostFired = false; noiseHit(0.5, 1800, 0.6); beep(300, 0.25, 'sawtooth', 0.12); beep(600, 0.35, 'sawtooth', 0.08); shake = Math.max(shake, 0.25); }
   if (landed && state === 'racing') {
+    if (landed.clean && !boosted()) { DATA.stats.air += landed.air; if (!(frameNo % 4)) save(); checkFx(); }
     const big = landed.air > 1.2 ? 'HUGE AIR' : landed.air > 0.8 ? 'BIG AIR' : 'AIR';
     if (landed.clean) { trick(`${big} ${landed.air.toFixed(1)}s<small>CLEAN LANDING · +BOOST</small>`); beep(990, 0.12); beep(1480, 0.2); }
     else { trick(`${big} ${landed.air.toFixed(1)}s<small style="color:var(--bad)">SLOPPY LANDING</small>`); }
@@ -3675,6 +3807,10 @@ function frame(now) {
   }
   if (slam > 3) { for (let i = 0; i < Math.min(30, slam * 4); i++) { const s = Math.random() < 0.5 ? -1 : 1; const p = qv(s * 0.7, -0.1, -1.6 + Math.random()); spawn(p.x, p.y, p.z, rt.x * s * (3 + Math.random() * 4) + b.vel.x * 0.6, 2 + Math.random() * 3, rt.z * s * (3 + Math.random() * 4) + b.vel.z * 0.6, 1.1, 0.45 + Math.random() * 0.4, 0); } }
   updateParticles(dt, simT);
+  // boat effects: yours, plus other racers' (when close enough to see)
+  if (boatMesh.visible && DATA.look.fx && DATA.look.fx !== 'none') { boat.fxo = Object.assign(boat.fxo || {}, { pos: boatMesh.position, q: boat.q, vx: b.vel.x, vz: b.vel.z, stripe: (SKINS.find(k => k.id === DATA.skin) || SKINS[0]).stripe }); fxEmit(DATA.look.fx, boat.fxo, dt, simT); }
+  for (const pid in NET.peers) { const pr = NET.peers[pid]; if (!pr.mesh || !pr.mesh.visible || !pr.look || !pr.look.fx || pr.look.fx === 'none' || pr.pos.distanceTo(camera.position) > 160) continue; pr.fxo = pr.fxo || {}; Object.assign(pr.fxo, { pos: pr.pos, q: pr.q, vx: pr.v[0], vz: pr.v[1], stripe: (SKINS.find(k => k.id === pr.look.skin) || SKINS[0]).stripe }); fxEmit(pr.look.fx, pr.fxo, dt, simT); }
+  fxUpdate(dt);
   // world animation
   for (const o of W3.bobbers) {
     const h = waveH(o.x, o.z, simT), e = 0.6;
