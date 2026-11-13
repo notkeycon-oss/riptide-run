@@ -233,8 +233,8 @@ function tab(t) {
 }
 let P = {}, ADMD = {}, BANS = {}, sel = null, TAKE = {};
 // what a racer really has: their synced profile minus anything you've taken away that hasn't synced yet
-const realMoney = (id, e) => (e.earned || 0) - (e.spent || 0) - Math.max(+e.takenCash || 0, +((TAKE[id] || {}).cash) || 0);
-const realXp = (id, e) => Math.max(0, (+e.xp || 0) - Math.max(+e.takenXp || 0, +((TAKE[id] || {}).xp) || 0));
+const realMoney = (id, e) => Math.max(0, (e.earned || 0) - (e.spent || 0) - (+((TAKE[id] || {}).cash) || 0));
+const realXp = (id, e) => Math.max(0, (+e.xp || 0) - (+((TAKE[id] || {}).xp) || 0));
 const xpAtLevel = L => { let x = 0; for (let k = 1; k < L; k++) x += xpNeed(k); return x; };
 const FXRULES = { flames: st => Object.keys(st.stockGold || {}).length >= 5, sparks: st => Object.keys(st.recs || {}).length >= 3, smoke: st => (st.air || 0) >= 180, stardust: st => (st.bestStreak || 0) >= 14, bubbles: st => (st.wins || 0) >= 20 };
 const isOn = p => p && p.on && Date.now() - (p.on.t || 0) < 90000;
@@ -276,7 +276,7 @@ const actionsHTML = scope => `
     <div class="box"><b>🎁 GIVE AN ITEM</b><div class="row"><select id="${scope}Cat">${Object.keys(CATALOG).map(c => `<option value="${c}">${CATNAME[c]}</option>`).join('')}</select><select id="${scope}Item"></select><button data-${scope}-item="1">GIVE</button></div></div>
     <div class="box"><b>🔓 UNLOCK EVERYTHING</b><div class="row"><button data-${scope}-all="1">GIVE ALL</button><button data-${scope}-all="0">TAKE BACK</button></div><p class="msg">Every paint, helmet, visor, flag and engine.</p></div>
     <div class="box"><b>🧹 REMOVE ADMIN GIFTS</b><button data-${scope}-despawn="1">REMOVE ALL ADMIN STUFF</button><p class="msg">Removes boosts, given money/mastery/items/unlocks and anything bought with given money. Keeps what was earned by playing.</p></div>
-    ${scope === 'one' ? `<div class="box danger"><b>➖ TAKE AWAY</b><div class="row"><input type="number" id="takeCash" placeholder="money" style="width:110px"><button class="del" data-one-takecash="1">TAKE MONEY</button></div><div class="row" style="margin-top:6px"><input type="number" id="setLvl" placeholder="level" min="1" max="30" style="width:110px"><button class="del" data-one-setlvl="1">SET MASTERY LEVEL</button></div><p class="msg">Only lowers what they earned by playing. Engines above the new level stay owned — take those away in Inventory.</p></div>` : ''}
+    ${scope === 'one' ? `<div class="box danger"><b>➖ TAKE AWAY</b><div class="row"><input type="number" id="takeCash" placeholder="money" style="width:110px"><button class="del" data-one-takecash="1">TAKE MONEY</button></div><div class="row" style="margin-top:6px"><input type="number" id="setLvl" placeholder="level" min="1" max="30" style="width:110px"><button class="del" data-one-setlvl="1">SET MASTERY LEVEL</button></div><div class="row" style="margin-top:6px"><button data-one-untake="1">UNDO MONEY &amp; MASTERY TAKE-AWAYS</button></div><p class="msg">Only lowers what they earned by playing. Engines above the new level stay owned — take those away in Inventory.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box"><b>✏ RENAME</b><div class="row"><input id="newName" maxlength="14" placeholder="New racer name" style="width:160px"><button data-one-rename="1">RENAME</button></div><p class="msg">Updates their profile and leaderboard times. They sign in with the new name and the same PIN.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box"><b>💬 MESSAGE / KICK</b><input id="oneMsg" maxlength="200" placeholder="Message or kick reason" style="width:100%"><div class="row" style="margin-top:6px"><button data-one-msg="1">SEND MESSAGE</button><button class="del" data-one-kick="1">KICK</button></div><p class="msg">Kick drops them out of their race or lobby to the menu.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box danger"><b>⛔ BAN</b><input id="banReason" maxlength="120" placeholder="Reason (shown to them)" style="width:100%"><div class="row" style="margin-top:6px"><select id="banLen"><option value="3600000">1 hour</option><option value="86400000">1 day</option><option value="604800000" selected>7 days</option><option value="2592000000">30 days</option><option value="0">Permanent</option></select><button class="del" data-one-ban="1">BAN</button><button data-one-unban="1">UNBAN</button></div></div>` : ''}
@@ -351,6 +351,7 @@ function bind(scope, only) {
     if (prompt(`This wipes ${scope === 'all' ? "EVERY racer's" : pname(list[0]) + "'s"} progress and leaderboard times. Type ${word} to confirm.`) !== word) return;
     const lb = (await db('lb')) || {}, lbt = (await db('lbt').catch(() => null)) || {};
     for (const id of list) {
+      await db('take/' + id, 'DELETE'); await db('lbdel/' + id, 'DELETE');
       await db('rst/' + id, 'PUT', Date.now()); await db('adm/' + id, 'DELETE'); await db('players/' + id, 'DELETE');
       for (const k in lb) if (lb[k][id]) { await db(`lb/${k}/${id}`, 'DELETE'); await db(`gh/${k}/${id}`, 'DELETE'); }
       for (const k in lbt) for (const tk in lbt[k]) if (lbt[k][tk] && lbt[k][tk][id]) { await db(`lbt/${k}/${tk}/${id}`, 'DELETE'); await db(`ght/${k}/${tk}/${id}`, 'DELETE'); }
@@ -362,14 +363,19 @@ function bind(scope, only) {
     const id = only[0], n = Math.round(+$('takeCash').value); if (!(n > 0)) return say('Type an amount first.', false);
     const e = (P[id] || {}).econ || {}, have = realMoney(id, e), amt = Math.min(n, Math.max(0, have));
     if (!amt) return say(`${pname(id)} has no earned money to take.`, false);
-    const cur = Math.max(+e.takenCash || 0, +((TAKE[id] || {}).cash) || 0);
+    const cur = +((TAKE[id] || {}).cash) || 0;
     await db(`take/${id}/cash`, 'PUT', cur + amt); log(`Took ${money(amt)} from ${pname(id)}`); await loadAll(); say(`Took ${money(amt)} from ${pname(id)}.`);
+  });
+  q('untake').forEach(b => b.onclick = async () => {
+    const id = only[0], T = TAKE[id] || {}; if (!T.cash && !T.xp) return say(`Nothing was taken from ${pname(id)}.`, false);
+    if (!confirm(`Give back ${money(T.cash || 0)} and ${(T.xp || 0).toLocaleString()} XP to ${pname(id)}?`)) return;
+    await db(`take/${id}/cash`, 'DELETE'); await db(`take/${id}/xp`, 'DELETE'); log(`Undid money/mastery take-aways for ${pname(id)}`); await loadAll(); say('Given back.');
   });
   q('setlvl').forEach(b => b.onclick = async () => {
     const id = only[0], L = Math.round(+$('setLvl').value); if (!(L >= 1 && L <= 30)) return say('Pick a level from 1 to 30.', false);
     const e = (P[id] || {}).econ || {}, now = realXp(id, e), target = xpAtLevel(L);
     if (target >= now) return say(`${pname(id)} is already at or below level ${L}.`, false);
-    const cur = Math.max(+e.takenXp || 0, +((TAKE[id] || {}).xp) || 0);
+    const cur = +((TAKE[id] || {}).xp) || 0;
     await db(`take/${id}/xp`, 'PUT', cur + (now - target)); log(`Set ${pname(id)}'s mastery to level ${L}`); await loadAll(); say(`${pname(id)} is now mastery ${L}.`);
   });
   q('rename').forEach(b => b.onclick = async () => {
