@@ -1150,7 +1150,7 @@ const offline = () => BANNED || !!CFG.maint;   // online features switched off f
 const boosted = () => (ADM.speed || 1) !== 1;
 const admWallet = () => Math.max(0, (ADM.cash || 0) + E().admCash - E().admSpent);
 const realCash = () => E().earned - E().spent - (E().takenCash || 0);
-const cash = () => realCash() + admWallet();
+const cash = () => Math.max(0, realCash()) + admWallet();
 const totalXp = () => Math.max(0, E().xp - (E().takenXp || 0)) + (ADM.xp || 0) + E().admXp;
 const xpNeed = L => 250 + 100 * L;               // xp to go from level L to L+1
 function levelOf(xp) { let L = 1; while (L < 30 && xp >= xpNeed(L)) { xp -= xpNeed(L); L++; } return { L, into: xp, need: xpNeed(L), max: L >= 30 }; }
@@ -2547,7 +2547,7 @@ function itemState(cat, it) {
   else if (!it.cost) own = true;
   else own = owns(cat, it.id) || (cat === 'paint' && DATA.unlocked[it.id]);
   const c = it.cost || 0;
-  return { own, lvlLock: !own && it.lvl > L, cost: c, canBuy: !own && !it.unlock && (it.lvl || 0) <= L && (realCash() >= c || admWallet() >= c) };
+  return { own, lvlLock: !own && it.lvl > L, cost: c, canBuy: !own && !it.unlock && (it.lvl || 0) <= L && cash() >= c };
 }
 function itemCard(cat, it, equipped, sw, extra = '') {
   const st = itemState(cat, it);
@@ -2560,7 +2560,7 @@ function itemCard(cat, it, equipped, sw, extra = '') {
   else if (it.unlock) right = `<span class="price lk">🔒</span>`;
   else if (st.lvlLock) right = `<span class="price lk">🔒 LV ${it.lvl}</span>`;
   else right = `<span class="price ${st.canBuy ? '' : 'lk'}">${gPending === cat + ':' + (it.id ?? it.k) ? 'CONFIRM?' : money(st.cost)}</span>`;
-  const sub = equipped ? (it.excl ? '👑 Exclusive · equipped' : 'Equipped') : st.own ? (it.excl ? '👑 Exclusive · tap to equip' : 'Tap to equip') : it.req ? '🔒 ' + FXREQ[it.req].text(Math.min(FXREQ[it.req].have(), FXREQ[it.req].need)) : it.excl ? '👑 Admin exclusive — can\'t be bought' : it.unlock ? '🔒 ' + req : st.lvlLock ? `Reach mastery ${it.lvl}, then ${money(st.cost)}` : st.canBuy ? 'Tap to buy' : `Need ${money(st.cost - cash())} more`;
+  const sub = equipped ? (it.excl ? '👑 Exclusive · equipped' : 'Equipped') : st.own ? (it.excl ? '👑 Exclusive · tap to equip' : 'Tap to equip') : it.req ? '🔒 ' + FXREQ[it.req].text(Math.min(FXREQ[it.req].have(), FXREQ[it.req].need)) : it.excl ? '👑 Admin exclusive — can\'t be bought' : it.unlock ? '🔒 ' + req : st.lvlLock ? `Reach mastery ${it.lvl}, then ${money(st.cost)}` : st.canBuy ? 'Tap to buy' : `Need ${money(Math.max(1, st.cost - cash()))} more`;
   return `<div class="skin ${st.own ? '' : 'lock'} ${equipped ? 'sel' : ''} ${it.excl ? 'excl' : ''} ${gPending === cat + ':' + (it.id ?? it.k) ? 'buy' : ''}" data-cat="${cat}" data-id="${it.id ?? it.k}">
     ${sw}<div style="min-width:0"><b>${it.name}</b><small>${sub}</small>${extra}</div>${right}</div>`;
 }
@@ -2616,8 +2616,10 @@ function garageClick(cat, id) {
     if (!st.canBuy) { gPending = null; renderSkins(); return; }
     if (gPending !== key) { gPending = key; renderSkins(); return; }
     const k = cat === 'eng' ? +id : id;
-    if (admWallet() >= st.cost) { E().admSpent += st.cost; grantAdm(cat, k); }   // bought with admin money: goes away with admin gifts
-    else { E().spent += st.cost; if (cat === 'paint') DATA.unlocked[id] = true; else grant(cat, k); }
+    // admin-gift money is used first; anything bought with it goes away if the admin removes gifts
+    const fromAdm = Math.min(admWallet(), st.cost), fromReal = st.cost - fromAdm;
+    E().admSpent += fromAdm; E().spent += fromReal;
+    if (fromAdm > 0) grantAdm(cat, k); else { if (cat === 'paint') DATA.unlocked[id] = true; else grant(cat, k); }
     gPending = null; beep(1200, 0.1); beep(1600, 0.2);
   }
   gPending = null;
@@ -2915,7 +2917,6 @@ function mergeProfile(p) {
   if (pe && typeof pe === 'object') {
     const remoteAhead = (+pe.xp || 0) > e.xp;
     e.earned = Math.max(e.earned, +pe.earned || 0); e.spent = Math.max(e.spent, +pe.spent || 0); e.xp = Math.max(e.xp, +pe.xp || 0);
-    e.takenCash = Math.max(e.takenCash || 0, +pe.takenCash || 0); e.takenXp = Math.max(e.takenXp || 0, +pe.takenXp || 0);
     for (const cat in (pe.own || {})) for (const id in pe.own[cat]) if (pe.own[cat][id]) grant(cat, cat === 'eng' ? +id : id);
     if (pe.daily && pe.daily.last && pe.daily.last > (e.daily.last || '')) e.daily = { last: pe.daily.last, streak: +pe.daily.streak || 1 };
     if (pe.admEp != null && pe.admEp === e.admEp) {
@@ -2970,8 +2971,8 @@ async function pollAdmin() {
     // the admin took things away: money/mastery counters, items, effects
     if (uid && tk !== undefined) {
       const T = tk && typeof tk === 'object' ? tk : {}, e = E(); let ch = false;
-      if ((+T.cash || 0) > (e.takenCash || 0)) { e.takenCash = +T.cash; ch = true; }
-      if ((+T.xp || 0) > (e.takenXp || 0)) { e.takenXp = +T.xp; ch = true; }
+      if ((+T.cash || 0) !== (e.takenCash || 0)) { e.takenCash = +T.cash || 0; ch = true; }
+      if ((+T.xp || 0) !== (e.takenXp || 0)) { e.takenXp = +T.xp || 0; ch = true; }
       DATA.revSeen = DATA.revSeen || {};
       for (const cat in (T.items || {})) for (const id in T.items[cat]) {
         if (cat === 'fx') continue; const k = cat + '|' + id, t = +T.items[cat][id] || 1;
