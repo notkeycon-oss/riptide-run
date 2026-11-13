@@ -14,7 +14,11 @@ A browser powerboat racing game in a single file: open `riptide.html`.
 On touch screens the ⚡ button is boost.
 
 ## What's in the game
-- **Five maps**: Harbor Point, Red Rock Canyon, Coral Lagoon, Storm Point, and **Breakers Bay**, a stunt circuit with huge swells and kicker ramps. Clean landings refill your boost.
+- **Six maps**: Harbor Point, Red Rock Canyon, Coral Lagoon, Storm Point, **Breakers Bay** (a stunt circuit with huge swells and kicker ramps, where clean landings refill your boost), and **Gator Bayou**.
+- **Gator Bayou** is a dark, foggy cypress swamp sprint. The channel splits twice, so you pick your route:
+  - First split: Cypress Run (wide and long), Root Tunnel (tight and short, full of trunks) or Gator Bend (log jumps and gators).
+  - Second split: Sunken Village (under the stilt shacks) or Hollow Log (drive through a giant fallen tree).
+  - There's also a hidden cut behind a curtain of vines. Gold here unlocks the Swamp Lantern paint.
 - **Boost**: a burst of thrust that also tightens your carve. It recharges on a cooldown, and faster while you slipstream a rival.
 - **Money and mastery**: every finished run (online or offline) pays money and mastery XP. Payouts scale with how hard the map is and how close you are to the gold time. On top of that you can earn first-time medal bonuses, a personal-best bonus, a daily streak bonus, and ×1.5 on the featured map of the day.
 - **Engine tiers T1–T5**: mastery level unlocks each tier, and money buys it.
