@@ -146,6 +146,8 @@ input.tx:focus{border-color:var(--accent)}
 .skin .price.lk{color:var(--dim)}
 .skin.buy{border-color:#7dffb0}
 .estat{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--dim)}.estat i{display:block;height:5px;border-radius:3px;background:var(--accent)}
+.qrow{background:rgba(255,255,255,.06);border-radius:10px;padding:8px 12px;margin:6px 0}
+.qrow.qdone{opacity:.55}.qtop{display:flex;justify-content:space-between;gap:10px;font-size:18px;font-weight:600}.qtop b{color:#7dffb0;font-size:16px;white-space:nowrap}
 .rewards{margin:10px auto 0;text-align:left;max-width:420px;font-size:17px}
 .rewards div{display:flex;justify-content:space-between;gap:10px;padding:2px 0;color:var(--dim)}
 .rewards div b{color:#7dffb0;font-variant-numeric:tabular-nums}
@@ -228,6 +230,7 @@ input.tx:focus{border-color:var(--accent)}
     <div class="row">
       <button class="sec" id="lobbyBtn" style="border-color:var(--accent)">🏁 PLAY WITH FRIENDS</button>
       <button class="sec" id="builderBtn">🛠 MAP BUILDER</button>
+      <button class="sec" id="questBtn" style="border-color:#7dffb0">📋 QUESTS</button>
     </div>
     <div class="row">
       <button class="sec" id="garageBtn">GARAGE</button>
@@ -277,6 +280,15 @@ input.tx:focus{border-color:var(--accent)}
     <div class="sub" id="gSub" style="margin:8px 0 0"></div>
     <div id="skins"></div>
     <div class="gfoot"><button class="go" id="garDone">DONE</button></div>
+  </div>
+</div>
+
+<div class="panel hidden" id="quests">
+  <div class="card">
+    <h2>QUESTS</h2>
+    <div class="sub" style="margin-top:-6px">Extra money and mastery. Everyone gets the same quests each day.</div>
+    <div id="qList" style="text-align:left"></div>
+    <button class="go" id="qDone">DONE</button>
   </div>
 </div>
 
@@ -1150,22 +1162,106 @@ const dayNum = s => Math.round(new Date(s + 'T12:00:00').getTime() / 864e5);
 const featuredMap = () => MAPS.find(m => !m.custom && m.id === CFG.feat) || MAPS.filter(m => !m.custom)[dayNum(today()) % MAPS.filter(m => !m.custom).length];
 function dailyInfo() { const d = E().daily; const t = today(); const fresh = d.last !== t; const streak = !fresh ? d.streak : d.last && dayNum(t) - dayNum(d.last) === 1 ? d.streak + 1 : 1; return { fresh, streak: Math.min(streak, 30) }; }
 // payout for a finished run. perf compares your time to the gold time; harder maps pay more.
+const dailyCash = k => 75 + 25 * Math.min(k, 10);
 function payout(meta, t, opts = {}) {
   if (meta.custom) return { cash: 0, xp: 25, lines: [['Custom map practice', 0, 25]] };
   const tg = targets(meta), diff = DIFF[meta.id] || 1, len = Math.min(6, tg.g / 60);
   const perf = clamp(tg.g / t, 0.45, 1.3);
   const lines = [];
-  let c = Math.round(55 * diff * len * Math.pow(perf, 3) * 2), x = Math.round(70 * diff * len * (0.5 + 0.5 * perf));
+  let c = Math.round(32 * diff * len * Math.pow(perf, 3) * 2), x = Math.round(40 * diff * len * (0.5 + 0.5 * perf));
   lines.push([`Run pay · ${perf >= 1 ? 'gold pace' : Math.round(perf * 100) + '% of gold pace'}`, c, x]);
-  if (opts.newMedal) { const MB = [0, 100, 200, 400], MX = [0, 40, 80, 160]; let mc = 0, mx = 0; for (let k = opts.oldMedal + 1; k <= opts.newMedal; k++) { mc += MB[k]; mx += MX[k]; } mc = Math.round(mc * diff); lines.push(['First-time medal bonus', mc, mx]); c += mc; x += mx; }
-  if (opts.pb) { const pc = Math.round(c * 0.25); lines.push(['Personal best', pc, 30]); c += pc; x += 30; }
-  if (opts.place) { const PB = [0, 160, 100, 60, 30], n = opts.field || 1; const pc = Math.round((PB[opts.place] || 15) * Math.min(1, (n - 1) / 3) * diff); if (pc) { lines.push([`Finished P${opts.place} of ${n}`, pc, Math.round(pc / 2)]); c += pc; x += Math.round(pc / 2); } }
-  if (featuredMap().id === meta.id) { lines.push(['Featured map of the day ×1.5', Math.round(c * 0.5), Math.round(x * 0.5)]); c = Math.round(c * 1.5); x = Math.round(x * 1.5); }
+  if (opts.newMedal) { const MB = [0, 60, 120, 250], MX = [0, 25, 50, 100]; let mc = 0, mx = 0; for (let k = opts.oldMedal + 1; k <= opts.newMedal; k++) { mc += MB[k]; mx += MX[k]; } mc = Math.round(mc * diff); lines.push(['First-time medal bonus', mc, mx]); c += mc; x += mx; }
+  if (opts.pb) { const pc = Math.round(c * 0.15); lines.push(['Personal best', pc, 20]); c += pc; x += 20; }
+  if (opts.place) { const PB = [0, 100, 60, 35, 20], n = opts.field || 1; const pc = Math.round((PB[opts.place] || 15) * Math.min(1, (n - 1) / 3) * diff); if (pc) { lines.push([`Finished P${opts.place} of ${n}`, pc, Math.round(pc / 2)]); c += pc; x += Math.round(pc / 2); } }
+  if (featuredMap().id === meta.id) { lines.push(['Featured map of the day ×1.25', Math.round(c * 0.25), Math.round(x * 0.25)]); c = Math.round(c * 1.25); x = Math.round(x * 1.25); }
   const di = dailyInfo();
-  if (di.fresh) { const dc = 150 + 50 * Math.min(di.streak, 10); lines.push([`Daily bonus · ${di.streak}-day streak`, dc, 50]); c += dc; x += 50; }
+  if (di.fresh) { const dc = dailyCash(di.streak); lines.push([`Daily bonus · ${di.streak}-day streak`, dc, 30]); c += dc; x += 30; }
   const pm = clamp(+CFG.payMul || 1, 1, 5);
   if (pm > 1) { lines.push([`Event bonus ×${pm}`, Math.round(c * (pm - 1)), Math.round(x * (pm - 1))]); c = Math.round(c * pm); x = Math.round(x * pm); }
   return { cash: c, xp: x, lines };
+}
+// ================= quests: 3 daily + 1 weekly, the same for everyone that day =================
+const QDAY = [
+  { t: 'races', n: 3, text: 'Finish 3 races', cash: 110, xp: 55 },
+  { t: 'races', n: 6, text: 'Finish 6 races', cash: 190, xp: 95 },
+  { t: 'map', n: 1, text: m => `Finish a race on ${m}`, cash: 110, xp: 55 },
+  { t: 'medal2', n: 1, text: m => `Get silver or better on ${m}`, cash: 170, xp: 85 },
+  { t: 'gold', n: 1, text: 'Win a gold medal on any map', cash: 220, xp: 110 },
+  { t: 'air', n: 12, text: 'Catch 12 s of clean airtime', cash: 150, xp: 75 },
+  { t: 'boost', n: 20, text: 'Use boost 20 times', cash: 110, xp: 55 },
+  { t: 'noreset', n: 1, text: 'Finish a race without using reset', cash: 130, xp: 65 },
+  { t: 'pb', n: 1, text: 'Set a new personal best', cash: 150, xp: 75 },
+  { t: 'ghost', n: 1, text: 'Beat a ghost from the leaderboard', cash: 200, xp: 100 },
+  { t: 'lobby', n: 1, text: 'Finish an online race with friends', cash: 170, xp: 85 },
+  { t: 'stock', n: 2, text: 'Finish 2 races on the STOCK engine', cash: 130, xp: 65 },
+];
+const QWEEK = [
+  { t: 'races', n: 20, text: 'Finish 20 races this week', cash: 650, xp: 320 },
+  { t: 'gold', n: 4, text: 'Win 4 gold medals this week', cash: 850, xp: 420 },
+  { t: 'air', n: 60, text: 'Catch 60 s of clean airtime this week', cash: 750, xp: 380 },
+  { t: 'lobbywin', n: 2, text: 'Win 2 online races this week', cash: 850, xp: 420 },
+  { t: 'allmaps', n: 5, text: 'Finish a race on every map this week', cash: 700, xp: 350 },
+];
+const builtinMaps = () => MAPS.filter(m => !m.custom);
+const weekNum = d => Math.floor((d + 3) / 7);
+function makeQuest(tpl, r) {
+  const q = { t: tpl.t, n: tpl.n, cash: tpl.cash, xp: tpl.xp, prog: 0, done: false, seen: [] };
+  if (typeof tpl.text === 'function') { const m = builtinMaps()[Math.floor(r() * builtinMaps().length)]; q.map = m.id; q.text = tpl.text(m.name); } else q.text = tpl.text;
+  return q;
+}
+function ensureQuests() {
+  const d = dayNum(today()), w = weekNum(d), Q = DATA.quests || (DATA.quests = {});
+  if (Q.day !== d) {
+    const r = Core.rng(d * 7919 + 13), pool = QDAY.map((x, i) => i), pick = [];
+    while (pick.length < 3) { const k = pool.splice(Math.floor(r() * pool.length), 1)[0]; if (pick.some(j => QDAY[j].t === QDAY[k].t)) continue; pick.push(k); }
+    Q.day = d; Q.list = pick.map(k => makeQuest(QDAY[k], r));
+  }
+  if (Q.week !== w) { const r = Core.rng(w * 104729 + 7); Q.week = w; Q.weekly = makeQuest(QWEEK[Math.floor(r() * QWEEK.length)], r); }
+  return Q;
+}
+// quest rewards pay straight in (they don't use up the daily bonus)
+function grantPlain(cash, xp) {
+  const e = E(), before = levelOf(totalXp()).L; e.earned += cash; e.xp += xp;
+  const after = levelOf(totalXp()).L; let bonus = 0; for (let L = before + 1; L <= after; L++) { bonus += 40 * L; } e.earned += bonus;
+  return bonus;
+}
+// feed game events into the quests. Admin-boosted runs and custom maps never count.
+function qEvent(type, d = {}) {
+  if (boosted() || d.custom) return;
+  const Q = ensureQuests(), done = [];
+  for (const q of [...Q.list, Q.weekly]) {
+    if (q.done) continue;
+    let add = 0;
+    if (type === 'finish' || type === 'lobby') {
+      const fin = type === 'finish' || d.finished;
+      if (q.t === 'races' && fin) add = 1;
+      if (q.t === 'map' && fin && d.map === q.map) add = 1;
+      if (q.t === 'stock' && fin && d.stock) add = 1;
+      if (q.t === 'allmaps' && fin && d.map && !q.seen.includes(d.map)) { q.seen.push(d.map); q.prog = q.seen.length - 1; add = 1; }
+    }
+    if (type === 'finish') {
+      if (q.t === 'medal2' && d.map === q.map && d.medal >= 2) add = 1;
+      if (q.t === 'gold' && d.medal === 3) add = 1;
+      if (q.t === 'noreset' && d.resets === 0) add = 1;
+      if (q.t === 'pb' && d.pb) add = 1;
+      if (q.t === 'ghost' && d.ghostBeat) add = 1;
+    }
+    if (type === 'lobby') { if (q.t === 'lobby' && d.finished) add = 1; if (q.t === 'lobbywin' && d.place === 1 && d.field >= 2) add = 1; }
+    if (type === 'air' && q.t === 'air') add = d.s;
+    if (type === 'boost' && q.t === 'boost') add = 1;
+    if (!add) continue;
+    q.prog = Math.min(q.n, q.prog + add);
+    if (q.prog >= q.n) { q.done = true; const bonus = grantPlain(q.cash, q.xp); done.push(`${q.text} · +${money(q.cash + bonus)} +${q.xp} XP`); }
+  }
+  if (done.length) { save(); pushProfile(); refreshLabels(); setTimeout(() => notice('QUEST', `📋 Quest complete${done.length > 1 ? 's' : ''}!`, done.join('\n')), type === 'finish' || type === 'lobby' ? 2600 : 200); }
+  else if (type !== 'boost' && type !== 'air') save();
+}
+function renderQuests() {
+  const Q = ensureQuests(), now = new Date(), mid = new Date(now); mid.setHours(24, 0, 0, 0);
+  const hrs = Math.max(0, Math.round((mid - now) / 36e5)), d = dayNum(today()), daysLeft = 7 - ((d + 3) % 7);
+  const row = q => `<div class="qrow ${q.done ? 'qdone' : ''}"><div class="qtop"><span>${q.done ? '✅' : '◻'} ${esc(q.text)}</span><b>${q.done ? 'DONE' : `+${money(q.cash)} · +${q.xp} XP`}</b></div>
+    <div class="xpline" style="margin:4px 0 0"><div class="xpbar"><i style="width:${q.prog / q.n * 100}%"></i></div><span>${q.t === 'air' ? Math.floor(q.prog) + ' / ' + q.n + ' s' : q.prog + ' / ' + q.n}</span></div></div>`;
+  $('qList').innerHTML = `<div class="sect" style="margin:0 0 6px">DAILY · new quests in ${hrs} h</div>` + Q.list.map(row).join('') + `<div class="sect" style="margin:14px 0 6px">WEEKLY · ${daysLeft} day${daysLeft > 1 ? 's' : ''} left</div>` + row(Q.weekly);
 }
 // apply a payout; returns level-up rewards
 // effect achievements: call after any stat changes; pops up newly earned effects
@@ -1181,7 +1277,7 @@ function award(p) {
   if (adm) { e.admCash += p.cash; e.admXp += p.xp; } else { e.earned += p.cash; e.xp += p.xp; }
   const di = dailyInfo(); if (di.fresh && p.cash) { e.daily = { last: today(), streak: di.streak }; DATA.stats.bestStreak = Math.max(DATA.stats.bestStreak, di.streak); }
   const after = levelOf(totalXp()).L, ups = [];
-  for (let L = before + 1; L <= after; L++) { const bonus = 150 * L; if (adm) e.admCash += bonus; else e.earned += bonus; ups.push({ L, bonus }); }
+  for (let L = before + 1; L <= after; L++) { const bonus = 40 * L; if (adm) e.admCash += bonus; else e.earned += bonus; ups.push({ L, bonus }); }
   save(); pushProfile();
   return ups;
 }
@@ -2188,7 +2284,7 @@ function beep(freq, len, type = 'triangle', vol = 0.25) {
 const keys = {};
 const KM = { ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', Space: 'b', ShiftLeft: 'b', ShiftRight: 'b' };
 const open = id => !$(id).classList.contains('hidden');
-const panelOpen = () => ['garage', 'settings', 'login', 'board', 'lobby', 'lres', 'editor'].some(open);
+const panelOpen = () => ['garage', 'settings', 'login', 'board', 'lobby', 'lres', 'editor', 'quests'].some(open);
 addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') { if (open('login')) $('loginGo').click(); else if (open('lobby')) $('lbJoin').click(); else if (open('editor') && e.target.id === 'edCode') $('edLoad').click(); } return; }
   if (open('editor')) { edKey(e); return; }
@@ -2233,7 +2329,7 @@ function loadMap(i) {
   refreshLabels();
   if (!LOBBY.code) joinLive(MAPS[i].id);
 }
-function hidePanels() { for (const id of ['menu', 'finish', 'pause', 'garage', 'settings', 'lobby', 'lres', 'editor', 'board']) $(id).classList.add('hidden'); }
+function hidePanels() { for (const id of ['menu', 'finish', 'pause', 'garage', 'settings', 'lobby', 'lres', 'editor', 'board', 'quests']) $(id).classList.add('hidden'); }
 function resetRun() {
   R = Core.makeRace(world, lapsFor(MAPS[mapIdx]));
   world.rings && W3.rings.forEach(g => { g.m.visible = g.p.visible = true; });
@@ -2271,6 +2367,7 @@ function togglePause() {
 }
 function resetToCheckpoint() {
   if (state !== 'racing' && state !== 'countdown') return;
+  if (R) R.resets = (R.resets || 0) + 1;
   if (LOBBY.racing && LOBBY.out) return;
   const keep = { charge: boat.charge };
   if (R.rings) { const p = lastResetPos || world.start; placeBoat(p.x, p.z, p.yaw); }
@@ -2359,6 +2456,7 @@ function finishRace() {
   const pay = payout(meta, t, adminRun ? {} : { pb: isPB && !!prevBest, newMedal: tier > oldMedal ? tier : 0, oldMedal });
   const ups = award(pay);
   checkFx();
+  qEvent('finish', { map: meta.id, custom: meta.custom, medal: tier, pb: isPB && !!prevBest, resets: R.resets || 0, stock: TUNE === Core.TIERS[0] && E().engine === 0, ghostBeat: !!(ghostPick && t < ghostPick.t) });
   save();
   $('fmap').textContent = meta.name.toUpperCase() + (R.laps > 1 ? ` · ${R.laps} LAPS` : '') + (ghostPick ? ` · VS ${ghostPick.n.toUpperCase()}` : '');
   $('ftime').textContent = fmt(t);
@@ -2407,12 +2505,13 @@ function refreshLabels() {
   $('unit').textContent = { mph: 'MPH', kmh: 'KM/H', kn: 'KNOTS' }[S.units];
   const lv = levelOf(totalXp()), di = dailyInfo();
   const top = `<span class="pill cash">${money(cash())}</span><span class="pill">MASTERY ${lv.L}<span class="xpbar"><i style="width:${lv.max ? 100 : lv.into / lv.need * 100}%"></i></span></span><span class="pill">⚙ ${Core.TIERS[E().engine].name}</span>`;
+  { const Q = ensureQuests(), nd = Q.list.filter(q => q.done).length + (Q.weekly.done ? 1 : 0); $('questBtn').textContent = `📋 QUESTS ${nd}/4`; }
   const stk = di.fresh ? di.streak - 1 : di.streak;
   const admPills = (boosted() ? `<span class="pill" style="color:#7ff5ff">⚡ ADMIN BOOST ×${ADM.speed}</span>` : '') + (admWallet() || ADM.all || ADM.xp || E().admXp ? `<span class="pill" style="color:#ff9bd2" title="Admin gifts: removable by the admin">🎁 ADMIN GIFTS${admWallet() ? ' · ' + money(admWallet()) : ''}</span>` : '');
   $('topbar').innerHTML = top + (stk > 0 ? `<span class="pill">🔥 ${stk}-DAY STREAK</span>` : '') + admPills + (BANNED ? `<span class="pill" style="color:var(--bad)">⛔ BANNED${BAN && BAN.until ? ' UNTIL ' + new Date(BAN.until).toLocaleDateString() : ''}</span>` : '') + (CFG.maint ? '<span class="pill" style="color:var(--accent)">🛠 ONLINE MAINTENANCE</span>' : '');
   $('gTop').innerHTML = top;
   const fm = featuredMap();
-  $('dailyTxt').innerHTML = (CFG.msg ? `<div style="margin-bottom:4px;color:var(--accent);font-weight:700">📣 ${esc(CFG.msg)}</div>` : '') + ((+CFG.payMul || 1) > 1 ? `<b style="color:#ff9bd2">🎉 EVENT: ×${+CFG.payMul} money & mastery on every race!</b> ` : '') + (di.fresh ? `🎁 <b style="color:#7dffb0">Daily bonus ready</b> — finish any race to collect (${di.streak > 1 ? `day ${di.streak} streak, ` : ''}+${money(150 + 50 * Math.min(di.streak, 10))}). ` : 'Daily bonus collected — come back tomorrow to keep the streak. ') + `Featured today: <b style="color:var(--accent)">${fm.name}</b> pays ×1.5`;
+  $('dailyTxt').innerHTML = (CFG.msg ? `<div style="margin-bottom:4px;color:var(--accent);font-weight:700">📣 ${esc(CFG.msg)}</div>` : '') + ((+CFG.payMul || 1) > 1 ? `<b style="color:#ff9bd2">🎉 EVENT: ×${+CFG.payMul} money & mastery on every race!</b> ` : '') + (di.fresh ? `🎁 <b style="color:#7dffb0">Daily bonus ready</b> — finish any race to collect (${di.streak > 1 ? `day ${di.streak} streak, ` : ''}+${money(dailyCash(di.streak))}). ` : 'Daily bonus collected — come back tomorrow to keep the streak. ') + `Featured today: <b style="color:var(--accent)">${fm.name}</b> pays ×1.25`;
 }
 
 // ================= menus =================
@@ -2423,7 +2522,7 @@ function renderMaps() {
     const tg = targets(m), r = DATA.runs[runKey(m)] || {}, skin = SKINS.find(s => s.unlock === m.id);
     const got = !!DATA.unlocked[skin.id];
     return `<div class="map ${i === mapIdx ? 'sel' : ''}" data-i="${i}">
-      <div><span class="tag">${m.mode}</span>${fm.id === m.id ? '<span class="feat">×1.5 TODAY</span>' : ''}</div><div class="nm">${m.name}</div><div class="ds">${m.desc}</div>
+      <div><span class="tag">${m.mode}</span>${fm.id === m.id ? '<span class="feat">×1.25 TODAY</span>' : ''}</div><div class="nm">${m.name}</div><div class="ds">${m.desc}</div>
       <div class="stars">${starsHTML(r.medal || 0)}</div>
       <div class="tm"><span style="color:var(--gold)">★</span> ${fmt(tg.g)} · <span style="color:var(--silver)">★</span> ${fmt(tg.s)} · <span style="color:var(--bronze)">★</span> ${fmt(tg.b)}</div>
       <div class="tm">Best <b>${fmt(r.best)}</b>${lapsFor(m) > 1 ? ` · ${lapsFor(m)} laps` : ''}</div>
@@ -2590,6 +2689,8 @@ $('bMenu').onclick = quitToMenu;
 function toMenu() { pollAdmin(); clearMyLive(); state = 'menu'; ghostMesh.visible = false; setGhostTag(null); $('vsghost').textContent = ''; spec = null; placeBoat(world.start.x, world.start.z, world.start.yaw); W3.rings.forEach(g => { g.m.visible = g.p.visible = true; }); renderMaps(); refreshLabels(); $('menu').classList.remove('hidden'); refreshBoards(true); }
 $('resumeBtn').onclick = togglePause; $('restartBtn').onclick = () => { if (!LOBBY.racing) startRace(); };
 $('setBtn').onclick = () => openSettings('menu'); $('pSetBtn').onclick = () => openSettings('pause'); $('setDone').onclick = closeSettings;
+$('questBtn').onclick = () => { renderQuests(); $('menu').classList.add('hidden'); $('quests').classList.remove('hidden'); };
+$('qDone').onclick = () => { $('quests').classList.add('hidden'); $('menu').classList.remove('hidden'); };
 $('garageBtn').onclick = () => { gPending = null; renderSkins(); $('menu').classList.add('hidden'); $('garage').classList.remove('hidden'); };
 $('garDone').onclick = () => { $('garage').classList.add('hidden'); $('menu').classList.remove('hidden'); };
 $('lapChip').onclick = () => { const L = [1, 2, 3, 5]; S.laps = L[(L.indexOf(S.laps) + 1) % L.length]; save(); refreshLabels(); renderMaps(); };
@@ -2823,6 +2924,9 @@ function mergeProfile(p) {
     if (remoteAhead) { if (owns('eng', pe.engine | 0)) e.engine = pe.engine | 0; if (p.look) Object.assign(DATA.look, p.look); if (p.skin && DATA.unlocked[p.skin]) DATA.skin = p.skin; }
   } else if (p.skin && DATA.unlocked[p.skin] && DATA.skin === 'classic') DATA.skin = p.skin;
   DATA.rsSeen = Math.max(DATA.rsSeen || 0, +p.rs || 0);
+  if (p.quests && typeof p.quests === 'object') { const Q = ensureQuests(), P = p.quests;
+    if (P.day === Q.day && Array.isArray(P.list)) Q.list.forEach((q, i) => { const o = P.list[i]; if (o && o.t === q.t) { q.prog = Math.max(q.prog, +o.prog || 0); q.done = q.done || !!o.done; } });
+    if (P.week === Q.week && P.weekly && P.weekly.t === Q.weekly.t) { Q.weekly.prog = Math.max(Q.weekly.prog, +P.weekly.prog || 0); Q.weekly.done = Q.weekly.done || !!P.weekly.done; Q.weekly.seen = [...new Set([...(Q.weekly.seen || []), ...(P.weekly.seen || [])])]; } }
   if (p.stats && typeof p.stats === 'object') { const a = DATA.stats, b = p.stats; Object.assign(a.stockGold, b.stockGold || {}); Object.assign(a.recs, b.recs || {}); Object.assign(a.fxSeen, b.fxSeen || {}); a.air = Math.max(a.air, +b.air || 0); a.wins = Math.max(a.wins, +b.wins || 0); a.bestStreak = Math.max(a.bestStreak, +b.bestStreak || 0); }
   applyMyLook();
   save();
@@ -2831,7 +2935,7 @@ async function pushProfile() {
   if (!NET.on || !me()) return;
   const runs = {}; for (const k in DATA.runs) { const r = DATA.runs[k]; if (r.best || r.medal) runs[k] = { best: r.best || 0, medal: r.medal || 0 }; }
   if (BANNED) return;
-  try { await api('players/' + me().id, 'PUT', { name: me().name, runs, unlocked: DATA.unlocked, skin: DATA.skin, econ: E(), look: DATA.look, stats: DATA.stats, rs: DATA.rsSeen || 0, seen: Date.now() }); } catch (e) {}
+  try { await api('players/' + me().id, 'PUT', { name: me().name, runs, unlocked: DATA.unlocked, skin: DATA.skin, econ: E(), look: DATA.look, stats: DATA.stats, quests: DATA.quests || null, rs: DATA.rsSeen || 0, seen: Date.now() }); } catch (e) {}
 }
 // ---- admin panel hooks: gifts, speed boost, resets, bans and event settings (polled every few seconds) ----
 function ownedNow(cat, id) {
@@ -3427,9 +3531,10 @@ function lobbyDone(place, t, laps) {
   const meta = MAPS[mapIdx], field = LOBBY.roster.length;
   let pay;
   if (t != null) pay = payout(meta, t, { place, field });
-  else { const diff = DIFF[meta.id] || 1, c = Math.round(45 * diff * Math.max(laps, 0)) + Math.round([0, 160, 100, 60, 30][place] || 15) * (field > 1 ? 1 : 0), x = 40 * Math.max(laps, 0) + 25; pay = { cash: meta.custom ? 0 : c, xp: x, lines: [[laps ? `Survived ${laps} lap${laps > 1 ? 's' : ''} · P${place} of ${field}` : `Did not finish · P${place}`, meta.custom ? 0 : c, x]] }; }
+  else { const diff = DIFF[meta.id] || 1, c = Math.round(28 * diff * Math.max(laps, 0)) + Math.round([0, 100, 60, 35, 20][place] || 10) * (field > 1 ? 1 : 0), x = 25 * Math.max(laps, 0) + 15; pay = { cash: meta.custom ? 0 : c, xp: x, lines: [[laps ? `Survived ${laps} lap${laps > 1 ? 's' : ''} · P${place} of ${field}` : `Did not finish · P${place}`, meta.custom ? 0 : c, x]] }; }
   if (place === 1 && t != null && field >= 2 && !boosted() && !LOBBY.out) DATA.stats.wins++;
   LOBBY.pay = pay; LOBBY.ups = award(pay); checkFx();
+  qEvent('lobby', { custom: meta.custom, finished: t != null, place, field, map: meta.id, stock: !LOBBY.eq && E().engine === 0 || LOBBY.eq });
   if (LOBBY.out) { flash('KNOCKED OUT', 'var(--bad)', 1800); beep(180, 0.6, 'sawtooth', 0.2); }
   else if (place === 1) { flash('WINNER!', 'var(--accent)', 1800); beep(1320, 0.2); setTimeout(() => beep(1760, 0.4), 200); }
   setTimeout(() => { if (LOBBY.code && LOBBY.racing && !spec) showResults(); }, 1600);
@@ -3803,9 +3908,9 @@ function frame(now) {
     prevPos.x = boat.pos.x; prevPos.y = boat.pos.y; prevPos.z = boat.pos.z;
   }
   const b = boat, speed = Math.hypot(b.vel.x, b.vel.z);
-  if (b.boostFired) { b.boostFired = false; noiseHit(0.5, 1800, 0.6); beep(300, 0.25, 'sawtooth', 0.12); beep(600, 0.35, 'sawtooth', 0.08); shake = Math.max(shake, 0.25); }
+  if (b.boostFired) { b.boostFired = false; if (state === 'racing') qEvent('boost'); noiseHit(0.5, 1800, 0.6); beep(300, 0.25, 'sawtooth', 0.12); beep(600, 0.35, 'sawtooth', 0.08); shake = Math.max(shake, 0.25); }
   if (landed && state === 'racing') {
-    if (landed.clean && !boosted()) { DATA.stats.air += landed.air; if (!(frameNo % 4)) save(); checkFx(); }
+    if (landed.clean && !boosted()) { DATA.stats.air += landed.air; qEvent('air', { s: landed.air }); checkFx(); }
     const big = landed.air > 1.2 ? 'HUGE AIR' : landed.air > 0.8 ? 'BIG AIR' : 'AIR';
     if (landed.clean) { trick(`${big} ${landed.air.toFixed(1)}s<small>CLEAN LANDING · +BOOST</small>`); beep(990, 0.12); beep(1480, 0.2); }
     else { trick(`${big} ${landed.air.toFixed(1)}s<small style="color:var(--bad)">SLOPPY LANDING</small>`); }
@@ -3927,7 +4032,7 @@ function frame(now) {
   dynRes(dt);
   // a full-screen menu is covering the 3D view: drawing it at half rate looks the same and frees up the machine
   frameNo++;
-  if (state === 'menu' && (open('menu') || open('lobby') || open('board') || open('settings') || open('login')) && (frameNo & 1)) return;
+  if (state === 'menu' && (open('menu') || open('lobby') || open('board') || open('settings') || open('login') || open('quests')) && (frameNo & 1)) return;
   renderer.render(scene, camera);
 }
 requestAnimationFrame(frame);
