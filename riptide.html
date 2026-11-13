@@ -1110,7 +1110,7 @@ const FXREQ = {
   streak: { need: 14, have: () => DATA.stats.bestStreak, text: n => `A 14-day daily streak · best ${n}/14` },
   wins: { need: 20, have: () => DATA.stats.wins, text: n => `Win 20 online races (2+ racers) · ${n}/20` },
 };
-const fxEarned = id => { const e = EFFECTS.find(x => x.id === id); if (!e || !e.req) return false; const r = FXREQ[e.req]; return r.have() >= r.need; };
+const fxEarned = id => { const e = EFFECTS.find(x => x.id === id); if (!e || !e.req || (DATA.revFx && DATA.revFx[id])) return false; const r = FXREQ[e.req]; return r.have() >= r.need; };
 const FLAGS = [
   { id: 'none', name: 'No flag' }, { id: 'check', name: 'Checkered' }, { id: 'pennant', name: 'Red Pennant' },
   { id: 'wave', name: 'Big Wave', cost: 700, lvl: 2 }, { id: 'skull', name: 'Skull & Bones', cost: 900, lvl: 3 },
@@ -1149,9 +1149,9 @@ let BANNED = false, BAN = null;
 const offline = () => BANNED || !!CFG.maint;   // online features switched off for this racer
 const boosted = () => (ADM.speed || 1) !== 1;
 const admWallet = () => Math.max(0, (ADM.cash || 0) + E().admCash - E().admSpent);
-const realCash = () => E().earned - E().spent;
+const realCash = () => E().earned - E().spent - (E().takenCash || 0);
 const cash = () => realCash() + admWallet();
-const totalXp = () => E().xp + (ADM.xp || 0) + E().admXp;
+const totalXp = () => Math.max(0, E().xp - (E().takenXp || 0)) + (ADM.xp || 0) + E().admXp;
 const xpNeed = L => 250 + 100 * L;               // xp to go from level L to L+1
 function levelOf(xp) { let L = 1; while (L < 30 && xp >= xpNeed(L)) { xp -= xpNeed(L); L++; } return { L, into: xp, need: xpNeed(L), max: L >= 30 }; }
 const owns = (cat, id) => !!(ADM.all || (E().own[cat] && E().own[cat][id]) || (E().ownAdm[cat] && E().ownAdm[cat][id]) || (ADM.items && ADM.items[cat] && ADM.items[cat][id]));
@@ -2915,6 +2915,7 @@ function mergeProfile(p) {
   if (pe && typeof pe === 'object') {
     const remoteAhead = (+pe.xp || 0) > e.xp;
     e.earned = Math.max(e.earned, +pe.earned || 0); e.spent = Math.max(e.spent, +pe.spent || 0); e.xp = Math.max(e.xp, +pe.xp || 0);
+    e.takenCash = Math.max(e.takenCash || 0, +pe.takenCash || 0); e.takenXp = Math.max(e.takenXp || 0, +pe.takenXp || 0);
     for (const cat in (pe.own || {})) for (const id in pe.own[cat]) if (pe.own[cat][id]) grant(cat, cat === 'eng' ? +id : id);
     if (pe.daily && pe.daily.last && pe.daily.last > (e.daily.last || '')) e.daily = { last: pe.daily.last, streak: +pe.daily.streak || 1 };
     if (pe.admEp != null && pe.admEp === e.admEp) {
@@ -2965,7 +2966,30 @@ async function pollAdmin() {
     const uid = me() && me().id;
     // each read on its own, so one blocked path can't stop the others (e.g. bans) from applying
     const get = p => api(p).catch(() => undefined);
-    const [c, a, rs, ban, msg, ex, rn] = await Promise.all([get('cfg'), uid ? get('adm/' + uid) : null, uid ? get('rst/' + uid) : null, uid ? get('bans/' + uid) : null, uid ? get('msg/' + uid) : null, uid ? get('exc/' + uid) : null, uid ? get('rn/' + uid) : null]);
+    const [c, a, rs, ban, msg, ex, rn, tk, ld] = await Promise.all([get('cfg'), uid ? get('adm/' + uid) : null, uid ? get('rst/' + uid) : null, uid ? get('bans/' + uid) : null, uid ? get('msg/' + uid) : null, uid ? get('exc/' + uid) : null, uid ? get('rn/' + uid) : null, uid ? get('take/' + uid) : null, uid ? get('lbdel/' + uid) : null]);
+    // the admin took things away: money/mastery counters, items, effects
+    if (uid && tk !== undefined) {
+      const T = tk && typeof tk === 'object' ? tk : {}, e = E(); let ch = false;
+      if ((+T.cash || 0) > (e.takenCash || 0)) { e.takenCash = +T.cash; ch = true; }
+      if ((+T.xp || 0) > (e.takenXp || 0)) { e.takenXp = +T.xp; ch = true; }
+      DATA.revSeen = DATA.revSeen || {};
+      for (const cat in (T.items || {})) for (const id in T.items[cat]) {
+        if (cat === 'fx') continue; const k = cat + '|' + id, t = +T.items[cat][id] || 1;
+        if ((DATA.revSeen[k] || 0) >= t) continue; DATA.revSeen[k] = t; ch = true;
+        const key = cat === 'eng' ? +id : id;
+        if (cat === 'paint') delete DATA.unlocked[id];
+        if (cat === 'eng' && key === 0) continue;
+        if (e.own[cat]) delete e.own[cat][key]; if (e.ownAdm[cat]) delete e.ownAdm[cat][key];
+      }
+      const rf = {}; for (const id in ((T.items || {}).fx || {})) rf[id] = true;
+      if (JSON.stringify(rf) !== JSON.stringify(DATA.revFx || {})) { DATA.revFx = rf; ch = true; }
+      if (ch) { if (fixEquipped()) applyMyLook(); save(); pushProfile(); }
+    }
+    // the admin deleted one of your leaderboard times: drop this device's copy too
+    if (uid && ld && typeof ld === 'object') {
+      DATA.lbdelSeen = DATA.lbdelSeen || {};
+      for (const k in ld) { const key = k; if ((+ld[k] || 0) > (DATA.lbdelSeen[k] || 0)) { DATA.lbdelSeen[k] = +ld[k]; const r = DATA.runs[key]; if (r) { delete r.best; delete r.splits; delete r.ghost; delete r.e; } NET.boards = {}; save(); pushProfile(); } }
+    }
     // renamed by the admin
     if (uid && rn && typeof rn === 'object' && typeof rn.name === 'string' && rn.name && rn.name !== me().name && +rn.t > (DATA.rnSeen || 0)) {
       DATA.rnSeen = +rn.t; const old = me().name; DATA.player.name = rn.name.slice(0, 14); save(); refreshLabels(); if (LOBBY.code) api(lpath('p', uid, 'n'), 'PUT', DATA.player.name).catch(() => {});

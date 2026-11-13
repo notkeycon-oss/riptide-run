@@ -141,7 +141,7 @@ tr.sus td{background:rgba(255,90,95,.1)}
 // Same database and key as riptide.html
 const DB = "https://riptide-run-default-rtdb.firebaseio.com";
 const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
-const RULES_MARK = 'rv7'; // bump together with database.rules.json
+const RULES_MARK = 'rv8'; // bump together with database.rules.json
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -213,10 +213,10 @@ const CATALOG = {
   fx: [['flames', 'Afterburner'], ['sparks', 'Static Charge'], ['smoke', 'Stunt Smoke'], ['stardust', 'Stardust'], ['bubbles', 'Bubble Trail']],
 };
 // admin-exclusive items: never for sale in the game, only given from here (kept in exc/{uid}, separate from gifts)
-const EXCL = [['paint', 'x_spectrum', 'Spectrum', 'rainbow flowing along the hull + rainbow underglow'], ['fx', 'x_rainbow', 'Rainbow Wake', 'effect · wide banded rainbow trail with sparkles'],
+const EXCL = [['paint', 'x_spectrum', 'Spectrum', 'rainbow flowing along the hull + rainbow underglow'], ['fx', 'x_rainbow', 'Rainbow Wake', 'wide banded rainbow trail with sparkles'],
   ['paint', 'x_aurora', 'Aurora Prism', 'color-shifting paint + underglow'], ['paint', 'x_obsidian', 'Obsidian Ember', 'black paint, pulsing ember glow'], ['paint', 'x_gold24', '24K Gold', 'mirror gold + golden underglow'], ['paint', 'x_frost', 'Frostbite', 'ice paint, pulsing frost glow'],
   ['helmet', 'x_halo', 'Halo', 'floating glowing halo'], ['helmet', 'x_blaze', 'Blaze Crest', 'flaming crest'], ['visor', 'x_prism', 'Prism Shift', 'color-cycling visor'], ['flag', 'x_staff', 'Staff Crest', 'purple & gold STAFF flag'], ['flag', 'x_phoenix', 'Phoenix', 'fiery phoenix flag'],
-  ['fx', 'x_inferno', 'Blue Inferno', 'effect · blue-white hellfire + embers'], ['fx', 'x_galaxy', 'Galaxy Orbit', 'effect · ring of stars orbiting the boat'], ['fx', 'x_storm', 'Storm Caller', 'effect · violet lightning over the hull'], ['fx', 'x_royal', 'Royal Aura', 'effect · golden halo of sparkles']];
+  ['fx', 'x_inferno', 'Blue Inferno', 'blue-white hellfire + embers'], ['fx', 'x_galaxy', 'Galaxy Orbit', 'ring of stars orbiting the boat'], ['fx', 'x_storm', 'Storm Caller', 'violet lightning over the hull'], ['fx', 'x_royal', 'Royal Aura', 'golden halo of sparkles']];
 let EXCD = {};
 const CATNAME = { paint: 'Paint', helmet: 'Helmet', visor: 'Visor', flag: 'Flag', eng: 'Engine', fx: 'Effect' };
 const itemName = (cat, id) => ((CATALOG[cat] || []).find(x => String(x[0]) === String(id)) || [id, id])[1];
@@ -231,11 +231,17 @@ function tab(t) {
   document.querySelectorAll('section[data-tab]').forEach(s => s.classList.toggle('hidden', s.dataset.tab !== t));
   if (t === 'boards') loadRuns(); if (t === 'world') loadWorld(); if (t === 'events') loadCfg(); if (t === 'log') loadLog();
 }
-let P = {}, ADMD = {}, BANS = {}, sel = null;
+let P = {}, ADMD = {}, BANS = {}, sel = null, TAKE = {};
+// what a racer really has: their synced profile minus anything you've taken away that hasn't synced yet
+const realMoney = (id, e) => (e.earned || 0) - (e.spent || 0) - Math.max(+e.takenCash || 0, +((TAKE[id] || {}).cash) || 0);
+const realXp = (id, e) => Math.max(0, (+e.xp || 0) - Math.max(+e.takenXp || 0, +((TAKE[id] || {}).xp) || 0));
+const xpAtLevel = L => { let x = 0; for (let k = 1; k < L; k++) x += xpNeed(k); return x; };
+const FXRULES = { flames: st => Object.keys(st.stockGold || {}).length >= 5, sparks: st => Object.keys(st.recs || {}).length >= 3, smoke: st => (st.air || 0) >= 180, stardust: st => (st.bestStreak || 0) >= 14, bubbles: st => (st.wins || 0) >= 20 };
 const isOn = p => p && p.on && Date.now() - (p.on.t || 0) < 90000;
 const banOn = b => !!b && (b === true || !b.until || b.until > Date.now());
 async function loadAll(auto) {
-  const [p, a, b, x] = await Promise.all([db('players'), db('adm'), db('bans'), db('exc').catch(() => null)]);
+  const [p, a, b, x, tk] = await Promise.all([db('players'), db('adm'), db('bans'), db('exc').catch(() => null), db('take').catch(() => null)]);
+  TAKE = tk || {};
   P = p || {}; ADMD = a || {}; BANS = b || {}; EXCD = x || {};
   loadStats(); renderPlayers(); if (auto) return; renderAll(); if (sel) renderCard();
 }
@@ -252,7 +258,7 @@ function renderPlayers() {
   const q = $('search').value.trim().toLowerCase(), oo = $('onlyOnline').checked;
   const ids = Object.keys(P).filter(id => (!q || String(P[id].name || '').toLowerCase().includes(q)) && (!oo || isOn(P[id]))).sort((a, b) => (isOn(P[b]) - isOn(P[a])) || ((P[b].seen || 0) - (P[a].seen || 0)));
   $('pBody').innerHTML = ids.map(id => { const p = P[id], e = p.econ || {}; return `<tr data-id="${esc(id)}" class="${id === sel ? 'sel' : ''}"><td>${isOn(p) ? '<span class="dot" title="online now"></span>' : ''}${esc(p.name || '?')} ${banOn(BANS[id]) ? '<span class="tag" style="background:var(--bad)">BANNED</span>' : ''}${id.length < 20 ? ' <span class="tag">OLD</span>' : ''}</td>
-    <td>${levelOf(+e.xp || 0)}</td><td>${money((e.earned || 0) - (e.spent || 0))}</td><td>T${(e.engine | 0) + 1}</td><td>${giftTxt(ADMD[id], id)}</td><td>${isOn(p) ? '<b style="color:var(--good)">now</b> · ' + esc(p.on.s || '') : p.seen ? new Date(p.seen).toLocaleDateString() : '—'}</td></tr>`; }).join('') || '<tr><td colspan="6" class="msg">No racers match.</td></tr>';
+    <td>${levelOf(realXp(id, e))}</td><td>${money(realMoney(id, e))}</td><td>T${(e.engine | 0) + 1}</td><td>${giftTxt(ADMD[id], id)}</td><td>${isOn(p) ? '<b style="color:var(--good)">now</b> · ' + esc(p.on.s || '') : p.seen ? new Date(p.seen).toLocaleDateString() : '—'}</td></tr>`; }).join('') || '<tr><td colspan="6" class="msg">No racers match.</td></tr>';
   document.querySelectorAll('#pBody tr[data-id]').forEach(r => r.onclick = () => { sel = r.dataset.id; renderPlayers(); renderCard(); });
 }
 $('search').oninput = renderPlayers; $('onlyOnline').onchange = renderPlayers; $('reloadP').onclick = loadAll;
@@ -270,6 +276,7 @@ const actionsHTML = scope => `
     <div class="box"><b>🎁 GIVE AN ITEM</b><div class="row"><select id="${scope}Cat">${Object.keys(CATALOG).map(c => `<option value="${c}">${CATNAME[c]}</option>`).join('')}</select><select id="${scope}Item"></select><button data-${scope}-item="1">GIVE</button></div></div>
     <div class="box"><b>🔓 UNLOCK EVERYTHING</b><div class="row"><button data-${scope}-all="1">GIVE ALL</button><button data-${scope}-all="0">TAKE BACK</button></div><p class="msg">Every paint, helmet, visor, flag and engine.</p></div>
     <div class="box"><b>🧹 REMOVE ADMIN GIFTS</b><button data-${scope}-despawn="1">REMOVE ALL ADMIN STUFF</button><p class="msg">Removes boosts, given money/mastery/items/unlocks and anything bought with given money. Keeps what was earned by playing.</p></div>
+    ${scope === 'one' ? `<div class="box danger"><b>➖ TAKE AWAY</b><div class="row"><input type="number" id="takeCash" placeholder="money" style="width:110px"><button class="del" data-one-takecash="1">TAKE MONEY</button></div><div class="row" style="margin-top:6px"><input type="number" id="setLvl" placeholder="level" min="1" max="30" style="width:110px"><button class="del" data-one-setlvl="1">SET MASTERY LEVEL</button></div><p class="msg">Only lowers what they earned by playing. Engines above the new level stay owned — take those away in Inventory.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box"><b>✏ RENAME</b><div class="row"><input id="newName" maxlength="14" placeholder="New racer name" style="width:160px"><button data-one-rename="1">RENAME</button></div><p class="msg">Updates their profile and leaderboard times. They sign in with the new name and the same PIN.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box"><b>💬 MESSAGE / KICK</b><input id="oneMsg" maxlength="200" placeholder="Message or kick reason" style="width:100%"><div class="row" style="margin-top:6px"><button data-one-msg="1">SEND MESSAGE</button><button class="del" data-one-kick="1">KICK</button></div><p class="msg">Kick drops them out of their race or lobby to the menu.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box danger"><b>⛔ BAN</b><input id="banReason" maxlength="120" placeholder="Reason (shown to them)" style="width:100%"><div class="row" style="margin-top:6px"><select id="banLen"><option value="3600000">1 hour</option><option value="86400000">1 day</option><option value="604800000" selected>7 days</option><option value="2592000000">30 days</option><option value="0">Permanent</option></select><button class="del" data-one-ban="1">BAN</button><button data-one-unban="1">UNBAN</button></div></div>` : ''}
@@ -279,23 +286,37 @@ function renderCard() {
   const p = P[sel]; if (!p) { $('pCard').classList.add('hidden'); return; }
   const e = p.econ || {}, a = ADMD[sel], b = BANS[sel], L = p.look || {};
   const runs = Object.entries(p.runs || {}).sort();
-  const owned = Object.entries(e.own || {}).flatMap(([c, o]) => Object.keys(o || {}).filter(k => o[k] && !(c === 'eng' && k === '0')).map(k => itemName(c, k)));
+  const tkItems = (TAKE[sel] || {}).items || {}, gone = (c, k) => !!(tkItems[c] && tkItems[c][k]);
+  const inv = [];
+  for (const k of Object.keys(p.unlocked || {})) if (p.unlocked[k] && k !== 'classic') inv.push(['paint', k]);
+  for (const [c, o] of Object.entries(e.own || {})) for (const k of Object.keys(o || {})) if (o[k] && !(c === 'eng' && k === '0') && c !== 'paint') inv.push([c, k]);
+  for (const k in FXRULES) if (FXRULES[k](p.stats || {})) inv.push(['fx', k]);
+  const owned = inv;
   $('pCard').classList.remove('hidden');
   $('pCard').innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">${isOn(p) ? '<span class="dot"></span>' : ''}${esc(p.name)}</h2><span class="uid">${esc(sel)}</span></div>
     ${banOn(b) ? `<div class="warnbar">⛔ Banned ${b.until ? 'until ' + new Date(b.until).toLocaleString() : 'permanently'}${b.reason ? ' — ' + esc(b.reason) : ''}</div>` : ''}
     <div class="grid">
       <div class="box"><b>PROFILE</b><div class="kv"><span>Status</span><span>${isOn(p) ? 'online · ' + esc(p.on.s || '') + ' · ' + esc(p.on.m || '') : p.seen ? 'last seen ' + new Date(p.seen).toLocaleString() : '—'}</span>
-        <span>Earned money</span><span>${money((e.earned || 0) - (e.spent || 0))} <small class="msg">(${money(e.earned)} total earned)</small></span><span>Mastery</span><span>${levelOf(+e.xp || 0)} <small class="msg">(${(+e.xp || 0).toLocaleString()} XP)</small></span>
+        <span>Earned money</span><span>${money(realMoney(sel, e))} <small class="msg">(${money(e.earned)} total earned)</small></span><span>Mastery</span><span>${levelOf(realXp(sel, e))} <small class="msg">(${realXp(sel, e).toLocaleString()} XP)</small></span>
         <span>Engine</span><span>T${(e.engine | 0) + 1} ${TIERS[e.engine | 0]}</span><span>Daily streak</span><span>${(e.daily && e.daily.streak) || 0} days</span>
         <span>Look</span><span>${esc(p.skin || 'classic')} paint · ${esc(L.helmet || 'open')} helmet · ${esc(L.flag || '—')} flag</span>
         <span>Admin gifts</span><span>${giftTxt(a)}</span>
         <span>Effect progress</span><span>${(() => { const st = p.stats || {}; return `stock golds ${Object.keys(st.stockGold || {}).length}/5 · records ${Object.keys(st.recs || {}).length}/3 · air ${Math.floor(st.air || 0)}/180 s · best streak ${st.bestStreak || 0}/14 · online wins ${st.wins || 0}/20`; })()}</span></div></div>
-      <div class="box"><b>BEST TIMES</b><div class="kv">${runs.map(([k, r]) => `<span>${esc(k.replace(':', ' · ') + ' lap')}</span><span>${fmt(r.best)} ${'★'.repeat(r.medal || 0)}</span>`).join('') || '<span class="msg">No races yet</span>'}</div></div>
+      <div class="box"><b>BEST TIMES</b><div class="kv">${runs.map(([k, r]) => `<span>${esc(k.replace(':', ' · ') + ' lap')}</span><span>${r.best ? fmt(r.best) : '— (deleted)'} ${'★'.repeat(r.medal || 0)}</span>`).join('') || '<span class="msg">No races yet</span>'}</div></div>
       <div class="box" style="border:1px solid rgba(255,155,210,.4)"><b>👑 EXCLUSIVES</b><p class="msg" style="margin:0 0 6px">Only you can give these. "Remove admin gifts" doesn't touch them.</p>
         ${EXCL.map(([c, k, n, d]) => { const has = !!(EXCD[sel] && EXCD[sel][c] && EXCD[sel][c][k]); return `<div class="row" style="justify-content:space-between;margin:3px 0"><span>${esc(n)} <small class="msg">${esc(CATNAME[c].toLowerCase())} · ${esc(d)}</small></span><button data-exc="${c}|${k}" class="${has ? 'on' : ''}">${has ? 'GIVEN ✓ — TAKE BACK' : 'GIVE'}</button></div>`; }).join('')}</div>
-      <div class="box"><b>OWNS (BOUGHT/EARNED)</b><p class="msg" style="margin:0">${owned.map(esc).join(', ') || 'Nothing bought yet'}</p>${a && a.items ? `<b style="margin-top:8px">GIVEN ITEMS</b><div class="row">${Object.entries(a.items).flatMap(([c, o]) => Object.keys(o).map(k => `<button data-take="${c}|${esc(k)}" title="take back">${esc(itemName(c, k))} ✕</button>`)).join('')}</div>` : ''}</div>
+      <div class="box"><b>INVENTORY (BOUGHT/EARNED)</b><p class="msg" style="margin:0 0 6px">✕ takes an item away. Bought items can be bought again; a taken effect stays locked until you restore it.</p>
+        <div class="row">${owned.map(([c, k]) => gone(c, k) ? `<button disabled title="waiting for their game to sync">${esc(itemName(c, k))} · removing…</button>` : `<button class="del" data-inv="${c}|${esc(k)}" title="take away">${esc(CATNAME[c])}: ${esc(itemName(c, k))} ✕</button>`).join('') || '<span class="msg">Nothing bought or earned yet</span>'}</div>
+        ${tkItems.fx ? `<div class="row" style="margin-top:6px">${Object.keys(tkItems.fx).map(k => `<button data-restore="${esc(k)}">restore ${esc(itemName('fx', k))}</button>`).join('')}</div>` : ''}${a && a.items ? `<b style="margin-top:8px">GIVEN ITEMS</b><div class="row">${Object.entries(a.items).flatMap(([c, o]) => Object.keys(o).map(k => `<button data-take="${c}|${esc(k)}" title="take back">${esc(itemName(c, k))} ✕</button>`)).join('')}</div>` : ''}</div>
     </div>` + actionsHTML('one');
   bind('one', [sel]);
+  document.querySelectorAll('[data-inv]').forEach(btn => btn.onclick = async () => {
+    const [c, k] = btn.dataset.inv.split('|'); if (!confirm(`Take ${itemName(c, k)} away from ${pname(sel)}?`)) return;
+    await db(`take/${sel}/items/${c}/${k}`, 'PUT', Date.now()); log(`Took ${CATNAME[c].toLowerCase()} "${itemName(c, k)}" from ${pname(sel)}`); await loadAll(); say(`Took ${itemName(c, k)} from ${pname(sel)}. Their game updates within a few seconds.`);
+  });
+  document.querySelectorAll('[data-restore]').forEach(btn => btn.onclick = async () => {
+    await db(`take/${sel}/items/fx/${btn.dataset.restore}`, 'DELETE'); log(`Restored effect "${itemName('fx', btn.dataset.restore)}" for ${pname(sel)}`); await loadAll(); say('Restored.');
+  });
   document.querySelectorAll('[data-exc]').forEach(btn => btn.onclick = async () => {
     const [c, k] = btn.dataset.exc.split('|'), n = (EXCL.find(e => e[1] === k) || [])[2], has = !!(EXCD[sel] && EXCD[sel][c] && EXCD[sel][c][k]);
     if (has) { await db(`exc/${sel}/${c}/${k}`, 'DELETE'); log(`Took exclusive "${n}" from ${pname(sel)}`); }
@@ -336,6 +357,20 @@ function bind(scope, only) {
     }
     log(`Reset progress — ${scope === 'all' ? 'EVERYONE (' + list.length + ')' : pname(list[0])}`);
     if (scope === 'one') sel = null; await loadAll(); say(`Reset ${list.length} racer${list.length > 1 ? 's' : ''}.`);
+  });
+  q('takecash').forEach(b => b.onclick = async () => {
+    const id = only[0], n = Math.round(+$('takeCash').value); if (!(n > 0)) return say('Type an amount first.', false);
+    const e = (P[id] || {}).econ || {}, have = realMoney(id, e), amt = Math.min(n, Math.max(0, have));
+    if (!amt) return say(`${pname(id)} has no earned money to take.`, false);
+    const cur = Math.max(+e.takenCash || 0, +((TAKE[id] || {}).cash) || 0);
+    await db(`take/${id}/cash`, 'PUT', cur + amt); log(`Took ${money(amt)} from ${pname(id)}`); await loadAll(); say(`Took ${money(amt)} from ${pname(id)}.`);
+  });
+  q('setlvl').forEach(b => b.onclick = async () => {
+    const id = only[0], L = Math.round(+$('setLvl').value); if (!(L >= 1 && L <= 30)) return say('Pick a level from 1 to 30.', false);
+    const e = (P[id] || {}).econ || {}, now = realXp(id, e), target = xpAtLevel(L);
+    if (target >= now) return say(`${pname(id)} is already at or below level ${L}.`, false);
+    const cur = Math.max(+e.takenXp || 0, +((TAKE[id] || {}).xp) || 0);
+    await db(`take/${id}/xp`, 'PUT', cur + (now - target)); log(`Set ${pname(id)}'s mastery to level ${L}`); await loadAll(); say(`${pname(id)} is now mastery ${L}.`);
   });
   q('rename').forEach(b => b.onclick = async () => {
     const id = only[0], oldName = pname(id), nn = $('newName').value.trim().replace(/\s+/g, ' ');
@@ -446,9 +481,11 @@ async function loadBoard() {
     log(`Changed ${v.n}'s ${key} time ${fmt(v.t)} → ${fmt(t)}`); await loadBoard(); $('lbMsg').textContent = `Changed ${v.n} to ${fmt(t)}.`; $('lbMsg').className = 'msg ok';
   });
   document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
-    const v = board[+b.dataset.del]; if (!confirm(`Delete ${v.n}'s ${fmt(v.t)} (and its ghost)?`)) return;
-    for (const en of await timeEntries(key, v.id)) if (Math.abs(en.v.t - v.t) < 0.02) { await db(en.path, 'DELETE'); await db(en.ghost, 'DELETE'); }
-    log(`Deleted ${v.n}'s ${key} time ${fmt(v.t)}`);
+    const v = board[+b.dataset.del]; if (!confirm(`Delete ${v.n}'s times on ${key} (every engine tab, their ghosts, and the copy on their device)?`)) return;
+    for (const en of await timeEntries(key, v.id)) { await db(en.path, 'DELETE'); await db(en.ghost, 'DELETE'); }
+    const wr = await db('wr/' + key); if (wr && wr.n === v.n) await db('wr/' + key, 'DELETE');
+    await db(`lbdel/${v.id}/${key}`, 'PUT', Date.now());
+    log(`Deleted ${v.n}'s ${key} times (was ${fmt(v.t)})`);
     await loadBoard(); $('lbMsg').textContent = `Deleted ${v.n}'s time.`; $('lbMsg').className = 'msg ok';
   });
 }
