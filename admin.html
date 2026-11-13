@@ -210,12 +210,14 @@ const CATALOG = {
   visor: [['gold', 'Gold Mirror'], ['blue', 'Ice Mirror'], ['rainbow', 'Oil Slick']],
   flag: [['wave', 'Big Wave'], ['skull', 'Skull & Bones'], ['bolt', 'Lightning'], ['star', 'Lone Star'], ['flame', 'Hot Rod Flames'], ['champ', "Champion's Gold"]],
   eng: [[1, 'T2 Sport'], [2, 'T3 Race'], [3, 'T4 Pro'], [4, 'T5 Riptide']],
+  fx: [['flames', 'Afterburner'], ['sparks', 'Static Charge'], ['smoke', 'Stunt Smoke'], ['stardust', 'Stardust'], ['aurora', 'Aurora Wake']],
 };
 // admin-exclusive items: never for sale in the game, only given from here (kept in exc/{uid}, separate from gifts)
 const EXCL = [['paint', 'x_aurora', 'Aurora Prism', 'color-shifting paint + underglow'], ['paint', 'x_obsidian', 'Obsidian Ember', 'black paint, pulsing ember glow'], ['paint', 'x_gold24', '24K Gold', 'mirror gold + golden underglow'], ['paint', 'x_frost', 'Frostbite', 'ice paint, pulsing frost glow'],
-  ['helmet', 'x_halo', 'Halo', 'floating glowing halo'], ['helmet', 'x_blaze', 'Blaze Crest', 'flaming crest'], ['visor', 'x_prism', 'Prism Shift', 'color-cycling visor'], ['flag', 'x_staff', 'Staff Crest', 'purple & gold STAFF flag'], ['flag', 'x_phoenix', 'Phoenix', 'fiery phoenix flag']];
+  ['helmet', 'x_halo', 'Halo', 'floating glowing halo'], ['helmet', 'x_blaze', 'Blaze Crest', 'flaming crest'], ['visor', 'x_prism', 'Prism Shift', 'color-cycling visor'], ['flag', 'x_staff', 'Staff Crest', 'purple & gold STAFF flag'], ['flag', 'x_phoenix', 'Phoenix', 'fiery phoenix flag'],
+  ['fx', 'x_inferno', 'Blue Inferno', 'effect · blue-white hellfire + embers'], ['fx', 'x_galaxy', 'Galaxy Orbit', 'effect · ring of stars orbiting the boat'], ['fx', 'x_storm', 'Storm Caller', 'effect · violet lightning over the hull'], ['fx', 'x_royal', 'Royal Aura', 'effect · golden halo of sparkles']];
 let EXCD = {};
-const CATNAME = { paint: 'Paint', helmet: 'Helmet', visor: 'Visor', flag: 'Flag', eng: 'Engine' };
+const CATNAME = { paint: 'Paint', helmet: 'Helmet', visor: 'Visor', flag: 'Flag', eng: 'Engine', fx: 'Effect' };
 const itemName = (cat, id) => ((CATALOG[cat] || []).find(x => String(x[0]) === String(id)) || [id, id])[1];
 const xpNeed = L => 250 + 100 * L, MAXXP = Array.from({ length: 29 }, (_, i) => xpNeed(i + 1)).reduce((a, b) => a + b, 0);
 function levelOf(xp) { let L = 1; while (L < 30 && xp >= xpNeed(L)) { xp -= xpNeed(L); L++; } return L; }
@@ -285,7 +287,8 @@ function renderCard() {
         <span>Earned money</span><span>${money((e.earned || 0) - (e.spent || 0))} <small class="msg">(${money(e.earned)} total earned)</small></span><span>Mastery</span><span>${levelOf(+e.xp || 0)} <small class="msg">(${(+e.xp || 0).toLocaleString()} XP)</small></span>
         <span>Engine</span><span>T${(e.engine | 0) + 1} ${TIERS[e.engine | 0]}</span><span>Daily streak</span><span>${(e.daily && e.daily.streak) || 0} days</span>
         <span>Look</span><span>${esc(p.skin || 'classic')} paint · ${esc(L.helmet || 'open')} helmet · ${esc(L.flag || '—')} flag</span>
-        <span>Admin gifts</span><span>${giftTxt(a)}</span></div></div>
+        <span>Admin gifts</span><span>${giftTxt(a)}</span>
+        <span>Effect progress</span><span>${(() => { const st = p.stats || {}; return `stock golds ${Object.keys(st.stockGold || {}).length}/5 · records ${Object.keys(st.recs || {}).length}/3 · air ${Math.floor(st.air || 0)}/180 s · best streak ${st.bestStreak || 0}/14 · online wins ${st.wins || 0}/20`; })()}</span></div></div>
       <div class="box"><b>BEST TIMES</b><div class="kv">${runs.map(([k, r]) => `<span>${esc(k.replace(':', ' · ') + ' lap')}</span><span>${fmt(r.best)} ${'★'.repeat(r.medal || 0)}</span>`).join('') || '<span class="msg">No races yet</span>'}</div></div>
       <div class="box" style="border:1px solid rgba(255,155,210,.4)"><b>👑 EXCLUSIVES</b><p class="msg" style="margin:0 0 6px">Only you can give these. "Remove admin gifts" doesn't touch them.</p>
         ${EXCL.map(([c, k, n, d]) => { const has = !!(EXCD[sel] && EXCD[sel][c] && EXCD[sel][c][k]); return `<div class="row" style="justify-content:space-between;margin:3px 0"><span>${esc(n)} <small class="msg">${esc(CATNAME[c].toLowerCase())} · ${esc(d)}</small></span><button data-exc="${c}|${k}" class="${has ? 'on' : ''}">${has ? 'GIVEN ✓ — TAKE BACK' : 'GIVE'}</button></div>`; }).join('')}</div>
