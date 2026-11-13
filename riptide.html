@@ -1059,6 +1059,7 @@ const SKINS = [
   { id: 'x_aurora', name: 'Aurora Prism', hull: 0x7b2cbf, stripe: 0x00f5d4, glow: true, bottom: 0x10002b, deck: 0xf2f2ff, motor: 0x10002b, cap: 0x00f5d4, metal: 0.2, rough: 0.18, excl: true, anim: 'hue', under: 0x00f5d4, hullGlow: 0.25 },
   { id: 'x_obsidian', name: 'Obsidian Ember', hull: 0x0c0c0e, stripe: 0xff4d00, glow: true, bottom: 0x1a0500, deck: 0x1c1c20, motor: 0x0c0c0e, cap: 0xff4d00, metal: 0.35, rough: 0.28, excl: true, anim: 'pulse', under: 0xff4d00 },
   { id: 'x_gold24', name: '24K Gold', hull: 0xffc21a, stripe: 0xffffff, glow: true, bottom: 0x2a2000, deck: 0x111111, motor: 0xffc21a, cap: 0xffffff, metal: 0.35, rough: 0.2, excl: true, under: 0xffd23f, hullGlow: 0.4 },
+  { id: 'x_spectrum', name: 'Spectrum', hull: 0xff3d3d, stripe: 0xffffff, glow: true, bottom: 0x0d0d14, deck: 0xf7f7ff, motor: 0x0d0d14, cap: 0xffffff, metal: 0.2, rough: 0.12, excl: true, anim: 'rainbow', under: 0xffffff },
   { id: 'x_frost', name: 'Frostbite', hull: 0xdff6ff, stripe: 0x3fa9f5, glow: true, bottom: 0x0b2a4a, deck: 0xffffff, motor: 0xdff6ff, cap: 0x3fa9f5, metal: 0.45, rough: 0.1, excl: true, anim: 'pulse', under: 0x7ff5ff },
 ];
 // driver avatar catalog
@@ -1083,11 +1084,12 @@ const EFFECTS = [
   { id: 'sparks', name: 'Static Charge', desc: 'Electric sparks crackle over the hull.', req: 'records' },
   { id: 'smoke', name: 'Stunt Smoke', desc: 'An airshow smoke trail in your stripe colour.', req: 'air' },
   { id: 'stardust', name: 'Stardust', desc: 'A glittering gold trail.', req: 'streak' },
-  { id: 'aurora', name: 'Aurora Wake', desc: 'A colour-shifting wake.', req: 'wins' },
+  { id: 'bubbles', name: 'Bubble Trail', desc: 'Soft bubbles rising in your wake.', req: 'wins' },
   { id: 'x_inferno', name: 'Blue Inferno', desc: 'Blue-white hellfire with rising embers.', excl: true },
   { id: 'x_galaxy', name: 'Galaxy Orbit', desc: 'A ring of stars orbiting your boat.', excl: true },
   { id: 'x_storm', name: 'Storm Caller', desc: 'Violet lightning crackling over the hull.', excl: true },
-  { id: 'x_royal', name: 'Royal Aura', desc: 'A golden halo of sparkles.', excl: true },
+  { id: 'x_royal', name: 'Royal Aura', desc: 'A golden crown of light and a ring of gold around the boat.', excl: true },
+  { id: 'x_rainbow', name: 'Rainbow Wake', desc: 'A wide banded rainbow trail full of sparkles.', excl: true },
 ];
 const FXREQ = {
   stockgold: { need: 5, have: () => Object.keys(DATA.stats.stockGold).length, text: n => `Gold on every map with the STOCK engine · ${n}/5` },
@@ -1366,14 +1368,26 @@ function rbox(w, h, d, r, seg = 3) {
   }
   g.computeVertexNormals(); return g;
 }
+// lets a boat material show a rainbow that flows along the hull (Spectrum paint); off unless rb.on = 1
+function rainbowable(m, offset, strength = 0.92) {
+  const rb = { uRb: { value: 0 }, uRbT: { value: 0 }, uRbO: { value: offset }, uRbS: { value: strength } };
+  m.userData.rb = rb; m.customProgramCacheKey = () => 'rainbowable';
+  m.onBeforeCompile = sh => {
+    Object.assign(sh.uniforms, rb);
+    sh.vertexShader = 'varying vec3 vRbP;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvRbP = position;');
+    sh.fragmentShader = 'uniform float uRb, uRbT, uRbO, uRbS;\nvarying vec3 vRbP;\nvec3 rbHue(float h){ return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0); }\n'
+      + sh.fragmentShader.replace('vec4 diffuseColor = vec4( diffuse, opacity );', 'vec4 diffuseColor = vec4( diffuse, opacity );\nif (uRb > 0.5) diffuseColor.rgb = mix(vec3(1.0), rbHue(fract(vRbP.z * 0.3 + vRbP.x * 0.12 + vRbP.y * 0.35 - uRbT * 0.35 + uRbO)), uRbS);');
+  };
+  return m;
+}
 function makeBoatMats(BM) {
-  BM.hull = new THREE.MeshPhysicalMaterial({ color: 0xc8102e, roughness: 0.28, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, side: THREE.DoubleSide });
-  BM.stripe = std(0xffffff, { roughness: 0.3, side: THREE.DoubleSide });
+  BM.hull = rainbowable(new THREE.MeshPhysicalMaterial({ color: 0xc8102e, roughness: 0.28, metalness: 0.05, clearcoat: 1, clearcoatRoughness: 0.08, side: THREE.DoubleSide }), 0);
+  BM.stripe = rainbowable(std(0xffffff, { roughness: 0.3, side: THREE.DoubleSide }), 0.5);
   BM.bottom = std(0x10243a, { roughness: 0.5, side: THREE.DoubleSide });
-  BM.deck = std(0xf2f2ee, { roughness: 0.45, side: THREE.DoubleSide });
+  BM.deck = rainbowable(std(0xf2f2ee, { roughness: 0.45, side: THREE.DoubleSide }), 0.25, 0.62);
   BM.floor = std(0x39434d, { roughness: 0.9, side: THREE.DoubleSide });
   BM.motor = std(0x1a1c1f, { roughness: 0.3 });
-  BM.cap = std(0xc8102e, { roughness: 0.3 });
+  BM.cap = rainbowable(std(0xc8102e, { roughness: 0.3 }), 0.6, 0.95);
   BM.chrome = std(0xe8edf2, { metalness: 1, roughness: 0.15 });
   BM.glass = new THREE.MeshStandardMaterial({ color: 0xbfe4ff, transparent: true, opacity: 0.35, roughness: 0.05, metalness: 0.1, side: THREE.DoubleSide, depthWrite: false });
   BM.seat = std(0xf0ebe0, { roughness: 0.6 });
@@ -1397,6 +1411,7 @@ function applySkinTo(BM, id) {
   const s = SKINS.find(k => k.id === id) || SKINS[0];
   BM.hull.color.setHex(s.hull); BM.hull.metalness = s.metal; BM.hull.roughness = s.rough;
   BM.hull.emissive.setHex(s.hullGlow ? s.hull : 0); BM.hull.emissiveIntensity = s.hullGlow || 0;
+  const rbOn = s.anim === 'rainbow' ? 1 : 0; for (const k of ['hull', 'stripe', 'deck', 'cap']) BM[k].userData.rb.uRb.value = rbOn;
   BM.stripe.color.setHex(s.stripe); BM.stripe.emissive.setHex(s.glow ? s.stripe : 0); BM.stripe.emissiveIntensity = s.glow ? 0.55 : 0;
   BM.bottom.color.setHex(s.bottom); BM.deck.color.setHex(s.deck);
   BM.motor.color.setHex(s.motor); BM.motor.metalness = s.id === 'champion' || s.id === 'gold' ? 0.8 : 0.1;
@@ -1586,6 +1601,7 @@ function animateLooks(t) {
   for (const g of list) {
     const a = g.userData.anim; if (!a || !g.visible) continue;
     const { M, skin } = a;
+    if (skin.anim === 'rainbow') { for (const k of ['hull', 'stripe', 'deck', 'cap']) M[k].userData.rb.uRbT.value = t; M.stripe.emissive.setHSL((t * 0.35) % 1, 1, 0.5); M.cap.emissive.copy(M.stripe.emissive); if (a.glow) a.glow.material.color.setHSL((t * 0.2) % 1, 1, 0.55); }
     if (skin.anim === 'hue') { M.hull.color.setHSL((t * 0.06) % 1, 0.8, 0.45); M.hull.emissive.copy(M.hull.color); M.stripe.emissive.setHSL((t * 0.06 + 0.5) % 1, 1, 0.5); M.cap.emissive.copy(M.stripe.emissive); if (a.glow) a.glow.material.color.copy(M.stripe.emissive); }
     if (skin.anim === 'pulse') { const k = 0.45 + 0.4 * Math.sin(t * 3.2); M.stripe.emissiveIntensity = k + 0.2; M.cap.emissiveIntensity = k; }
     if (a.glow) {
@@ -2025,7 +2041,7 @@ function updateParticles(dt, t) {
 // two small particle pools for every boat's effect: one glowing (additive), one solid (smoke). 2 draw calls total.
 const FX = (() => {
   const make = additive => {
-    const N = 1100, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), al = new Float32Array(N), sz = new Float32Array(N);
+    const N = 1800, pos = new Float32Array(N * 3), col = new Float32Array(N * 3), al = new Float32Array(N), sz = new Float32Array(N);
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aC', new THREE.BufferAttribute(col, 3)); g.setAttribute('aA', new THREE.BufferAttribute(al, 1)); g.setAttribute('aS', new THREE.BufferAttribute(sz, 1));
     const m = new THREE.ShaderMaterial({ uniforms: pU, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -2048,7 +2064,7 @@ function fxEmit(id, o, dt, t) {
   _q.set(o.q.x, o.q.y, o.q.z, o.q.w);
   const W = (x, y, z) => _v.set(x, y, z).applyQuaternion(_q).add(o.pos);
   const R = () => Math.random(), sp = Math.hypot(o.vx, o.vz);
-  const rate = { flames: 110, sparks: 80, smoke: sp > 3 ? 20 : 6, stardust: 60, aurora: sp > 2 ? 55 : 12, x_inferno: 150, x_galaxy: 120, x_storm: 90, x_royal: 95 }[id] || 0;
+  const rate = { flames: 110, sparks: 80, smoke: sp > 3 ? 20 : 6, stardust: 60, bubbles: sp > 2 ? 35 : 10, x_rainbow: sp > 2 ? 150 : 40, x_inferno: 200, x_galaxy: 190, x_storm: 120, x_royal: 150 }[id] || 0;
   o.acc = (o.acc || 0) + dt * rate;
   let n = Math.min(12, Math.floor(o.acc)); o.acc -= n;
   const edge = () => { const u = 0.04 + R() * 0.92, s = R() < 0.5 ? -1 : 1; const p = hullPt(u, 1, s); return [p[0] * 1.04, p[1] + 0.05, p[2], s]; };
@@ -2057,33 +2073,46 @@ function fxEmit(id, o, dt, t) {
       const [x, y, z, sd] = edge(), w = W(x, y, z), blue = id === 'x_inferno', k = R();
       if (blue) _c.setRGB(0.35 + k * 0.5, 0.6 + k * 0.4, 1); else _c.setRGB(1, 0.45 + k * 0.45, 0.08 + k * 0.2);
       fxSpawn(FX.A, w.x, w.y, w.z, o.vx * 0.9 + (R() - 0.5) * 0.6, (blue ? 2.6 : 1.8) + R() * 1.6, o.vz * 0.9 + (R() - 0.5) * 0.6, 0.34 + R() * 0.3, (blue ? 0.9 : 0.8) + R() * 0.4, -0.9, _c.r, _c.g, _c.b, 0.9);
-      if (blue && R() < 0.12) { const e = W(x, y + 0.2, z); fxSpawn(FX.A, e.x, e.y, e.z, o.vx * 0.6 + (R() - 0.5), 5 + R() * 3, o.vz * 0.6 + (R() - 0.5), 1.1, 0.18, 0, 1, 0.75, 0.4, 1, -3); }
+      if (blue && R() < 0.28) { const e = W(x, y + 0.2, z); fxSpawn(FX.A, e.x, e.y, e.z, o.vx * 0.6 + (R() - 0.5) * 1.5, 5 + R() * 4, o.vz * 0.6 + (R() - 0.5) * 1.5, 1.3, 0.22, 0, R() < 0.5 ? 0.6 : 1, 0.85, 1, 1, -3, 1); }
+      if (blue && R() < 0.15) { const h = W((R() - 0.5) * 1.4, 0.6, (R() - 0.5) * 4); fxSpawn(FX.A, h.x, h.y, h.z, o.vx * 0.85, 1.2, o.vz * 0.85, 0.8, 2.2, 1.2, 0.15, 0.35, 0.9, 0.35); }
     } else if (id === 'sparks' || id === 'x_storm') {
       const [x, y, z] = edge(), w = W(x, y, z), a = R() * 6.28, b = R() * 3, purple = id === 'x_storm';
       fxSpawn(FX.A, w.x, w.y, w.z, o.vx + Math.cos(a) * b * 1.6, 1 + R() * 3, o.vz + Math.sin(a) * b * 1.6, 0.18 + R() * 0.18, 0.42 + R() * 0.2, -0.6, purple ? 0.85 : 0.7, purple ? 0.55 : 0.9, 1, 1, -8);
+      if (purple && R() < 0.12) { const g = W((R() - 0.5) * 2.2, 0.5, (R() - 0.5) * 5); fxSpawn(FX.A, g.x, g.y, g.z, o.vx * 0.9, 0.3, o.vz * 0.9, 0.5, 2.4, 0.8, 0.45, 0.2, 0.75, 0.35); }
     } else if (id === 'smoke') {
       const w = W((R() - 0.5) * 0.6, 0.4, 3.0); _c.setHex(o.stripe || 0xffffff).lerp(new THREE.Color(1, 1, 1), 0.25);
       fxSpawn(FX.S, w.x, w.y, w.z, o.vx * 0.15 + (R() - 0.5) * 0.6, 0.5 + R() * 0.5, o.vz * 0.15 + (R() - 0.5) * 0.6, 2.0 + R() * 0.5, 0.8, 0.9, _c.r, _c.g, _c.b, 0.38);
     } else if (id === 'stardust') {
       const w = W((R() - 0.5) * 2.2, 0.3 + R() * 0.8, -1.5 + R() * 4.5), gold = R() < 0.7;
       fxSpawn(FX.A, w.x, w.y, w.z, o.vx * 0.25 + (R() - 0.5) * 0.5, 0.2 + R() * 0.5, o.vz * 0.25 + (R() - 0.5) * 0.5, 1.3 + R() * 0.6, 0.34 + R() * 0.16, 0, 1, gold ? 0.82 : 1, gold ? 0.35 : 1, 1, 0, 1);
-    } else if (id === 'aurora') {
-      const lat = (R() - 0.5) * 2, w = W(lat, 0.15, 2.9); _c.setHSL((t * 0.15 + lat * 0.12 + 1) % 1, 1, 0.55);
-      fxSpawn(FX.A, w.x, w.y, w.z, o.vx * 0.1 + (R() - 0.5) * 0.3, 0.25 + R() * 0.3, o.vz * 0.1 + (R() - 0.5) * 0.3, 1.6 + R() * 0.5, 0.7, 0.9, _c.r, _c.g, _c.b, 0.55);
+    } else if (id === 'bubbles') {
+      const w = W((R() - 0.5) * 1.6, 0.05, 2.6 + R() * 0.6);
+      fxSpawn(FX.A, w.x, w.y, w.z, o.vx * 0.1 + (R() - 0.5) * 0.3, 0.5 + R() * 0.6, o.vz * 0.1 + (R() - 0.5) * 0.3, 1.4 + R() * 0.8, 0.18 + R() * 0.16, 0.05, 0.75, 0.9, 1, 0.45);
+    } else if (id === 'x_rainbow') {
+      // banded rainbow: colour comes from the lateral position, so the trail shows every colour side by side
+      const lat = (R() - 0.5) * 3.4, w = W(lat, 0.25 + R() * 0.3, 2.8 + R() * 0.4); _c.setHSL(((lat + 1.7) / 3.4 * 0.85 + t * 0.05) % 1, 1, 0.55);
+      if (R() < 0.82) fxSpawn(FX.A, w.x, w.y, w.z, o.vx * 0.08 + (R() - 0.5) * 0.2, 0.3 + R() * 0.25, o.vz * 0.08 + (R() - 0.5) * 0.2, 2.4 + R() * 0.6, 0.85, 1.1, _c.r, _c.g, _c.b, 0.6);
+      else fxSpawn(FX.A, w.x, w.y + 0.5, w.z, o.vx * 0.2 + (R() - 0.5), 0.8 + R() * 1.4, o.vz * 0.2 + (R() - 0.5), 1.2 + R() * 0.6, 0.26, 0, 1, 1, 1, 1, -0.5, 1);
     } else if (id === 'x_galaxy') {
-      const a = R() * 6.28, r = 3.4 + R() * 0.5, w = W(Math.cos(a) * r, 0.9 + Math.sin(a * 3 + t) * 0.25, Math.sin(a) * r * 1.3);
-      const tx = -Math.sin(a), tz = Math.cos(a); const k = R(); _c.setRGB(0.55 + k * 0.45, 0.45 + k * 0.4, 1);
-      _vt.set(tx * 3.5, 0, tz * 3.5).applyQuaternion(_q);
+      // two tilted rings of stars plus a soft nebula glow
+      const ring2 = R() < 0.4, a = R() * 6.28, r = (ring2 ? 2.6 : 3.6) + R() * 0.5, tilt = ring2 ? 0.9 : 0.25;
+      const w = W(Math.cos(a) * r, 1.0 + Math.sin(a) * r * tilt * 0.35, Math.sin(a) * r * 1.3);
+      const tx = -Math.sin(a), tz = Math.cos(a); const k = R(); if (ring2) _c.setRGB(1, 0.55 + k * 0.4, 0.85 + k * 0.15); else _c.setRGB(0.55 + k * 0.45, 0.45 + k * 0.4, 1);
+      if (R() < 0.08) { const nb = W((R() - 0.5) * 3, 1 + R(), (R() - 0.5) * 6); fxSpawn(FX.A, nb.x, nb.y, nb.z, o.vx, 0, o.vz, 1.2, 2.6, 0.5, 0.35, 0.2, 0.7, 0.3); }
+      _vt.set(tx * (ring2 ? -4.5 : 3.5), 0, tz * (ring2 ? -4.5 : 3.5)).applyQuaternion(_q);
       fxSpawn(FX.A, w.x, w.y, w.z, o.vx + _vt.x, 0, o.vz + _vt.z, 0.8 + R() * 0.4, 0.5 + R() * 0.25, -0.2, _c.r, _c.g, _c.b, 1, 0, 1);
     } else if (id === 'x_royal') {
-      const a = R() * 6.28, w = W(0.5 + Math.cos(a) * 0.55, 1.75, HZ(0.5) + 1.19 + Math.sin(a) * 0.55), up = R() < 0.4;
+      // half the sparkles make a gold ring around the whole boat at deck level, half a crown of light over the driver
+      const big = R() < 0.5, a = R() * 6.28;
+      if (big) { const w = W(Math.cos(a) * 2.4, 0.7, Math.sin(a) * 3.8); _vt.set(-Math.sin(a) * 2, 0, Math.cos(a) * 3.1).applyQuaternion(_q); fxSpawn(FX.A, w.x, w.y, w.z, o.vx + _vt.x, 0.6 + R() * 0.8, o.vz + _vt.z, 0.9 + R() * 0.4, 0.34 + R() * 0.12, -0.1, 1, 0.8 + R() * 0.15, 0.3, 1, 0, 1); continue; }
+      const w = W(0.5 + Math.cos(a) * 0.55, 1.75, HZ(0.5) + 1.19 + Math.sin(a) * 0.55), up = R() < 0.4;
       _vt.set(-Math.sin(a) * 1.5, 0, Math.cos(a) * 1.5).applyQuaternion(_q);
       fxSpawn(FX.A, w.x, w.y, w.z, o.vx + (up ? 0 : _vt.x), up ? 1 + R() : 0.15, o.vz + (up ? 0 : _vt.z), 0.9 + R() * 0.5, 0.32 + R() * 0.14, 0, 1, 0.85, 0.35, 1, 0, 1);
     }
   }
   // storm caller: an occasional lightning arc between two points on the hull
   if (id === 'x_storm' && (o.arcT = (o.arcT || 0) - dt) <= 0) {
-    o.arcT = 0.2 + Math.random() * 0.4;
+    o.arcT = 0.1 + Math.random() * 0.25;
     const [ax, ay, az] = edge(), [bx, by, bz] = edge();
     for (let k = 0; k <= 14; k++) { const f = k / 14, j = Math.sin(f * Math.PI) * 0.35; const w = W(ax + (bx - ax) * f + (Math.random() - 0.5) * j, ay + 0.3 + (by - ay) * f + Math.random() * j, az + (bz - az) * f + (Math.random() - 0.5) * j);
       fxSpawn(FX.A, w.x, w.y, w.z, o.vx, 0, o.vz, 0.16, 0.5, 0, 0.92, 0.85, 1, 1); }
@@ -2448,7 +2477,7 @@ function renderSkins() {
   let h = '';
   if (gTab === 'paint') {
     $('gSub').innerHTML = 'Buy paint jobs with race money, or earn the special ones with a <b style="color:var(--gold)">GOLD</b> medal.';
-    h = exclOrder('paint', SKINS).map(s => itemCard('paint', s, DATA.skin === s.id, `<div class="sw" style="background:linear-gradient(135deg,${hexc(s.hull)} 0 55%,${hexc(s.stripe)} 55% 68%,${hexc(s.bottom)} 68%)"></div>`)).join('');
+    h = exclOrder('paint', SKINS).map(s => itemCard('paint', s, DATA.skin === s.id, s.anim === 'rainbow' ? '<div class="sw" style="background:conic-gradient(#ff3d3d,#ffd23f,#3ddc84,#12d6ff,#3d7bff,#b05cff,#ff3d9a,#ff3d3d)"></div>' : `<div class="sw" style="background:linear-gradient(135deg,${hexc(s.hull)} 0 55%,${hexc(s.stripe)} 55% 68%,${hexc(s.bottom)} 68%)"></div>`)).join('');
   } else if (gTab === 'driver') {
     $('gSub').innerHTML = 'Your racer — everyone in your lobby sees this.';
     h = `<div class="sect">HELMET</div>` + exclOrder('helmet', HELMETS).map(x => itemCard('helmet', x, L.helmet === x.id, `<div class="sw" style="background:${hexc(L.hc)};display:flex;align-items:center;justify-content:center;font-size:20px">⛑</div>`)).join('')
@@ -2458,7 +2487,7 @@ function renderSkins() {
       + `<div class="sect">SKIN TONE</div>` + swatches('tone', TONES, L.tone);
   } else if (gTab === 'fx') {
     $('gSub').innerHTML = 'Effects can\'t be bought — each one is earned with a tough achievement.';
-    const ic = { none: '·', flames: '🔥', sparks: '⚡', smoke: '💨', stardust: '✨', aurora: '🌈', x_inferno: '💙', x_galaxy: '🌌', x_storm: '🌩', x_royal: '👑' };
+    const ic = { none: '·', flames: '🔥', sparks: '⚡', smoke: '💨', stardust: '✨', bubbles: '🫧', x_rainbow: '🌈', x_inferno: '💙', x_galaxy: '🌌', x_storm: '🌩', x_royal: '👑' };
     h = exclOrder('fx', EFFECTS).map(x => itemCard('fx', x, (L.fx || 'none') === x.id, `<div class="sw" style="display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(255,255,255,.08)">${ic[x.id] || '✨'}</div>`, x.desc ? `<small style="display:block">${x.desc}</small>` : '')).join('');
   } else if (gTab === 'flag') {
     $('gSub').innerHTML = 'A flag on a stern pole. It flaps harder the faster you go.';
