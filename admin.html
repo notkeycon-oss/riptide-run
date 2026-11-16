@@ -120,6 +120,7 @@ tr.sus td{background:rgba(255,90,95,.1)}
 
     <section data-tab="world" class="hidden">
       <h2>PUBLISHED MAPS</h2><div class="card"><table><tbody id="mapBody"></tbody></table></div>
+      <h2>MAP CHAT</h2><div class="card"><div class="row"><select id="chatSel"></select><button id="chatReload">RELOAD</button><button class="del" id="chatClear">CLEAR THIS CHAT</button></div><table class="log"><tbody id="chatBody"></tbody></table><p class="msg">Delete bad messages here. To stop someone chatting, open them in Players and press MUTE.</p></div>
       <h2>LOBBIES</h2><div class="card"><div class="row"><button class="del" id="killLobbies">CLOSE ALL LOBBIES</button></div><table><tbody id="lobBody"></tbody></table></div>
     </section>
 
@@ -154,7 +155,7 @@ tr.sus td{background:rgba(255,90,95,.1)}
 // Same database and key as riptide.html
 const DB = "https://riptide-run-default-rtdb.firebaseio.com";
 const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
-const RULES_MARK = 'rv9'; // bump together with database.rules.json
+const RULES_MARK = 'rv10'; // bump together with database.rules.json
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -244,7 +245,7 @@ function tab(t) {
   document.querySelectorAll('section[data-tab]').forEach(s => s.classList.toggle('hidden', s.dataset.tab !== t));
   if (t === 'boards') loadRuns(); if (t === 'world') loadWorld(); if (t === 'events') loadCfg(); if (t === 'log') loadLog(); if (t === 'vice') loadVice();
 }
-let P = {}, ADMD = {}, BANS = {}, sel = null, TAKE = {}, VICE = {};
+let P = {}, ADMD = {}, BANS = {}, sel = null, TAKE = {}, VICE = {}, MUTE = {};
 // what a racer really has: their synced profile minus anything you've taken away that hasn't synced yet
 const realMoney = (id, e) => Math.max(0, (e.earned || 0) - (e.spent || 0) - (+((TAKE[id] || {}).cash) || 0));
 const realXp = (id, e) => Math.max(0, (+e.xp || 0) - (+((TAKE[id] || {}).xp) || 0));
@@ -254,8 +255,7 @@ const isOn = p => p && p.on && Date.now() - (p.on.t || 0) < 90000;
 const banOn = b => !!b && (b === true || !b.until || b.until > Date.now());
 async function loadAll(auto) {
   const [p, a, b, x, tk, vc] = await Promise.all([db('players'), db('adm'), db('bans'), db('exc').catch(() => null), db('take').catch(() => null), db('vice').catch(() => null)]);
-  VICE = vc || {};
-  TAKE = tk || {};
+  VICE = vc || {}; MUTE = (await db('mute').catch(() => null)) || {};
   P = p || {}; ADMD = a || {}; BANS = b || {}; EXCD = x || {};
   loadStats(); renderPlayers(); if (auto) return; renderAll(); if (sel) renderCard();
 }
@@ -263,7 +263,7 @@ async function loadStats() {
   const count = async p => { try { return Object.keys((await db(p, 'GET', undefined, '&shallow=true')) || {}).length; } catch (e) { return '?'; } };
   const [lobbies, maps] = await Promise.all([count('lobbies'), count('maps')]);
   const week = Date.now() - 7 * 864e5, active = Object.values(P).filter(x => x && x.seen > week).length, online = Object.values(P).filter(isOn).length;
-  $('stats').innerHTML = [['ONLINE NOW', online], ['RACERS', Object.keys(P).length], ['ACTIVE THIS WEEK', active], ['OPEN LOBBIES', lobbies], ['PUBLISHED MAPS', maps], ['BANNED', Object.values(BANS).filter(banOn).length]]
+  $('stats').innerHTML = [['ONLINE NOW', online], ['RACERS', Object.keys(P).length], ['ACTIVE THIS WEEK', active], ['OPEN LOBBIES', lobbies], ['PUBLISHED MAPS', maps], ['BANNED', Object.values(BANS).filter(b => banOn(b) && !b.moved).length]]
     .map(([l, v]) => `<div class="stat"><small>${l}</small><b>${v}</b></div>`).join('');
 }
 const giftTxt0 = a => !a ? '—' : [a.speed && a.speed !== 1 ? '⚡×' + a.speed : '', a.cash ? money(a.cash) : '', a.xp ? '+' + a.xp + ' XP' : '', a.all ? 'ALL UNLOCKED' : '', a.items ? Object.values(a.items).reduce((n, c) => n + Object.keys(c).length, 0) + ' items' : ''].filter(Boolean).join(' · ') || '—';
@@ -295,6 +295,8 @@ const actionsHTML = scope => `
     ${scope === 'one' ? `<div class="box danger"><b>➖ TAKE AWAY</b><div class="row"><input type="number" id="takeCash" placeholder="money" style="width:110px"><button class="del" data-one-takecash="1">TAKE MONEY</button></div><div class="row" style="margin-top:6px"><input type="number" id="setLvl" placeholder="level" min="1" max="30" style="width:110px"><button class="del" data-one-setlvl="1">SET MASTERY LEVEL</button></div><div class="row" style="margin-top:6px"><button data-one-untake="1">UNDO MONEY &amp; MASTERY TAKE-AWAYS</button></div><p class="msg">Only lowers what they earned by playing. Engines above the new level stay owned — take those away in Inventory.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box"><b>✏ RENAME</b><div class="row"><input id="newName" maxlength="14" placeholder="New racer name" style="width:160px"><button data-one-rename="1">RENAME</button></div><p class="msg">Updates their profile and leaderboard times. They sign in with the new name and the same PIN.</p></div>` : ''}
     ${scope === 'one' ? `<div class="box"><b>💬 MESSAGE / KICK</b><input id="oneMsg" maxlength="200" placeholder="Message or kick reason" style="width:100%"><div class="row" style="margin-top:6px"><button data-one-msg="1">SEND MESSAGE</button><button class="del" data-one-kick="1">KICK</button></div><p class="msg">Kick drops them out of their race or lobby to the menu.</p></div>` : ''}
+    ${scope === 'one' ? `<div class="box"><b>🔇 CHAT</b>${MUTE[sel] ? `<p class="msg" style="margin:0 0 6px">Muted — they can't send chat messages.</p><button data-one-mute="0">UNMUTE</button>` : `<button class="del" data-one-mute="1">MUTE IN CHAT</button><p class="msg">Stops them sending chat messages. They can still play.</p>`}</div>` : ''}
+    ${scope === 'one' ? `<div class="box danger"><b>🔑 CHANGE PIN</b>${sel && sel.length >= 20 ? `<div class="row"><input id="newPin" maxlength="4" inputmode="numeric" placeholder="new PIN" style="width:110px"><button data-one-rndpin="1">RANDOM</button><button class="del" data-one-pin="1">CHANGE PIN</button></div><p class="msg">For when someone else knows their PIN. Signs out every device using the old PIN and keeps all their progress. You'll see the new PIN once — tell them privately.</p><div id="pinOut"></div>` : '<p class="msg">Old-style account — they need to sign in once with the new version first.</p>'}</div>` : ''}
     ${scope === 'one' ? `<div class="box" style="border:1px solid rgba(127,216,255,.4)"><b>👤 VICE ADMIN</b>${VICE[sel] ? `<p class="msg" style="margin:0 0 6px">${esc(pname(sel))} is a vice admin. Change what they can do in the Vice Admins tab.</p><div class="row"><button data-one-vice="0" class="del">REMOVE VICE ADMIN</button><button data-one-vicetab="1">OPEN VICE ADMINS</button></div>` : sel && sel.length >= 20 ? `<button data-one-vice="1">MAKE VICE ADMIN</button><p class="msg">Gives them a few moderator tools. You choose which, and can remove them any time.</p>` : '<p class="msg">Old-style account — they need to sign in once with the new version first.</p>'}</div>` : ''}
     ${scope === 'one' ? `<div class="box danger"><b>⛔ BAN</b><input id="banReason" maxlength="120" placeholder="Reason (shown to them)" style="width:100%"><div class="row" style="margin-top:6px"><select id="banLen"><option value="3600000">1 hour</option><option value="86400000">1 day</option><option value="604800000" selected>7 days</option><option value="2592000000">30 days</option><option value="0">Permanent</option></select><button class="del" data-one-ban="1">BAN</button><button data-one-unban="1">UNBAN</button></div></div>` : ''}
     <div class="box danger"><b>☠ RESET PROGRESS</b><button class="del" data-${scope}-reset="1">RESET PROGRESS</button><p class="msg">Wipes money, mastery, unlocks, medals and leaderboard times.</p></div>
@@ -430,6 +432,15 @@ function bind(scope, only) {
     await db('msg/' + id, 'PUT', { t: Date.now(), text: 'You have been banned from online play.' + (reason ? ' Reason: ' + reason : ''), kick: true });
     log(`Banned ${pname(id)} ${len ? 'for ' + $('banLen').selectedOptions[0].text : 'permanently'}${reason ? ' — ' + reason : ''}`); await loadAll(); say('Banned ' + pname(id) + '.');
   });
+  q('mute').forEach(b => b.onclick = async () => { const id = only[0], on = b.getAttribute('data-one-mute') === '1'; if (on) await db('mute/' + id, 'PUT', { at: Date.now() }); else await db('mute/' + id, 'DELETE'); log(`${on ? 'Muted' : 'Unmuted'} ${pname(id)} in chat`); await loadAll(); say(`${pname(id)} ${on ? 'is muted in chat' : 'can chat again'}.`); });
+  q('rndpin').forEach(b => b.onclick = () => { $('newPin').value = String(Math.floor(Math.random() * 10000)).padStart(4, '0'); });
+  q('pin').forEach(b => b.onclick = async () => {
+    const id = only[0], pin = $('newPin').value.trim(); if (!/^\d{4}$/.test(pin)) return say('A PIN is exactly 4 digits.', false);
+    if (!confirm(`Change ${pname(id)}'s PIN? Anyone signed in with the old PIN (including them) gets signed out.`)) return;
+    b.disabled = true; say('Changing PIN…');
+    try { const name = pname(id), nu = await changePin(id, pin); sel = nu; await loadAll(); renderCard(); $('pinOut').innerHTML = `<div class="okbar">New PIN for <b>${esc(name)}</b>: <b style="font-size:28px;letter-spacing:6px">${pin}</b><br><small class="msg">Tell them privately. It isn't saved anywhere, so it won't be shown again.</small></div>`; say(`Changed ${name}'s PIN.`); }
+    catch (e) { b.disabled = false; say("Couldn't change the PIN: " + e.message, false); }
+  });
   q('vice').forEach(b => b.onclick = async () => { const on = b.getAttribute('data-one-vice') === '1'; if (on) await makeVice(only[0]); else await removeVice(only[0]); renderCard(); });
   q('vicetab').forEach(b => b.onclick = () => tab('vice'));
   q('unban').forEach(b => b.onclick = async () => { const id = only[0]; await db('bans/' + id, 'DELETE'); log(`Unbanned ${pname(id)}`); await loadAll(); say('Unbanned ' + pname(id) + '.'); });
@@ -447,7 +458,17 @@ $('cfgSave').onclick = async () => { const n = { msg: $('cfgMsg').value.trim(), 
 $('cfgClear').onclick = async () => { if (!confirm('Clear the message, multiplier, featured map and maintenance mode?')) return; await db('cfg', 'DELETE'); log('Cleared event settings'); loadCfg(); say('Event settings cleared.'); };
 $('annSend').onclick = async () => { const t = $('annText').value.trim(); if (!t) return say('Type the announcement first.', false); CFG.ann = { t: Date.now(), text: t }; await db('cfg/ann', 'PUT', CFG.ann); log(`Announcement: "${t}"`); $('annText').value = ''; say('Announcement sent.'); };
 // ---- maps & lobbies ----
+const CHATS = MAPS.map(m => [m[0], m[1]]).concat([['custom', 'Custom maps']]);
+async function loadChat() {
+  if (!$('chatSel').options.length) $('chatSel').innerHTML = CHATS.map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join('');
+  const ch = $('chatSel').value, d = await db('chat/' + ch, 'GET', undefined, '&orderBy=%22$key%22&limitToLast=60');
+  $('chatBody').innerHTML = Object.entries(d || {}).sort((a, b) => a[0] < b[0] ? 1 : -1).map(([k, v]) => `<tr><td style="white-space:nowrap;color:var(--dim)">${v.t ? new Date(v.t).toLocaleString() : ''}</td><td><b>${esc(v.n)}</b>${MUTE[v.u] ? ' <span class="tag">MUTED</span>' : ''}</td><td>${esc(v.m)}</td><td><button class="del" data-dc="${esc(k)}">DELETE</button></td></tr>`).join('') || '<tr><td class="msg">No messages in this chat.</td></tr>';
+  document.querySelectorAll('[data-dc]').forEach(b => b.onclick = async () => { const v = (d || {})[b.dataset.dc] || {}; await db(`chat/${ch}/${b.dataset.dc}`, 'DELETE'); log(`Deleted ${v.n}'s chat message on ${ch}: "${v.m}"`); loadChat(); });
+}
+$('chatSel').onchange = loadChat; $('chatReload').onclick = loadChat;
+$('chatClear').onclick = async () => { const ch = $('chatSel').value; if (!confirm('Delete every message in the ' + ch + ' chat?')) return; await db('chat/' + ch, 'DELETE'); log('Cleared the ' + ch + ' chat'); loadChat(); };
 async function loadWorld() {
+  loadChat();
   const [m, l] = await Promise.all([db('maps'), db('lobbies')]);
   $('mapBody').innerHTML = Object.entries(m || {}).map(([k, v]) => `<tr><td><b>${esc(v.n)}</b> <small class="msg">by ${esc(v.a)}</small></td><td><span class="uid">${esc(k)}</span></td><td>${v.d ? new Date(v.d).toLocaleDateString() : ''}</td><td><button class="del" data-dm="${esc(k)}">DELETE</button></td></tr>`).join('') || '<tr><td class="msg">No published maps.</td></tr>';
   $('lobBody').innerHTML = Object.entries(l || {}).map(([k, v]) => `<tr><td><b>${esc(k)}</b></td><td>${Object.values(v.p || {}).map(p => esc(p.n)).join(', ') || '<span class="msg">empty</span>'}</td><td>${esc(v.md || '')} · ${esc(v.m || '')}</td><td><button class="del" data-dl="${esc(k)}">CLOSE</button></td></tr>`).join('') || '<tr><td class="msg">No lobbies right now.</td></tr>';
@@ -460,6 +481,31 @@ async function loadLog() {
   const [d, vl] = await Promise.all([db('adminlog', 'GET', undefined, '&orderBy=%22$key%22&limitToLast=150'), db('vlog').catch(() => null)]);
   const rows = Object.values(d || {}).map(v => ({ t: v.t || 0, a: v.a, who: '' })).concat(viceRows(vl)).sort((x, y) => y.t - x.t).slice(0, 200);
   $('logBody').innerHTML = rows.map(v => `<tr><td style="white-space:nowrap;color:var(--dim)">${v.t ? new Date(v.t).toLocaleString() : ''}</td><td>${v.who ? `<span class="tag" style="background:rgba(127,216,255,.35)">VICE · ${esc(v.who)}</span> ` : ''}${esc(v.a)}</td></tr>`).join('') || '<tr><td class="msg">Nothing yet.</td></tr>';
+}
+// ---- change PIN ----
+// A PIN is part of the racer's sign-in, and only Google's servers can change a sign-in password. So the panel makes a fresh
+// sign-in for the same name with the new PIN, moves all their progress onto it in one write, and retires the old one.
+async function changePin(id, pin) {
+  const name = pname(id), key = s => s.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_'), nk = key(name);
+  if ((await db('names/' + nk)) !== id) throw new Error('their name record points somewhere else');
+  const ek = nk + '.' + Date.now().toString(36);
+  const j = await post('https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=' + FIREBASE_API_KEY, { email: ek + '@players.riptide-run.firebaseapp.com', password: 'riptide-' + pin + '-' + ek, returnSecureToken: false });
+  const nu = j.localId; if (!nu) throw new Error('no new account');
+  const u = {}, mv = (from, to, v) => { if (v != null) u[to] = v; u[from] = null; };
+  const one = path => db(path).catch(() => null);
+  const [prof, adm, exc, tk, vc, rs, mt, lb, lbt, maps] = await Promise.all([one('players/' + id), one('adm/' + id), one('exc/' + id), one('take/' + id), one('vice/' + id), one('rst/' + id), one('mute/' + id), one('lb'), one('lbt'), one('maps')]);
+  mv('players/' + id, 'players/' + nu, prof); mv('adm/' + id, 'adm/' + nu, adm); mv('exc/' + id, 'exc/' + nu, exc); mv('vice/' + id, 'vice/' + nu, vc); mv('rst/' + id, 'rst/' + nu, rs); mv('mute/' + id, 'mute/' + nu, mt);
+  // money/mastery take-aways and taken effects are state, so they move; other item take-aways were already applied to the profile
+  if (tk) { const t = {}; if (tk.cash) t.cash = tk.cash; if (tk.xp) t.xp = tk.xp; if (tk.items && tk.items.fx) t.items = { fx: tk.items.fx }; mv('take/' + id, 'take/' + nu, Object.keys(t).length ? t : null); }
+  for (const run in (lb || {})) if (lb[run][id]) { mv(`lb/${run}/${id}`, `lb/${run}/${nu}`, lb[run][id]); mv(`gh/${run}/${id}`, `gh/${run}/${nu}`, await one(`gh/${run}/${id}`)); }
+  for (const run in (lbt || {})) for (const tr in (lbt[run] || {})) if (lbt[run][tr] && lbt[run][tr][id]) { mv(`lbt/${run}/${tr}/${id}`, `lbt/${run}/${tr}/${nu}`, lbt[run][tr][id]); mv(`ght/${run}/${tr}/${id}`, `ght/${run}/${tr}/${nu}`, await one(`ght/${run}/${tr}/${id}`)); }
+  for (const code in (maps || {})) if (maps[code] && maps[code].au === id) u[`maps/${code}/au`] = nu;
+  Object.assign(u, { ['names/' + nk]: nu, ['alias/' + nk]: ek, ['online/' + id]: null, ['msg/' + id]: null, ['lbdel/' + id]: null, ['vlast/' + id]: null,
+    ['bans/' + id]: { until: 0, reason: 'PIN changed by the admin', moved: nu, at: Date.now() } });
+  await db('', 'PATCH', u);
+  if (VICE[id]) { VICE[nu] = VICE[id]; delete VICE[id]; }
+  log(`Changed ${name}'s PIN (old sign-in retired)`);
+  return nu;
 }
 // ---- vice admins ----
 const VPERMS = [['msg', '💬 Message & kick'], ['lb', '🏁 Delete leaderboard times'], ['boost', '⚡ Speed boost (up to ×2)'], ['gift', '💰 Give money & mastery (5,000 max each time)'], ['items', '🎁 Give shop items'], ['ann', '📣 Announcements']];

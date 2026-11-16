@@ -107,6 +107,21 @@ button.alt{margin-top:10px;font-size:16px;background:none;border:none;color:var(
 #hudBtns{position:fixed;top:12px;right:12px;display:flex;gap:8px;z-index:4}
 #hudBtns button{width:44px;height:44px;border-radius:50%;background:rgba(6,22,34,.55);border:2px solid rgba(255,255,255,.3);color:#fff;font-size:20px;font-weight:800;display:flex;align-items:center;justify-content:center;padding:0}
 #hudBtns button:hover{background:rgba(255,255,255,.2)}
+.social{display:grid;grid-template-columns:1fr 1.3fr;gap:12px;margin-top:16px;text-align:left}
+.sbox{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:10px 12px;display:flex;flex-direction:column;min-width:0}
+.shead{font-size:15px;font-weight:800;letter-spacing:2px;color:var(--dim);margin-bottom:6px}.shead span{color:var(--ink)}
+.slist{max-height:170px;overflow-y:auto;font-size:16px;line-height:1.3}
+.orow{display:flex;align-items:center;gap:8px;padding:5px 0;border-top:1px solid rgba(255,255,255,.07)}.orow:first-child{border-top:none}
+.orow .who{flex:1;min-width:0}.orow .who small{display:block;color:var(--dim);font-size:13px}
+.orow button{font-size:13px;font-weight:800;letter-spacing:1px;padding:4px 10px;border-radius:999px;border:1px solid var(--accent);background:rgba(255,210,63,.12);color:var(--ink);white-space:nowrap}
+.odot{width:8px;height:8px;border-radius:50%;background:#3ddc84;box-shadow:0 0 6px #3ddc84;flex:none}
+.cmsg{padding:2px 0;word-wrap:break-word}.cmsg b{margin-right:6px}.cmsg i{color:var(--dim);font-style:normal;font-size:13px;margin-left:6px}
+.crow{display:flex;gap:6px;margin-top:8px}.crow input{flex:1;min-width:0;margin:0;font-size:17px;padding:7px 10px}.crow button{margin:0;padding:6px 14px;font-size:16px}
+.snote{color:var(--dim);font-size:15px;padding:4px 0}
+#chatHud{position:fixed;left:14px;bottom:180px;width:min(380px,70vw);z-index:4;pointer-events:none;display:none}
+#chatHudList .cmsg{background:rgba(6,22,34,.55);border-radius:8px;padding:3px 9px;margin-top:4px;font-size:16px;transition:opacity .6s;text-shadow:0 1px 2px #000}
+#chatIn{pointer-events:auto;width:100%;margin-top:6px;font:inherit;font-size:17px;padding:7px 10px;border-radius:10px;border:2px solid var(--accent);background:rgba(6,22,34,.85);color:#fff;outline:none}
+@media (max-width:700px){.social{grid-template-columns:1fr}#chatHud{bottom:170px}}
 #netchip{top:64px;right:16px;font-size:15px;font-weight:700;letter-spacing:1px;color:var(--dim)}
 #netchip b{color:var(--good)}
 input.tx{font:inherit;font-size:22px;font-weight:600;width:100%;max-width:300px;padding:10px 14px;margin:6px auto;display:block;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:var(--ink);text-align:center;user-select:text;-webkit-user-select:text;touch-action:auto;outline:none}
@@ -213,7 +228,8 @@ input.tx:focus{border-color:var(--accent)}
   <div class="tb" id="tl">◀</div><div class="tb" id="tr">▶</div>
   <div class="tb" id="tu">▲</div><div class="tb" id="tb">⚡</div><div class="tb" id="td">▼</div><div class="tb" id="trst">R</div>
 </div>
-<div id="hudBtns"><button id="bPause" title="Pause (P)">II</button><button id="bRestart" title="Restart race (T)">↻</button><button id="bMenu" title="Main menu (Q)">☰</button></div>
+<div id="chatHud"><div id="chatHudList"></div><input id="chatIn" class="hidden" maxlength="120" placeholder="Chat to this map — Enter to send, Esc to close" autocomplete="off"></div>
+<div id="hudBtns"><button id="bChat" title="Chat (Enter)">💬</button><button id="bPause" title="Pause (P)">II</button><button id="bRestart" title="Restart race (T)">↻</button><button id="bMenu" title="Main menu (Q)">☰</button></div>
 <div id="netchip" class="hud"></div>
 
 <div class="panel" id="menu">
@@ -236,6 +252,11 @@ input.tx:focus{border-color:var(--accent)}
       <button class="sec" id="garageBtn">GARAGE</button>
       <button class="sec" id="boardBtn">LEADERBOARD</button>
       <button class="sec" id="setBtn">SETTINGS</button>
+    </div>
+    <div class="social">
+      <div class="sbox"><div class="shead">🟢 ONLINE NOW <span id="onCount"></span></div><div id="onList" class="slist"></div></div>
+      <div class="sbox"><div class="shead">💬 CHAT · <span id="chatName"></span></div><div id="chatList" class="slist chatl"></div>
+        <div class="crow"><input class="tx" id="chatMenuIn" maxlength="120" placeholder="Say something…" autocomplete="off"><button class="sec" id="chatMenuSend">SEND</button></div></div>
     </div>
   </div>
 </div>
@@ -1070,7 +1091,7 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 // ================= save data =================
-const DEF_SET = { laps: 1, ghost: 'mine', splits: true, minimap: true, cam: 0, units: 'mph', volume: 2, quality: 2, shake: true, shadows: true };
+const DEF_SET = { laps: 1, ghost: 'mine', splits: true, minimap: true, chat: true, cam: 0, units: 'mph', volume: 2, quality: 2, shake: true, shadows: true };
 // each signed-in racer gets their own save slot on this device; the guest slot holds offline play
 const GUEST = 'riptide_run_v2', SLOT = id => 'rr_u_' + id;
 function readLS(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
@@ -1346,6 +1367,8 @@ function grantPlain(cash, xp) {
   const after = levelOf(totalXp()).L; let bonus = 0; for (let L = before + 1; L <= after; L++) { bonus += 40 * L; } e.earned += bonus;
   return bonus;
 }
+const QPEND = []; // quests finished mid-race, announced on the main menu
+setInterval(() => { if (QPEND.length && state === 'menu' && open('menu') && !LOBBY.racing && !open('notice')) { const d = QPEND.splice(0); notice('QUEST', `📋 Quest complete${d.length > 1 ? 's' : ''}!`, d.join('\n')); } }, 600);
 // feed game events into the quests. Admin-boosted runs and custom maps never count.
 function qEvent(type, d = {}) {
   if (boosted() || d.custom) return;
@@ -1374,7 +1397,7 @@ function qEvent(type, d = {}) {
     q.prog = Math.min(q.n, q.prog + add);
     if (q.prog >= q.n) { q.done = true; const bonus = grantPlain(q.cash, q.xp); done.push(`${q.text} · +${money(q.cash + bonus)} +${q.xp} XP`); }
   }
-  if (done.length) { save(); pushProfile(); refreshLabels(); setTimeout(() => notice('QUEST', `📋 Quest complete${done.length > 1 ? 's' : ''}!`, done.join('\n')), type === 'finish' || type === 'lobby' ? 2600 : 200); }
+  if (done.length) { save(); pushProfile(); refreshLabels(); QPEND.push(...done); } // shown when they're back on the main menu
   else if (type !== 'boost' && type !== 'air') save();
 }
 function renderQuests() {
@@ -2668,6 +2691,7 @@ const KM = { ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ArrowLeft: 'l',
 const open = id => !$(id).classList.contains('hidden');
 const panelOpen = () => ['garage', 'settings', 'login', 'board', 'lobby', 'lres', 'editor', 'quests'].some(open);
 addEventListener('keydown', e => {
+  if (e.target && (e.target.id === 'chatIn' || e.target.id === 'chatMenuIn')) { if (e.code === 'Enter') { e.preventDefault(); chatSendFrom(e.target); } else if (e.code === 'Escape') closeChatInput(); return; }
   if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') { if (open('login')) $('loginGo').click(); else if (open('lobby')) $('lbJoin').click(); else if (open('editor') && e.target.id === 'edCode') $('edLoad').click(); } return; }
   if (open('editor')) { edKey(e); return; }
   if (KM[e.code]) { keys[KM[e.code]] = true; e.preventDefault(); }
@@ -2678,6 +2702,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyQ' && state !== 'menu') quitToMenu();
   if (e.code === 'KeyM') { S.volume = S.volume ? 0 : 2; save(); }
   if (e.code === 'KeyP' || e.code === 'Escape') { if (open('settings')) closeSettings(); else if (!LOBBY.racing) togglePause(); }
+  if (e.code === 'Enter' && (state === 'racing' || state === 'countdown' || state === 'paused') && !panelOpen()) { e.preventDefault(); openChatInput(); return; }
   if (e.code === 'Enter' && ((state === 'menu' && !panelOpen()) || (state === 'finished' && open('finish')))) { e.preventDefault(); startRace(); }
 });
 addEventListener('keyup', e => { if (KM[e.code]) keys[KM[e.code]] = false; });
@@ -2708,7 +2733,7 @@ function loadMap(i) {
   mapIdx = i; buildWorld(i); P.length = 0;
   placeBoat(world.start.x, world.start.z, world.start.yaw);
   R = Core.makeRace(world, lapsFor(MAPS[i]));
-  refreshLabels();
+  refreshLabels(); setTimeout(() => pollChat(true), 0); // switch chat rooms with the map
   if (!LOBBY.code) joinLive(MAPS[i].id);
 }
 function hidePanels() { for (const id of ['menu', 'finish', 'pause', 'garage', 'settings', 'lobby', 'lres', 'editor', 'board', 'quests']) $(id).classList.add('hidden'); }
@@ -3014,6 +3039,7 @@ const SET_SCHEMA = [
   { k: 'ghost', label: 'Ghost boat', opts: [['mine', 'My best'], ['world', 'World record'], ['off', 'Off']] },
   { k: 'splits', label: 'Split times', opts: [[true, 'On'], [false, 'Off']] },
   { k: 'minimap', label: 'Minimap', opts: [[true, 'On'], [false, 'Off']] },
+  { k: 'chat', label: 'Chat during races', opts: [[true, 'On'], [false, 'Off']] },
   { k: 'cam', label: 'Starting camera', opts: [[0, 'Chase'], [1, 'Far'], [2, 'Cockpit']] },
   { k: 'units', label: 'Speed units', opts: [['mph', 'MPH'], ['kmh', 'KM/H'], ['kn', 'Knots']] },
   { k: 'volume', label: 'Sound', opts: [[0, 'Off'], [1, 'Low'], [2, 'Med'], [3, 'High']] },
@@ -3387,7 +3413,8 @@ async function pollAdmin() {
     const before = JSON.stringify([CFG, ADM, EXC, BANNED, cash(), DATA.skin]);
     if (ex !== undefined) { const was = JSON.stringify(EXC); EXC = ex && typeof ex === 'object' ? ex : {}; if (uid && JSON.stringify(EXC) !== was) { if (fixEquipped()) applyMyLook(); const n = Object.values(EXC).reduce((k, o) => k + Object.keys(o || {}).length, 0); if (was !== '{}' || DATA.excSeen !== n) { if (n > (DATA.excSeen || 0)) notice('GIFT', '👑 You got an exclusive item!', 'The admin gave you something nobody can buy. Find it in the Garage.'); DATA.excSeen = n; save(); } } }
     if (c !== undefined) CFG = Object.assign({ msg: '', payMul: 1, feat: '', maint: false, ann: null }, c && typeof c === 'object' ? c : {});
-    if (ban !== undefined) {
+    if (uid && ban && typeof ban === 'object' && ban.moved) { clearMyLive(); AUTH.token = null; useAccount(null); refreshLabels(); notice('ACCOUNT', 'Your PIN was changed', 'The admin changed the PIN for this racer.\nSign in again with your name and the new PIN.'); }
+    else if (ban !== undefined) {
       const was = BANNED; BAN = banActive(ban) ? ban : null; BANNED = !!BAN;
       if (BANNED && !was) {
         const until = BAN.until ? 'until ' + new Date(BAN.until).toLocaleString() : 'permanently';
@@ -3423,6 +3450,114 @@ async function pollAdmin() {
 }
 const SV0 = { '.sv': 'timestamp' };
 setInterval(pollAdmin, 8000);
+
+// ================= map chat =================
+// every map has its own chat room. Messages are signed with your racer name; the server allows one every 2 s.
+const CHAT = { ch: null, msgs: [], lastKey: '', busy: false, sendT: 0, note: '', noteT: 0 };
+const BADW = ['fuck', 'shit', 'bitch', 'cunt', 'dick', 'pussy', 'nigg', 'fag', 'retard', 'whore', 'slut', 'bastard', 'asshole', 'cock', 'penis', 'porn', 'nazi'];
+const BADRE = new RegExp(BADW.join('|'), 'gi');
+const tidy = t => String(t || '').replace(BADRE, m => m[0] + '*'.repeat(m.length - 1));
+const chatCh = () => { const m = MAPS[mapIdx]; return m && !m.custom ? m.id : 'custom'; };
+const chatColor = s => { let h = 0; for (const c of String(s)) h = (h * 31 + c.charCodeAt(0)) | 0; return `hsl(${Math.abs(h) % 360},85%,70%)`; };
+const ago = t => { const s = Math.max(0, (srvNow() - t) / 1000); return s < 60 ? 'now' : s < 3600 ? Math.floor(s / 60) + 'm' : Math.floor(s / 3600) + 'h'; };
+async function pollChat(force) {
+  if (!NET.on || CHAT.busy || document.hidden) return;
+  const ch = chatCh(); CHAT.busy = true;
+  try {
+    // first load: the last 30 messages; after that only what's new (keeps it light on school internet)
+    const fresh = CHAT.ch !== ch || force;
+    const q = fresh ? '?orderBy=%22$key%22&limitToLast=30' : `?orderBy=%22$key%22&startAt=%22${CHAT.lastKey}%22`;
+    const d = await api('chat/' + ch, 'GET', undefined, q);
+    if (chatCh() !== ch) return;
+    if (fresh) { CHAT.ch = ch; CHAT.msgs = []; }
+    const have = new Set(CHAT.msgs.map(m => m.k));
+    const now = performance.now();
+    for (const [k, v] of Object.entries(d || {}).sort((a, b) => a[0] < b[0] ? -1 : 1)) if (v && !have.has(k)) CHAT.msgs.push({ k, n: v.n, m: v.m, t: +v.t || 0, at: fresh ? 0 : now });
+    if (fresh) { // drop messages the admin deleted
+      const keep = new Set(Object.keys(d || {})); CHAT.msgs = CHAT.msgs.filter(m => keep.has(m.k));
+    }
+    CHAT.msgs = CHAT.msgs.slice(-40); CHAT.lastKey = CHAT.msgs.length ? CHAT.msgs[CHAT.msgs.length - 1].k : '';
+    renderChat();
+  } catch (e) {} finally { CHAT.busy = false; }
+}
+let chatTick = 0;
+setInterval(() => { chatTick++; pollChat(chatTick % 10 === 0); }, 3000); // full refresh every 30 s picks up deletions
+function chatNote(t) { CHAT.note = t; CHAT.noteT = performance.now(); renderChat(); }
+function renderChat() {
+  const m = MAPS[mapIdx]; $('chatName').textContent = m && !m.custom ? m.name : 'Custom maps';
+  const signed = me() && !isLegacyId(me().id);
+  const line = c => `<div class="cmsg"><b style="color:${chatColor(c.n)}">${esc(c.n)}</b>${esc(tidy(c.m))}<i>${ago(c.t)}</i></div>`;
+  const note = CHAT.note && performance.now() - CHAT.noteT < 6000 ? `<div class="snote" style="color:var(--bad)">${esc(CHAT.note)}</div>` : '';
+  const L = $('chatList'), atBottom = L.scrollTop + L.clientHeight >= L.scrollHeight - 8;
+  L.innerHTML = (CHAT.msgs.map(line).join('') || '<div class="snote">No messages yet. Say hi!</div>') + note;
+  if (atBottom) L.scrollTop = L.scrollHeight;
+  $('chatMenuIn').disabled = $('chatMenuSend').disabled = !signed || !NET.on;
+  $('chatMenuIn').placeholder = !NET.on ? 'Chat needs the online server' : signed ? 'Say something…' : 'Sign in to chat';
+  // in a race: the newest few messages float on the left and fade out
+  const typing = !$('chatIn').classList.contains('hidden'), now = performance.now();
+  const recent = CHAT.msgs.slice(-6).filter(c => typing || (c.at && now - c.at < 14000));
+  $('chatHudList').innerHTML = recent.map(c => `<div class="cmsg" style="opacity:${typing || now - c.at < 11000 ? 1 : 0}"><b style="color:${chatColor(c.n)}">${esc(c.n)}</b>${esc(tidy(c.m))}</div>`).join('') + (note && typing ? note : '');
+}
+setInterval(() => { if (state !== 'menu') renderChat(); uiS('chatHud', 'display', state !== 'menu' && S.chat !== false ? 'block' : 'none'); }, 1000);
+async function sendChat(text) {
+  text = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 120); if (!text) return false;
+  if (!NET.on) { chatNote('Chat needs the online server.'); return false; }
+  if (!me() || isLegacyId(me().id)) { chatNote('Sign in to chat.'); return false; }
+  if (BANNED) { chatNote("You can't chat while banned."); return false; }
+  if (Date.now() - CHAT.sendT < 2100) { chatNote('Slow down a little.'); return false; }
+  CHAT.sendT = Date.now();
+  const id = me().id, name = me().name, k = 'm' + Date.now() + Math.random().toString(36).slice(2, 6), ch = chatCh();
+  try { await api('', 'PATCH', { [`chat/${ch}/${k}`]: { u: id, n: name, k: nameKey(name), m: tidy(text), t: SV0 }, [`chatlast/${id}`]: SV0 }); pollChat(); return true; }
+  catch (e) { let muted = false; try { muted = !!(await api('mute/' + id)); } catch (e2) {} chatNote(muted ? "You've been muted in chat by an admin." : "Couldn't send that — try again in a moment."); return false; }
+}
+async function chatSendFrom(el) { const ok = await sendChat(el.value); if (ok) el.value = ''; if (el.id === 'chatIn') closeChatInput(); }
+function openChatInput() { for (const k in keys) keys[k] = false; $('chatIn').classList.remove('hidden'); $('chatHud').style.display = 'block'; $('chatIn').focus(); renderChat(); }
+function closeChatInput() { $('chatIn').blur(); $('chatIn').classList.add('hidden'); renderChat(); }
+$('chatIn').addEventListener('blur', () => setTimeout(() => { if (document.activeElement !== $('chatIn')) $('chatIn').classList.add('hidden'); }, 100));
+$('bChat').onclick = () => { if ($('chatIn').classList.contains('hidden')) openChatInput(); else closeChatInput(); };
+$('chatMenuSend').onclick = () => chatSendFrom($('chatMenuIn'));
+
+// ================= who's online (home screen) =================
+const ONL = { sig: '', beatT: 0, list: [], busy: false };
+const onlineMe = () => me() && !isLegacyId(me().id) && NET.on && !BANNED;
+function myStatus() {
+  const m = MAPS[mapIdx], l = LOBBY.code || null;
+  return { n: me().name, m: m && !m.custom ? m.id : 'custom', s: l ? 'lobby' : state === 'menu' ? 'menu' : 'racing', l, t: SV0 };
+}
+// tell everyone where you are: right away when it changes, otherwise every 25 s
+setInterval(async () => {
+  if (!onlineMe() || document.hidden) return;
+  const st = myStatus(), sig = JSON.stringify([me().id, st.m, st.s, st.l]);
+  if (sig === ONL.sig && Date.now() - ONL.beatT < 25000) return;
+  ONL.sig = sig; ONL.beatT = Date.now();
+  try { await api('online/' + me().id, 'PUT', st); } catch (e) { ONL.sig = ''; }
+}, 1500);
+function goOffline() { if (NET.on && me() && !isLegacyId(me().id)) api('online/' + me().id, 'DELETE').catch(() => {}); ONL.sig = ''; }
+addEventListener('pagehide', goOffline);
+document.addEventListener('visibilitychange', () => { if (document.hidden) goOffline(); });
+async function pollOnline() {
+  if (!NET.on || ONL.busy || document.hidden || state !== 'menu' || !open('menu')) return;
+  ONL.busy = true;
+  try {
+    const d = await api('online'), now = srvNow(), mine = me() && me().id;
+    ONL.list = Object.entries(d || {}).filter(([id, v]) => v && id !== mine && now - (+v.t || 0) < 75000).map(([id, v]) => Object.assign({ id }, v));
+    renderOnline();
+  } catch (e) {} finally { ONL.busy = false; }
+}
+setInterval(pollOnline, 6000);
+function renderOnline() {
+  const here = chatCh(), mapName = id => (MAPS.find(m => m.id === id && !m.custom) || { name: 'a custom map' }).name;
+  const list = ONL.list.slice().sort((a, b) => (b.s === 'lobby') - (a.s === 'lobby') || (b.m === here) - (a.m === here) || String(a.n).localeCompare(b.n));
+  $('onCount').textContent = list.length ? '· ' + list.length : '';
+  $('onList').innerHTML = list.map(v => {
+    const what = v.s === 'lobby' ? `in lobby ${esc(v.l || '')} · ${esc(mapName(v.m))}` : `${v.s === 'racing' ? 'racing' : 'in the menu'} · ${esc(mapName(v.m))}`;
+    const btn = v.s === 'lobby' && v.l ? `<button data-join="${esc(v.l)}">JOIN LOBBY</button>` : v.m !== here && v.m !== 'custom' ? `<button data-go="${esc(v.m)}">GO TO MAP</button>` : v.m === here ? '<small style="color:var(--dim)">same map</small>' : '';
+    return `<div class="orow"><span class="odot"></span><div class="who"><b style="color:${chatColor(v.n)}">${esc(v.n)}</b><small>${what}</small></div>${btn}</div>`;
+  }).join('') || `<div class="snote">${NET.on ? 'Nobody else is online right now.' : 'Offline — connect to see who\'s playing.'}</div>`;
+  $('onList').querySelectorAll('[data-go]').forEach(b => b.onclick = () => { const i = MAPS.findIndex(m => m.id === b.dataset.go && !m.custom); if (i >= 0 && i !== mapIdx) { ghostPick = null; loadMap(i); renderMaps(); renderOnline(); pollChat(true); } });
+  $('onList').querySelectorAll('[data-join]').forEach(b => b.onclick = () => { if (!me() || isLegacyId(me().id)) { openLogin(); return; } openLobbyPanel(); $('lbCode').value = b.dataset.join; $('lbJoin').click(); });
+}
+setTimeout(() => { pollOnline(); pollChat(true); renderChat(); renderOnline(); }, 1500);
 async function fetchBoard(key, force) {
   if (!NET.on) return null;
   const b = NET.boards[key];
@@ -3602,7 +3737,7 @@ function openLogin() {
 function closeLogin() { $('login').classList.add('hidden'); $('menu').classList.remove('hidden'); renderMaps(); refreshLabels(); }
 $('playerChip').onclick = openLogin;
 $('loginSkip').onclick = () => { DATA.skipLogin = true; save(); closeLogin(); };
-$('logout').onclick = () => { clearMyLive(); AUTH.token = null; useAccount(null); closeLogin(); pollAdmin(); };
+$('logout').onclick = () => { clearMyLive(); goOffline(); AUTH.token = null; useAccount(null); closeLogin(); pollAdmin(); };
 $('loginGo').onclick = async () => {
   $('lerr').textContent = 'Signing in…'; $('loginGo').disabled = true;
   try { await signIn($('lname').value, $('lpin').value); $('lerr').textContent = ''; closeLogin(); NET.boards = {}; refreshBoards(); pollAdmin(); }

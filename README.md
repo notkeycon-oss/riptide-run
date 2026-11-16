@@ -67,3 +67,14 @@ You switch each ability on or off per friend:
 
 Vice admins can never unlock everything, ban, reset progress, rename, give exclusives or engines, take things away, change event settings or edit times. The database rules enforce this, and every vice action must write a server-timestamped entry to `vlog`. Those entries show up in your Activity Log. You can remove a vice admin, or pause all of them, at any time.
 
+## Chat, online list and PIN changes
+
+- **Map chat**: every map has its own chat room, shown on the home screen and floating on the left during a race. Press Enter or the 💬 button to type while racing.
+  - The database allows one message every 2 s per racer and signs each message with the sender's own racer name.
+  - Muted racers can't post, and a basic word filter masks swears.
+  - You can turn race chat off in Settings.
+  - In the admin panel, delete messages or clear a room under Maps & Lobbies, and mute a racer from their card.
+- **Online now**: the home screen lists who's playing, which map they're on, and whether they're in a lobby. Use GO TO MAP to switch to a friend's map, or JOIN LOBBY to join their lobby.
+- **Quests** finished during a race no longer interrupt you. The pop-up waits until you're back on the main menu.
+- **Change PIN** (admin only): makes a fresh sign-in for the racer with a new PIN and moves all their progress onto it. Every device using the old PIN is signed out. PINs are never stored, so they can't be looked up, only replaced.
+
