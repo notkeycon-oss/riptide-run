@@ -2,7 +2,7 @@
   "rules": {
     ".read": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
     ".write": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
-    "rv8": {
+    "rv9": {
       ".read": true
     },
     "names": {
@@ -15,7 +15,8 @@
       "$pid": {
         ".read": true,
         ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid"
-      }
+      },
+      ".read": "auth != null && root.child('vice').child(auth.uid).exists()"
     },
     "lb": {
       ".read": true,
@@ -25,7 +26,7 @@
           "e"
         ],
         "$pid": {
-          ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid",
+          ".write": "(auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid) || (auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('lb').val() === true && root.child('viceoff').val() !== true && !newData.exists() && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now)",
           ".validate": "newData.hasChildren(['n','t']) && newData.child('t').isNumber() && newData.child('t').val() > 20 && newData.child('n').isString() && newData.child('n').val().length <= 16"
         }
       }
@@ -38,7 +39,7 @@
             "t"
           ],
           "$pid": {
-            ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid",
+            ".write": "(auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid) || (auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('lb').val() === true && root.child('viceoff').val() !== true && !newData.exists() && newData.parent().parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now)",
             ".validate": "newData.hasChildren(['n','t']) && newData.child('t').isNumber() && newData.child('t').val() > 20 && newData.child('n').isString() && newData.child('n').val().length <= 16"
           }
         }
@@ -47,7 +48,7 @@
     "wr": {
       ".read": true,
       "$run": {
-        ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && newData.exists() && (!data.exists() || newData.child('t').val() < data.child('t').val())",
+        ".write": "(auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && newData.exists() && (!data.exists() || newData.child('t').val() < data.child('t').val())) || (auth != null && root.child('vice').child(auth.uid).child('perms').child('lb').val() === true && root.child('viceoff').val() !== true && !newData.exists() && newData.parent().parent().child('vlast').child(auth.uid).child('t').val() === now)",
         ".validate": "newData.child('t').isNumber() && newData.child('t').val() > 20"
       }
     },
@@ -55,7 +56,7 @@
       ".read": true,
       "$run": {
         "$pid": {
-          ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid"
+          ".write": "(auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid) || (auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('lb').val() === true && root.child('viceoff').val() !== true && !newData.exists() && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now)"
         }
       }
     },
@@ -64,7 +65,7 @@
       "$run": {
         "$tier": {
           "$pid": {
-            ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid"
+            ".write": "(auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $pid) || (auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('lb').val() === true && root.child('viceoff').val() !== true && !newData.exists() && newData.parent().parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now)"
           }
         }
       }
@@ -97,7 +98,26 @@
     },
     "adm": {
       "$pid": {
-        ".read": true
+        ".read": true,
+        "speed": {
+          ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('boost').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.isNumber() && newData.val() >= 1 && newData.val() <= 2"
+        },
+        "cash": {
+          ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('gift').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.isNumber() && newData.val() >= (data.exists() ? data.val() : 0) && newData.val() <= (data.exists() ? data.val() : 0) + 5000"
+        },
+        "xp": {
+          ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('gift').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.isNumber() && newData.val() >= (data.exists() ? data.val() : 0) && newData.val() <= (data.exists() ? data.val() : 0) + 5000"
+        },
+        "ep": {
+          ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && (root.child('vice').child(auth.uid).child('perms').child('boost').val() === true && root.child('viceoff').val() !== true || root.child('vice').child(auth.uid).child('perms').child('gift').val() === true && root.child('viceoff').val() !== true || root.child('vice').child(auth.uid).child('perms').child('items').val() === true && root.child('viceoff').val() !== true) && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && !data.exists() && newData.isNumber()"
+        },
+        "items": {
+          "$cat": {
+            "$k": {
+              ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('items').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.val() === true && $cat.matches(/^(paint|helmet|visor|flag)$/) && !$k.matches(/^(champion|champ)$/) && !$k.beginsWith('x_')"
+            }
+          }
+        }
       }
     },
     "rst": {
@@ -112,11 +132,15 @@
     },
     "msg": {
       "$pid": {
-        ".read": true
+        ".read": true,
+        ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('msg').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.child('t').val() === now && newData.child('text').isString() && newData.child('text').val().length <= 200 && newData.child('from').val() === root.child('vice').child(auth.uid).child('name').val() && (!newData.child('kick').exists() || newData.child('kick').val() === true)"
       }
     },
     "cfg": {
-      ".read": true
+      ".read": true,
+      "ann": {
+        ".write": "auth != null && root.child('vice').child(auth.uid).child('perms').child('ann').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.child('t').val() === now && newData.child('text').isString() && newData.child('text').val().length <= 200"
+      }
     },
     "exc": {
       "$pid": {
@@ -140,7 +164,33 @@
     },
     "lbdel": {
       "$pid": {
-        ".read": true
+        ".read": true,
+        "$run": {
+          ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('lb').val() === true && root.child('viceoff').val() !== true && newData.isNumber() && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now"
+        }
+      }
+    },
+    "vice": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid"
+      }
+    },
+    "viceoff": {
+      ".read": "auth != null"
+    },
+    "vlog": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$k": {
+          ".write": "auth != null && auth.uid === $uid && root.child('vice').child(auth.uid).exists() && !data.exists()",
+          ".validate": "newData.hasChildren(['t', 'a', 'n']) && newData.child('t').val() === now && newData.child('a').isString() && newData.child('a').val().length <= 300 && newData.child('n').isString()"
+        }
+      }
+    },
+    "vlast": {
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid && root.child('vice').child(auth.uid).exists()",
+        ".validate": "newData.child('t').val() === now && newData.child('k').isString() && newData.parent().parent().child('vlog').child($uid).child(newData.child('k').val()).child('t').val() === now"
       }
     }
   }
