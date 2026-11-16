@@ -51,3 +51,19 @@ Players who signed in before the upgrade are asked to enter their PIN once. Thei
 
 - **Admin panel:** `admin.html` (not linked from the game). Sign in with the admin email and password you created in Firebase Authentication.
 - **Rules:** copy `database.rules.json` into Firebase → Realtime Database → Rules, replace both `YOUR_ADMIN_UID` with your admin account's UID, then publish. Do this only after the game update with the API key is live, because the rules reject saves that don't carry a login.
+
+## Vice admins
+
+Open the **Vice Admins** tab in `admin.html` to make a friend a vice admin. They sign in at `vice.html` with their normal racer name and PIN.
+
+You switch each ability on or off per friend:
+
+- message/kick
+- delete leaderboard times
+- speed boost up to ×2
+- give up to 5,000 money or XP at a time
+- give shop items
+- announcements
+
+Vice admins can never unlock everything, ban, reset progress, rename, give exclusives or engines, take things away, change event settings or edit times. The database rules enforce this, and every vice action must write a server-timestamped entry to `vlog`. Those entries show up in your Activity Log. You can remove a vice admin, or pause all of them, at any time.
+

@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Riptide Vice Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#f4f8fb;--dim:rgba(244,248,251,.62);--card:rgba(255,255,255,.06);--line:rgba(255,255,255,.14);--accent:#7fd8ff;--good:#3ddc84;--bad:#ff5a5f}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d1f2e;color:var(--ink);font-family:'Barlow Condensed',system-ui,sans-serif;font-size:18px;min-height:100vh}
+.wrap{max-width:900px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:38px;font-weight:800;font-style:italic;letter-spacing:1px}h1 span{color:var(--accent)}
+h2{font-size:24px;letter-spacing:2px;margin:0 0 10px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-top:12px}
+input,select{font:inherit;font-size:18px;padding:8px 10px;border-radius:8px;border:1px solid var(--line);background:rgba(255,255,255,.08);color:var(--ink);outline:none;max-width:100%}
+input:focus,select:focus{border-color:var(--accent)}select option{background:#0d1f2e}
+button{font:inherit;font-weight:700;letter-spacing:1px;cursor:pointer;padding:7px 16px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.1);color:var(--ink)}
+button:hover{background:rgba(255,255,255,.18)}button.go{background:var(--accent);color:#0d1f2e;border:none}button.del{border-color:var(--bad);color:var(--bad)}
+button:disabled{opacity:.4;cursor:default}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.msg{color:var(--dim);margin-top:8px;min-height:22px}.msg.bad{color:var(--bad)}.msg.ok{color:var(--good)}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-variant-numeric:tabular-nums}
+th{text-align:left;color:var(--dim);font-size:14px;letter-spacing:2px;font-weight:700;padding:6px}
+td{padding:6px;border-top:1px solid var(--line);vertical-align:middle}
+.hidden{display:none!important}
+.tabs button.on{background:var(--accent);color:#0d1f2e;border-color:var(--accent)}
+#pBody tr{cursor:pointer}#pBody tr:hover{background:rgba(255,255,255,.05)}#pBody tr.sel{background:rgba(127,216,255,.12)}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;margin-top:10px}
+.box{background:rgba(0,0,0,.18);border-radius:10px;padding:12px}.box b{display:block;margin-bottom:8px;letter-spacing:1px}
+.box .row button{padding:5px 12px}
+.chip{display:inline-block;font-size:15px;padding:3px 10px;border-radius:999px;background:rgba(127,216,255,.14);border:1px solid rgba(127,216,255,.4);margin:3px 4px 0 0}
+.note{background:rgba(127,216,255,.08);border:1px solid rgba(127,216,255,.35);border-radius:12px;padding:10px 14px;margin-top:12px;color:var(--dim)}
+.warnbar{background:rgba(255,90,95,.15);border:1px solid var(--bad);border-radius:12px;padding:12px 16px;margin-top:12px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--good);margin-right:6px;box-shadow:0 0 6px var(--good)}
+.tag{font-size:13px;font-weight:800;padding:1px 6px;border-radius:4px;background:rgba(255,255,255,.15)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:16px}.kv span:nth-child(odd){color:var(--dim)}
+.log td{font-size:15px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>RIPTIDE <span>VICE ADMIN</span></h1>
+
+  <div id="loginBox" class="card" style="max-width:420px">
+    <p class="msg" style="margin:0 0 10px">Sign in with your racer name and PIN — the same ones you use in the game.</p>
+    <div class="row" style="flex-direction:column;align-items:stretch">
+      <input id="lname" maxlength="14" placeholder="Racer name" autocomplete="username">
+      <input id="lpin" type="password" inputmode="numeric" maxlength="4" placeholder="4-digit PIN" autocomplete="current-password">
+      <button class="go" id="loginBtn">SIGN IN</button>
+    </div>
+    <div class="msg" id="loginMsg"></div>
+  </div>
+
+  <div id="blocked" class="card hidden"></div>
+
+  <div id="panel" class="hidden">
+    <div class="row" style="justify-content:space-between;margin-top:10px"><span class="msg" id="who"></span><button id="logout">SIGN OUT</button></div>
+    <div class="note">You can: <span id="canList"></span><br>Everything you do here is recorded, and the owner can see it and change what you're allowed to do at any time.</div>
+    <div class="row tabs" id="tabs" style="margin-top:18px"></div>
+    <div class="msg" id="flashMsg"></div>
+
+    <section data-tab="players">
+      <div class="card">
+        <div class="row"><input id="search" placeholder="Search racers…" style="flex:1;min-width:180px"><label class="row msg" style="margin:0"><input type="checkbox" id="onlyOnline"> online now</label><button id="reloadP">RELOAD</button></div>
+        <table><thead><tr><th>RACER</th><th>MASTERY</th><th>ENGINE</th><th>LAST SEEN</th></tr></thead><tbody id="pBody"></tbody></table>
+      </div>
+      <div class="card hidden" id="pCard"></div>
+    </section>
+
+    <section data-tab="boards" class="hidden">
+      <div class="card">
+        <div class="row"><select id="runSel"></select><button id="reloadB">RELOAD</button></div>
+        <div class="msg" id="lbMsg"></div>
+        <table><thead><tr><th>#</th><th>RACER</th><th>TIME</th><th>ENGINE</th><th></th></tr></thead><tbody id="lbBody"></tbody></table>
+        <p class="msg">Delete a time if it looks like cheating. You can't change times or wipe a whole board.</p>
+      </div>
+    </section>
+
+    <section data-tab="ann" class="hidden">
+      <div class="card">
+        <h2>📣 POP-UP ANNOUNCEMENT</h2>
+        <p class="msg">Shows a pop-up once for every racer who opens the game in the next 24 hours.</p>
+        <div class="row"><input id="annText" maxlength="200" placeholder="e.g. Race night at 8pm!" style="flex:1;min-width:220px"><button class="go" id="annSend">SEND</button></div>
+      </div>
+    </section>
+
+    <section data-tab="mine" class="hidden">
+      <div class="card"><div class="row"><button id="reloadMine">RELOAD</button><span class="msg">Your recent vice admin actions (the owner sees these too).</span></div><table class="log"><tbody id="mineBody"></tbody></table></div>
+    </section>
+  </div>
+</div>
+<script>
+// Same database and key as riptide.html
+const DB = "https://riptide-run-default-rtdb.firebaseio.com";
+const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
+const IDT = 'https://identitytoolkit.googleapis.com/v1/accounts:';
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = s => { if (s == null || !isFinite(s)) return '—'; const m = Math.floor(s / 60), r = s - m * 60; return m + ':' + (r < 10 ? '0' : '') + r.toFixed(2); };
+const money = n => '$' + Math.round(n || 0).toLocaleString('en-US');
+const nameKey = n => n.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
+const xpNeed = L => 250 + 100 * L;
+function levelOf(xp) { let L = 1; while (L < 30 && xp >= xpNeed(L)) { xp -= xpNeed(L); L++; } return L; }
+const TIERS = ['STOCK', 'SPORT', 'RACE', 'PRO', 'RIPTIDE'];
+const MAPS = { harbor: 'Harbor Point', canyon: 'Red Rock Canyon', lagoon: 'Coral Lagoon', storm: 'Storm Point', breakers: 'Breakers Bay', bayou: 'Gator Bayou' };
+// what a vice admin may hand out (the database rules enforce the same list)
+const ITEMS = {
+  paint: [['midnight', 'Midnight Run'], ['lime', 'Lime Shock'], ['sunsetp', 'Sunset Fade'], ['carbon', 'Carbon Ghost'], ['neon', 'Neon Pulse'], ['gold', 'Gold Rush'], ['desert', 'Desert Viper'], ['reef', 'Reef Glow'], ['thunder', 'Thunderbolt'], ['surf', 'Surf Jaws'], ['swamp', 'Swamp Lantern']],
+  helmet: [['aero', 'Aero Fin'], ['stripe', 'Twin Stripe'], ['shark', 'Shark Fin'], ['viking', 'Viking'], ['crown', 'Crown Crest']],
+  visor: [['gold', 'Gold Mirror'], ['blue', 'Ice Mirror'], ['rainbow', 'Oil Slick']],
+  flag: [['wave', 'Big Wave'], ['skull', 'Skull & Bones'], ['bolt', 'Lightning'], ['star', 'Lone Star'], ['flame', 'Hot Rod Flames']],
+};
+const CATNAME = { paint: 'Paint', helmet: 'Helmet', visor: 'Visor', flag: 'Flag' };
+const PERMS = { msg: '💬 message & kick', lb: '🏁 delete leaderboard times', boost: '⚡ speed boost (up to ×2)', gift: '💰 give money & mastery (up to 5,000 at a time)', items: '🎁 give shop items', ann: '📣 send announcements' };
+const MAXGIFT = 5000;
+
+const A = { token: null, exp: 0, rt: null, uid: null, name: null };
+let ME = null; // my vice record: { name, owner, perms }
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw new Error((j.error && j.error.message) || 'HTTP ' + r.status); return j;
+}
+function keep(j) {
+  A.token = j.idToken || j.id_token; A.rt = j.refreshToken || j.refresh_token || A.rt; A.uid = j.localId || j.user_id || A.uid;
+  A.exp = Date.now() + (+(j.expiresIn || j.expires_in) || 3600) * 1000;
+  try { sessionStorage.setItem('rr_vice', JSON.stringify({ rt: A.rt, uid: A.uid, name: A.name })); } catch (e) {}
+}
+async function token() {
+  if (A.token && Date.now() < A.exp - 60000) return A.token;
+  keep(await post('https://securetoken.googleapis.com/v1/token?key=' + FIREBASE_API_KEY, { grant_type: 'refresh_token', refresh_token: A.rt }));
+  return A.token;
+}
+async function db(path, method = 'GET', body, query = '') {
+  const tk = await token();
+  const r = await fetch(`${DB}/${path}.json?auth=${tk}${query}`, { method, body: body === undefined ? undefined : JSON.stringify(body) });
+  if (r.status === 401 || r.status === 403) throw new Error('DENIED');
+  if (!r.ok) throw new Error('HTTP ' + r.status);
+  return r.json();
+}
+const pub = async path => { const r = await fetch(`${DB}/${path}.json`); return r.ok ? r.json() : null; };
+const SV = { '.sv': 'timestamp' };
+function say(t, ok = true) { $('flashMsg').textContent = t; $('flashMsg').className = 'msg ' + (ok ? 'ok' : 'bad'); }
+// every vice action is one write: the change itself + a new entry in your activity log (the database refuses it otherwise)
+async function act(updates, text) {
+  const k = 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  updates[`vlog/${A.uid}/${k}`] = { t: SV, a: text, n: ME.name };
+  updates[`vlast/${A.uid}`] = { t: SV, k };
+  try { await db('', 'PATCH', updates); return true; }
+  catch (e) { await refreshMe(); say(e.message === 'DENIED' ? "Not allowed — the owner may have changed what you can do." : "Couldn't save: " + e.message, false); return false; }
+}
+
+$('loginBtn').onclick = async () => {
+  const name = $('lname').value.trim().replace(/\s+/g, ' '), pin = $('lpin').value.trim(), m = $('loginMsg');
+  m.className = 'msg';
+  if (!/^[A-Za-z0-9 _-]{2,14}$/.test(name)) { m.textContent = 'Type your racer name.'; m.className = 'msg bad'; return; }
+  if (!/^\d{4}$/.test(pin)) { m.textContent = 'Your PIN is 4 digits.'; m.className = 'msg bad'; return; }
+  m.textContent = 'Signing in…';
+  try {
+    const key = nameKey(name); let ak = key; try { const al = await pub('alias/' + key); if (typeof al === 'string' && al) ak = al; } catch (e) {}
+    A.name = name; keep(await post(IDT + 'signInWithPassword?key=' + FIREBASE_API_KEY, { email: ak + '@players.riptide-run.firebaseapp.com', password: 'riptide-' + pin + '-' + ak, returnSecureToken: true }));
+    $('lpin').value = ''; start();
+  } catch (e) { m.textContent = /TOO_MANY/.test(e.message) ? 'Too many tries — wait a few minutes.' : /DISABLED/.test(e.message) ? 'This racer is banned.' : 'Wrong name or PIN.'; m.className = 'msg bad'; }
+};
+$('lpin').onkeydown = e => { if (e.key === 'Enter') $('loginBtn').click(); };
+$('logout').onclick = () => { try { sessionStorage.removeItem('rr_vice'); } catch (e) {} location.reload(); };
+
+function blocked(html) { $('loginBox').classList.add('hidden'); $('panel').classList.add('hidden'); $('blocked').classList.remove('hidden'); $('blocked').innerHTML = html + '<div class="row" style="margin-top:12px"><button onclick="sessionStorage.removeItem(\'rr_vice\');location.reload()">SIGN OUT</button></div>'; }
+// re-read my record: the owner can change or remove my abilities at any moment
+async function refreshMe() {
+  let v, off;
+  try { [v, off] = await Promise.all([db('vice/' + A.uid), db('viceoff')]); }
+  catch (e) { if (e.message === 'DENIED') { blocked("<b>Vice admin tools aren't switched on yet.</b><p class=\"msg\">Ask the owner to update the database rules from their admin panel.</p>"); return false; } return !!ME; }
+  if (!v) { ME = null; blocked("<b>You're not a vice admin.</b><p class=\"msg\">Only the owner can make you one. If you were one, your access has been removed.</p>"); return false; }
+  if (off === true) { blocked('<b>⏸ Vice admin tools are paused by the owner.</b><p class="msg">Try again later.</p>'); return false; }
+  const was = JSON.stringify(ME && ME.perms); ME = { name: v.name || A.name, owner: v.owner || '', perms: v.perms || {} };
+  if (was !== JSON.stringify(ME.perms)) render();
+  return true;
+}
+const can = p => !!(ME && ME.perms && ME.perms[p] === true);
+let current = 'players';
+function render() {
+  $('blocked').classList.add('hidden'); $('loginBox').classList.add('hidden'); $('panel').classList.remove('hidden');
+  $('who').textContent = 'Signed in as ' + ME.name + ' · vice admin';
+  $('canList').innerHTML = Object.keys(PERMS).filter(can).map(p => `<span class="chip">${PERMS[p]}</span>`).join('') || '<i>nothing right now</i>';
+  tab(current); if (sel) renderCard();
+}
+async function start() { if (await refreshMe()) { render(); loadPlayers(); } }
+setInterval(() => { if (A.uid && ME) refreshMe(); }, 20000);
+
+function tab(t) {
+  const list = [['players', 'PLAYERS'], can('lb') ? ['boards', 'LEADERBOARDS'] : null, can('ann') ? ['ann', 'ANNOUNCE'] : null, ['mine', 'MY ACTIVITY']].filter(Boolean);
+  if (!list.some(x => x[0] === t)) t = 'players'; current = t;
+  $('tabs').innerHTML = list.map(([k, l]) => `<button data-t="${k}" class="${k === t ? 'on' : ''}">${l}</button>`).join('');
+  $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t));
+  document.querySelectorAll('section[data-tab]').forEach(s => s.classList.toggle('hidden', s.dataset.tab !== t));
+  if (t === 'boards') loadRuns(); if (t === 'mine') loadMine();
+}
+
+// ---- players ----
+let P = {}, sel = null;
+const isOn = p => p && p.on && Date.now() - (p.on.t || 0) < 90000;
+const pname = id => (P[id] && P[id].name) || id;
+async function loadPlayers() { try { P = (await db('players')) || {}; } catch (e) { P = {}; } renderPlayers(); if (sel) renderCard(); }
+function renderPlayers() {
+  const q = $('search').value.trim().toLowerCase(), oo = $('onlyOnline').checked;
+  const ids = Object.keys(P).filter(id => P[id] && (!q || String(P[id].name || '').toLowerCase().includes(q)) && (!oo || isOn(P[id]))).sort((a, b) => (isOn(P[b]) - isOn(P[a])) || ((P[b].seen || 0) - (P[a].seen || 0)));
+  $('pBody').innerHTML = ids.map(id => { const p = P[id], e = p.econ || {}; return `<tr data-id="${esc(id)}" class="${id === sel ? 'sel' : ''}"><td>${isOn(p) ? '<span class="dot"></span>' : ''}${esc(p.name || '?')}${id === ME.owner ? ' <span class="tag">OWNER</span>' : ''}${id === A.uid ? ' <span class="tag">YOU</span>' : ''}</td>
+    <td>${levelOf(+e.xp || 0)}</td><td>T${(e.engine | 0) + 1}</td><td>${isOn(p) ? '<b style="color:var(--good)">now</b>' : p.seen ? new Date(p.seen).toLocaleDateString() : '—'}</td></tr>`; }).join('') || '<tr><td colspan="4" class="msg">No racers match.</td></tr>';
+  document.querySelectorAll('#pBody tr[data-id]').forEach(r => r.onclick = () => { sel = r.dataset.id; renderPlayers(); renderCard(); });
+}
+$('search').oninput = renderPlayers; $('onlyOnline').onchange = renderPlayers; $('reloadP').onclick = loadPlayers;
+async function renderCard() {
+  const p = P[sel]; if (!p) { $('pCard').classList.add('hidden'); return; }
+  const e = p.econ || {}, owner = sel === ME.owner;
+  const boxes = [];
+  if (owner) boxes.push('<div class="box"><b>👑 THE OWNER</b><p class="msg">Vice admins can\'t use tools on the owner.</p></div>');
+  else {
+    if (can('msg')) boxes.push(`<div class="box"><b>💬 MESSAGE / KICK</b><input id="vMsg" maxlength="200" placeholder="Message or kick reason" style="width:100%"><div class="row" style="margin-top:6px"><button data-a="msg">SEND MESSAGE</button><button class="del" data-a="kick">KICK</button></div><p class="msg">Kick drops them out of their race or lobby to the menu. They see your name.</p></div>`);
+    if (can('boost')) boxes.push(`<div class="box"><b>⚡ SPEED BOOST</b><div class="row">${[1, 1.25, 1.5, 2].map(m => `<button data-speed="${m}">${m === 1 ? 'OFF' : '×' + m}</button>`).join('')}</div><p class="msg">Boosted runs never count as records.</p></div>`);
+    if (can('gift')) boxes.push(`<div class="box"><b>💰 GIVE MONEY / MASTERY</b><div class="row"><input type="number" id="vCash" min="1" max="${MAXGIFT}" placeholder="money" style="width:120px"><button data-a="cash">GIVE MONEY</button></div><div class="row" style="margin-top:6px"><input type="number" id="vXp" min="1" max="${MAXGIFT}" placeholder="XP" style="width:120px"><button data-a="xp">GIVE XP</button></div><p class="msg">Up to ${MAXGIFT.toLocaleString()} at a time.</p></div>`);
+    if (can('items')) boxes.push(`<div class="box"><b>🎁 GIVE AN ITEM</b><div class="row"><select id="vCat">${Object.keys(ITEMS).map(c => `<option value="${c}">${CATNAME[c]}</option>`).join('')}</select><select id="vItem"></select><button data-a="item">GIVE</button></div><p class="msg">Shop items only — no engines, effects or exclusives.</p></div>`);
+    if (!boxes.length) boxes.push('<div class="box"><p class="msg">You have no player tools switched on right now.</p></div>');
+  }
+  $('pCard').classList.remove('hidden');
+  $('pCard').innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">${isOn(p) ? '<span class="dot"></span>' : ''}${esc(p.name)}</h2></div>
+    <div class="kv" style="margin-top:8px"><span>Status</span><span>${isOn(p) ? 'online · ' + esc(p.on.s || '') : p.seen ? 'last seen ' + new Date(p.seen).toLocaleString() : '—'}</span>
+    <span>Mastery</span><span>${levelOf(+e.xp || 0)}</span><span>Engine</span><span>T${(e.engine | 0) + 1} ${TIERS[e.engine | 0] || ''}</span></div>
+    <div class="grid">${boxes.join('')}</div>`;
+  if ($('vCat')) { const fill = () => { $('vItem').innerHTML = ITEMS[$('vCat').value].map(([k, n]) => `<option value="${k}">${esc(n)}</option>`).join(''); }; $('vCat').onchange = fill; fill(); }
+  const id = sel, who = pname(id);
+  const adm = async () => (await pub('adm/' + id)) || {};
+  const withEp = (a, u) => { if (!a.ep) u[`adm/${id}/ep`] = Date.now(); return u; };
+  document.querySelectorAll('#pCard [data-a="msg"]').forEach(b => b.onclick = async () => { const t = $('vMsg').value.trim(); if (!t) return say('Type a message first.', false); if (await act({ [`msg/${id}`]: { t: SV, text: t, from: ME.name } }, `Messaged ${who}: "${t}"`)) { $('vMsg').value = ''; say('Message sent to ' + who + '.'); } });
+  document.querySelectorAll('#pCard [data-a="kick"]').forEach(b => b.onclick = async () => { const t = $('vMsg').value.trim(); if (!confirm(`Kick ${who}?`)) return; if (await act({ [`msg/${id}`]: Object.assign({ t: SV, text: t || 'Kicked by a vice admin.', from: ME.name, kick: true }) }, `Kicked ${who}${t ? ': "' + t + '"' : ''}`)) say('Kicked ' + who + '.'); });
+  document.querySelectorAll('#pCard [data-speed]').forEach(b => b.onclick = async () => { const m = +b.dataset.speed; if (await act(withEp(await adm(), { [`adm/${id}/speed`]: m }), m === 1 ? `Turned off ${who}'s speed boost` : `Gave ${who} a ×${m} speed boost`)) say(m === 1 ? 'Boost off for ' + who + '.' : `${who} has a ×${m} boost.`); });
+  document.querySelectorAll('#pCard [data-a="cash"],#pCard [data-a="xp"]').forEach(b => b.onclick = async () => {
+    const k = b.dataset.a, n = Math.round(+$(k === 'cash' ? 'vCash' : 'vXp').value);
+    if (!(n >= 1 && n <= MAXGIFT)) return say(`Pick an amount from 1 to ${MAXGIFT.toLocaleString()}.`, false);
+    const a = await adm(), cur = +a[k] || 0;
+    if (await act(withEp(a, { [`adm/${id}/${k}`]: cur + n }), k === 'cash' ? `Gave ${who} ${money(n)}` : `Gave ${who} ${n.toLocaleString()} XP`)) say(k === 'cash' ? `Gave ${money(n)} to ${who}.` : `Gave ${n.toLocaleString()} XP to ${who}.`);
+  });
+  document.querySelectorAll('#pCard [data-a="item"]').forEach(b => b.onclick = async () => {
+    const c = $('vCat').value, k = $('vItem').value, n = (ITEMS[c].find(x => x[0] === k) || [k, k])[1];
+    if (await act(withEp(await adm(), { [`adm/${id}/items/${c}/${k}`]: true }), `Gave ${who} the ${CATNAME[c].toLowerCase()} "${n}"`)) say(`Gave ${n} to ${who}.`);
+  });
+}
+
+// ---- leaderboards (delete only) ----
+async function loadRuns() {
+  const keys = Object.keys((await pub('lb') ) || {}).sort(), cur = $('runSel').value;
+  $('runSel').innerHTML = keys.map(k => { const [m, l] = k.split(':'); return `<option value="${esc(k)}">${esc(MAPS[m] || m)} · ${esc(l)} lap${l === '1' ? '' : 's'}</option>`; }).join('') || '<option value="">no leaderboards yet</option>';
+  if (keys.includes(cur)) $('runSel').value = cur; loadBoard();
+}
+$('runSel').onchange = () => loadBoard(); $('reloadB').onclick = loadRuns;
+async function loadBoard() {
+  const key = $('runSel').value; if (!key) { $('lbBody').innerHTML = ''; return; }
+  const board = Object.entries((await pub('lb/' + key)) || {}).map(([id, v]) => Object.assign({ id }, v)).sort((a, b) => a.t - b.t);
+  $('lbBody').innerHTML = board.map((v, i) => `<tr><td>${i + 1}</td><td>${esc(v.n)}${v.id === ME.owner ? ' <span class="tag">OWNER</span>' : ''}</td><td>${fmt(v.t)}</td><td>T${(v.e | 0) + 1}</td><td>${v.id === ME.owner ? '' : `<button class="del" data-del="${i}">DELETE</button>`}</td></tr>`).join('') || '<tr><td class="msg" colspan="5">No times yet.</td></tr>';
+  $('lbMsg').textContent = board.length + ' time' + (board.length === 1 ? '' : 's'); $('lbMsg').className = 'msg';
+  document.querySelectorAll('[data-del]').forEach(b => b.onclick = async () => {
+    const v = board[+b.dataset.del]; if (!confirm(`Delete ${v.n}'s ${fmt(v.t)} on ${key}? This also removes their ghost and the copy on their device.`)) return;
+    // the overall board, every engine-tier board, the ghosts, the record ghost if it's theirs, and a note so their game drops its copy
+    const u = { [`lb/${key}/${v.id}`]: null, [`gh/${key}/${v.id}`]: null, [`lbdel/${v.id}/${key}`]: Date.now() };
+    const tiers = (await pub(`lbt/${key}`)) || {};
+    for (const tk in tiers) if (tiers[tk] && tiers[tk][v.id]) { u[`lbt/${key}/${tk}/${v.id}`] = null; u[`ght/${key}/${tk}/${v.id}`] = null; }
+    const wr = await pub('wr/' + key); if (wr && wr.n === v.n) u['wr/' + key] = null;
+    if (await act(u, `Deleted ${v.n}'s ${key} time (${fmt(v.t)})`)) { say(`Deleted ${v.n}'s time.`); loadBoard(); }
+  });
+}
+
+// ---- announcement ----
+$('annSend').onclick = async () => { const t = $('annText').value.trim(); if (!t) return say('Type the announcement first.', false); if (await act({ 'cfg/ann': { t: SV, text: t } }, `Announcement: "${t}"`)) { $('annText').value = ''; say('Announcement sent.'); } };
+
+// ---- my activity ----
+async function loadMine() {
+  let d = {}; try { d = (await db('vlog/' + A.uid)) || {}; } catch (e) {}
+  $('mineBody').innerHTML = Object.values(d).sort((a, b) => b.t - a.t).slice(0, 100).map(v => `<tr><td style="white-space:nowrap;color:var(--dim)">${new Date(v.t).toLocaleString()}</td><td>${esc(v.a)}</td></tr>`).join('') || '<tr><td class="msg">Nothing yet.</td></tr>';
+}
+$('reloadMine').onclick = loadMine;
+
+try { const s = JSON.parse(sessionStorage.getItem('rr_vice') || 'null'); if (s && s.rt) { Object.assign(A, s); token().then(start).catch(() => {}); } } catch (e) {}
+</script>
+</body>
+</html>

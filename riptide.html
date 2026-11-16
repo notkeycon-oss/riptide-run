@@ -3408,7 +3408,8 @@ async function pollAdmin() {
       if (msg && typeof msg === 'object' && +msg.t > (DATA.msgSeen || 0)) {
         DATA.msgSeen = +msg.t; save();
         if (msg.kick) { if (LOBBY.code) await leaveLobby(); else if (state !== 'menu') { hidePanels(); toMenu(); } }
-        notice(msg.kick ? 'KICKED' : 'MESSAGE FROM THE ADMIN', msg.kick ? 'You were kicked by an admin' : 'Admin', String(msg.text || ''));
+        const from = typeof msg.from === 'string' && msg.from ? String(msg.from).slice(0, 14) : ''; // sent by a vice admin
+        notice(msg.kick ? 'KICKED' : from ? 'MESSAGE FROM A VICE ADMIN' : 'MESSAGE FROM THE ADMIN', msg.kick ? (from ? `You were kicked by vice admin ${from}` : 'You were kicked by an admin') : from || 'Admin', String(msg.text || ''));
       }
     } else { ADM = { speed: 1, cash: 0, xp: 0, all: false, items: null, ep: null }; EXC = {}; }
     // announcements pop up once for everyone
