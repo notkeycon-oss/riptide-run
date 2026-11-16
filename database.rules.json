@@ -2,7 +2,7 @@
   "rules": {
     ".read": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
     ".write": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
-    "rv9": {
+    "rv10": {
       ".read": true
     },
     "names": {
@@ -191,6 +191,33 @@
       "$uid": {
         ".write": "auth != null && auth.uid === $uid && root.child('vice').child(auth.uid).exists()",
         ".validate": "newData.child('t').val() === now && newData.child('k').isString() && newData.parent().parent().child('vlog').child($uid).child(newData.child('k').val()).child('t').val() === now"
+      }
+    },
+    "chat": {
+      ".read": true,
+      "$ch": {
+        "$m": {
+          ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && !data.exists() && !root.child('mute').child(auth.uid).exists() && newData.parent().parent().parent().child('chatlast').child(auth.uid).val() === now",
+          ".validate": "newData.hasChildren(['u', 'n', 'k', 'm', 't']) && newData.child('u').val() === auth.uid && newData.child('t').val() === now && newData.child('m').isString() && newData.child('m').val().length > 0 && newData.child('m').val().length <= 120 && newData.child('n').isString() && newData.child('n').val().length <= 14 && root.child('names').child(newData.child('k').val()).val() === auth.uid && newData.child('n').val().toLowerCase().replace(' ', '_').replace('-', '_') === newData.child('k').val() && $ch.matches(/^[a-z0-9_-]{1,24}$/)"
+        }
+      }
+    },
+    "chatlast": {
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid",
+        ".validate": "newData.val() === now && (!data.exists() || now - data.val() >= 2000)"
+      }
+    },
+    "mute": {
+      "$uid": {
+        ".read": true
+      }
+    },
+    "online": {
+      ".read": true,
+      "$uid": {
+        ".write": "auth != null && auth.uid === $uid && (!newData.exists() || !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)))",
+        ".validate": "newData.hasChildren(['n', 'm', 's', 't']) && newData.child('n').isString() && newData.child('n').val().length <= 14 && newData.child('m').isString() && newData.child('m').val().length <= 24 && newData.child('s').isString() && newData.child('s').val().length <= 12 && newData.child('t').val() === now && (!newData.child('l').exists() || newData.child('l').val().matches(/^[A-Z]{4}$/))"
       }
     }
   }
