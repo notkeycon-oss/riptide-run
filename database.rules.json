@@ -2,7 +2,7 @@
   "rules": {
     ".read": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
     ".write": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
-    "rv11": {
+    "rv12": {
       ".read": true
     },
     "names": {
@@ -100,7 +100,7 @@
       "$pid": {
         ".read": true,
         "speed": {
-          ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && $pid !== auth.uid && !root.child('vice').child($pid).exists() && root.child('vice').child(auth.uid).child('perms').child('boost').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.isNumber() && newData.val() >= 1 && newData.val() <= 2"
+          ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('vice').child(auth.uid).child('perms').child('boost').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.isNumber() && newData.val() >= 1 && newData.val() <= 2"
         },
         "cash": {
           ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && $pid !== auth.uid && !root.child('vice').child($pid).exists() && root.child('vice').child(auth.uid).child('perms').child('gift').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.isNumber() && newData.val() >= (data.exists() ? data.val() : 0) && newData.val() <= (data.exists() ? data.val() : 0) + 5000"
@@ -109,7 +109,7 @@
           ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && $pid !== auth.uid && !root.child('vice').child($pid).exists() && root.child('vice').child(auth.uid).child('perms').child('gift').val() === true && root.child('viceoff').val() !== true && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && newData.isNumber() && newData.val() >= (data.exists() ? data.val() : 0) && newData.val() <= (data.exists() ? data.val() : 0) + 5000"
         },
         "ep": {
-          ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && $pid !== auth.uid && !root.child('vice').child($pid).exists() && (root.child('vice').child(auth.uid).child('perms').child('boost').val() === true && root.child('viceoff').val() !== true || root.child('vice').child(auth.uid).child('perms').child('gift').val() === true && root.child('viceoff').val() !== true || root.child('vice').child(auth.uid).child('perms').child('items').val() === true && root.child('viceoff').val() !== true) && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && !data.exists() && newData.isNumber()"
+          ".write": "auth != null && $pid !== 'YOUR_ADMIN_UID' && root.child('viceoff').val() !== true && newData.parent().parent().parent().child('vlast').child(auth.uid).child('t').val() === now && !data.exists() && newData.isNumber() && (root.child('vice').child(auth.uid).child('perms').child('boost').val() === true || ((root.child('vice').child(auth.uid).child('perms').child('gift').val() === true || root.child('vice').child(auth.uid).child('perms').child('items').val() === true) && $pid !== auth.uid && !root.child('vice').child($pid).exists()))"
         },
         "items": {
           "$cat": {
