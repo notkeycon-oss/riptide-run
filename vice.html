@@ -105,10 +105,10 @@ const nameKey = n => n.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
 const xpNeed = L => 250 + 100 * L;
 function levelOf(xp) { let L = 1; while (L < 30 && xp >= xpNeed(L)) { xp -= xpNeed(L); L++; } return L; }
 const TIERS = ['STOCK', 'SPORT', 'RACE', 'PRO', 'RIPTIDE'];
-const MAPS = { harbor: 'Harbor Point', canyon: 'Red Rock Canyon', lagoon: 'Coral Lagoon', storm: 'Storm Point', breakers: 'Breakers Bay', bayou: 'Gator Bayou' };
+const MAPS = { harbor: 'Harbor Point', canyon: 'Red Rock Canyon', lagoon: 'Coral Lagoon', storm: 'Storm Point', breakers: 'Breakers Bay', bayou: 'Gator Bayou', magma: 'Magma Rift' };
 // what a vice admin may hand out (the database rules enforce the same list)
 const ITEMS = {
-  paint: [['midnight', 'Midnight Run'], ['lime', 'Lime Shock'], ['sunsetp', 'Sunset Fade'], ['carbon', 'Carbon Ghost'], ['neon', 'Neon Pulse'], ['gold', 'Gold Rush'], ['desert', 'Desert Viper'], ['reef', 'Reef Glow'], ['thunder', 'Thunderbolt'], ['surf', 'Surf Jaws'], ['swamp', 'Swamp Lantern']],
+  paint: [['midnight', 'Midnight Run'], ['lime', 'Lime Shock'], ['sunsetp', 'Sunset Fade'], ['carbon', 'Carbon Ghost'], ['neon', 'Neon Pulse'], ['gold', 'Gold Rush'], ['desert', 'Desert Viper'], ['reef', 'Reef Glow'], ['thunder', 'Thunderbolt'], ['surf', 'Surf Jaws'], ['swamp', 'Swamp Lantern'], ['lava', 'Lava Flow']],
   helmet: [['aero', 'Aero Fin'], ['stripe', 'Twin Stripe'], ['shark', 'Shark Fin'], ['viking', 'Viking'], ['crown', 'Crown Crest']],
   visor: [['gold', 'Gold Mirror'], ['blue', 'Ice Mirror'], ['rainbow', 'Oil Slick']],
   flag: [['wave', 'Big Wave'], ['skull', 'Skull & Bones'], ['bolt', 'Lightning'], ['star', 'Lone Star'], ['flame', 'Hot Rod Flames']],

@@ -96,6 +96,8 @@ button.alt{margin-top:10px;font-size:16px;background:none;border:none;color:var(
 .sw{width:40px;height:40px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 2px rgba(255,255,255,.25)}
 .skin b{font-size:18px;display:block}
 .skin small{font-size:13px;color:var(--dim)}
+#garage #skins.one{grid-template-columns:1fr!important}#skins.one .skin{align-items:flex-start}
+.chal{display:flex;flex-direction:column;gap:1px;margin-top:4px;font-size:13px;color:var(--dim)}.chal span.ok{color:#7dffb0}.chal i{font-style:normal;color:var(--ink);margin-left:4px}
 .medal{font-size:24px;font-weight:800;letter-spacing:3px;margin-top:4px}
 .unlock{margin:10px auto 0;padding:10px 14px;border-radius:12px;background:rgba(255,210,63,.15);border:1px solid rgba(255,210,63,.5);font-size:18px;font-weight:700}
 #touch{position:fixed;inset:auto 0 0 0;height:46%;pointer-events:none;display:none;z-index:4}
@@ -171,7 +173,7 @@ input.tx:focus{border-color:var(--accent)}
 .xpline .xpbar{flex:1;height:10px;border-radius:5px;background:rgba(255,255,255,.15);overflow:hidden}.xpline .xpbar i{display:block;height:100%;background:var(--accent);transition:width 1.2s ease-out}
 .lb .gbtn{font-size:14px;font-weight:700;letter-spacing:1px;padding:3px 10px;border-radius:999px;border:1px solid #7fe9ff;background:rgba(127,233,255,.12);color:#7fe9ff}
 .lb .gbtn:disabled{opacity:.35;border-color:var(--dim);color:var(--dim)}
-.lb .tier{font-size:12px;font-weight:800;padding:1px 6px;border-radius:4px;color:#14202a}
+.lb .tier,.map .tier{font-size:12px;font-weight:800;padding:1px 6px;border-radius:4px;color:#14202a}
 .code{font-size:58px;font-weight:800;letter-spacing:10px;color:var(--accent);line-height:1}
 .plist{display:flex;flex-direction:column;gap:6px;margin:10px 0;text-align:left}
 .plist div{display:flex;gap:10px;align-items:center;padding:7px 12px;border-radius:8px;background:rgba(255,255,255,.06);font-size:20px}
@@ -616,6 +618,8 @@ const Core = (() => {
       if (world.obstacles) collide(b, world.obstacles);
       if (world.channel) channelCollide(b, world.channel);
       if (world.chans) chansCollide(b, world.chans);
+      if (world.vents) for (const v of world.vents) { if (!ventOn(v, t)) continue; const dx = b.pos.x - v.x, dz = b.pos.z - v.z, d = Math.hypot(dx, dz); if (d > v.r) continue;
+        const k = 1 - d / v.r; b.vel.y += 26 * k * dt; const sl = Math.exp(-2.4 * k * dt); b.vel.x *= sl; b.vel.z *= sl; b.w.z += (dx > 0 ? 1 : -1) * 0.8 * k * dt; }
       if (world.limit) {
         const cx = world.cx || 0, cz = world.cz || 0;
         const dx = b.pos.x - cx, dz = b.pos.z - cz, R = Math.hypot(dx, dz), LIM = world.limit;
@@ -1009,6 +1013,63 @@ const Core = (() => {
       swamp: { trees, gators, stumps, shacks, hollow }, path: null, closed: false, limit: 0, start: { x: st.x, z: st.z, yaw: yawOfDir(st.tx, st.tz) } };
   }
 
+  // 7) Magma Rift — a night sprint down a volcanic rift: three lava gaps you must jump, steam vents, a lava tube, a hairpin gorge
+  function buildMagma() {
+    const rand = rng(31337);
+    const C = {
+      start: makeChan('start', [[0, -60, 20], [0, 0, 20], [2, 60, 15], [8, 110, 11]]),
+      rift: makeChan('rift', [[8, 100, 11], [30, 150, 10], [10, 200, 9.5], [-25, 240, 10], [-28, 295, 11], [-12, 345, 12], [-4, 400, 12], [6, 430, 13]]),
+      tube: makeChan('tube', [[6, 420, 12], [22, 470, 7.5], [26, 540, 7.5], [18, 610, 7.5], [6, 660, 12]]),
+      flats: makeChan('flats', [[6, 420, 14], [-35, 460, 16], [-70, 530, 17], [-62, 610, 16], [6, 665, 15]]),
+      mid: makeChan('mid', [[6, 650, 15], [2, 720, 13], [-4, 800, 13], [-6, 830, 13]]),
+      gorge: makeChan('gorge', [[-6, 820, 13], [-22, 868, 10], [-60, 893, 10], [-97, 875, 10.5], [-112, 832, 11], [-146, 815, 11], [-166, 850, 12], [-166, 905, 12]]),
+      final: makeChan('final', [[-166, 895, 12], [-161, 965, 13], [-156, 1035, 13], [-153, 1085, 20], [-153, 1120, 22]]),
+    };
+    const chans = Object.values(C), sd = (x, z) => chansSD(chans, x, z).sd;
+    const straight = (ch, s0, s1, L) => { let best = null; for (let s = s0; s <= s1; s += 3) { const a = chanAt(ch, s), b = chanAt(ch, s + L); const turn = Math.abs(Math.atan2(a.tx * b.tz - a.tz * b.tx, a.tx * b.tx + a.tz * b.tz)); if (!best || turn < best.turn) best = { s, turn }; } return best.s; };
+    const gateAt = (ch, s) => { const a = chanAt(ch, s); return { x: a.x, z: a.z, tx: a.tx, tz: a.tz, hw: a.hw - 0.6, kind: 'gate', side: 0, edge: true }; };
+    const obstacles = [], ramps = [], lava = [], vents = [], cols = [], cps = [];
+    // three lava gaps, each on a straight with a kicker ramp in front: 16 m, 20 m, 24 m
+    const jump = (ch, s0, s1, gap) => {
+      const s = straight(ch, s0, s1, 14 + gap + 30), a = chanAt(ch, s + 7);
+      ramps.push({ x: a.x, z: a.z, yaw: yawOfDir(a.tx, a.tz), len: 14, w: Math.min(11, a.hw * 2 - 4), h: 2.6, style: 'basalt' });
+      const m = chanAt(ch, s + 14 + 1 + gap / 2);
+      lava.push({ x: m.x, z: m.z, yaw: yawOfDir(m.tx, m.tz), len: gap, w: m.hw * 2 + 10 });
+      cps.push(gateAt(ch, Math.max(10, s - 70))); // a checkpoint well before the ramp: a burned boat restarts with a run-up
+      return s;
+    };
+    cps.push(gateAt(C.start, 120));
+    jump(C.rift, 250, 330, 16);
+    jump(C.mid, 70, 75, 20);
+    cps.push(gateAt(C.gorge, C.gorge.len * 0.5));
+    jump(C.final, 72, 80, 24);
+    cps.push(gateAt(C.final, C.final.len - 45));
+    const clear = (x, z, r, m) => obstacles.every(o => Math.hypot(o.x - x, o.z - z) > o.r + r + m) && cps.every(c => Math.hypot(c.x - x, c.z - z) > 18)
+      && ramps.every(rp => Math.hypot(rp.x - x, rp.z - z) > 45) && lava.every(l => Math.hypot(l.x - x, l.z - z) > l.len / 2 + 14) && Math.hypot(x, z) > 50;
+    const put = (ch, s, lat, r, type, list, m = 6) => {
+      const a = chanAt(ch, s); lat = Math.max(-(a.hw - r - 1), Math.min(a.hw - r - 1, lat));
+      const x = a.x - a.tz * lat, z = a.z + a.tx * lat;
+      if (Math.max(a.hw - lat - r, a.hw + lat - r) < 5.4 || !clear(x, z, r, m) || sd(x, z) > -(r + 0.8)) return null;
+      const o = { x, z, r, type }; obstacles.push(o); if (list) list.push(o); return o;
+    };
+    // steam vents in the lava tube: they blast on a beat, time your run through
+    for (let s = 40, k = 0; s < C.tube.len - 30; s += 42, k++) { const a = chanAt(C.tube, s), lat = (k % 2 ? 1 : -1) * 2.2; vents.push({ x: a.x - a.tz * lat, z: a.z + a.tx * lat, r: 3.4, per: 3.2, on: 1.1, ph: k * 0.9 }); }
+    // basalt column clusters: a slalom field on the flats, a few in the rift and gorge
+    const dense = { flats: [26, 1.4, 2.4], rift: [55, 1.1, 1.8], gorge: [44, 1.1, 1.7], tube: [70, 0.9, 1.1], final: [60, 1.2, 1.8], mid: [60, 1.1, 1.6] };
+    for (const name in dense) { const ch = C[name], [gap, r0, r1] = dense[name]; let side = 1;
+      for (let s = 30; s < ch.len - 25; s += gap * (0.8 + rand() * 0.4)) { const a = chanAt(ch, s), r = r0 + rand() * (r1 - r0); if (put(ch, s, side * (1.5 + rand() * Math.max(0.5, a.hw - r - 4.5)), r, 'col', cols)) side = -side; } }
+    const st = chanAt(C.start, 60);
+    return { type: 'sprint', magma: true, cps, obstacles, islands: [], rocks: [], logs: [], ramps, lava, vents, chans, chanMap: C, cols,
+      path: null, closed: false, limit: 0, start: { x: st.x, z: st.z, yaw: yawOfDir(st.tx, st.tz) } };
+  }
+  // touching lava: a boat on the surface (not flying over it) inside a lava rectangle
+  function lavaHit(world, b) {
+    if (!world.lava || b.airT > 0 || b.onRamp) return false;
+    for (const l of world.lava) { const dx = b.pos.x - l.x, dz = b.pos.z - l.z, c = Math.cos(l.yaw), s = Math.sin(l.yaw); const u = dx * -s + dz * -c, v = dx * c - dz * s; if (Math.abs(u) < l.len / 2 && Math.abs(v) < l.w / 2) return true; }
+    return false;
+  }
+  const ventOn = (v, t) => ((t + v.ph) % v.per) < v.on;
+
   // ---- race progress (shared by game + tests) ----
   function makeRace(world, laps) {
     const n = world.cps.length, seq = [];
@@ -1070,9 +1131,11 @@ const Core = (() => {
       waves: [[1.0, 70, 0.0, 0.0], [0.45, 36, 0.8, 1.7], [0.15, 15, -0.6, 4.1]], build: buildBreakers },
     { id: 'bayou', name: 'Gator Bayou', mode: 'SPRINT', desc: 'Dark, foggy cypress swamp. The channel splits: pick your route. Some say there is a hidden cut...',
       waves: [[0.035, 30, 0.6, 0.0], [0.025, 14, 1.6, 1.7], [0.015, 7, -0.5, 4.0]], build: buildBayou },
+    { id: 'magma', name: 'Magma Rift', mode: 'SPRINT', desc: 'Night run down a volcanic rift. Jump three lava gaps — touch lava and you burn. Steam vents, a lava tube, a hairpin gorge.',
+      waves: [[0.03, 26, 0.6, 0.0], [0.02, 12, 1.6, 1.7], [0.012, 6, -0.5, 4.0]], build: buildMagma },
   ];
 
-  return { makeRace, raceUpdate, raceTarget, waveH, setWaves, getWaves: () => W, step, makeBoat, chanQuery, qrot, qrotInv, qFromYaw, yawOfDir, MAPS, M, TIERS, rampAt, RAMP_BASE, rng, loopCheckpoints, gateBuoys, segDistFn, chansSD, chanAt };
+  return { makeRace, raceUpdate, raceTarget, waveH, setWaves, getWaves: () => W, step, makeBoat, chanQuery, qrot, qrotInv, qFromYaw, yawOfDir, MAPS, M, TIERS, rampAt, RAMP_BASE, rng, loopCheckpoints, gateBuoys, segDistFn, chansSD, chanAt, lavaHit, ventOn };
 })();
 if (typeof module !== 'undefined') module.exports = Core;
 
@@ -1120,8 +1183,8 @@ function normData(d) {
   d.econ = Object.assign({ earned: 0, spent: 0, xp: 0, engine: 0, own: {}, daily: { last: '', streak: 0 } }, d.econ || {});
   d.econ.own = Object.assign({ eng: { 0: true } }, d.econ.own);
   d.econ = Object.assign({ admCash: 0, admSpent: 0, admXp: 0, admEp: null, ownAdm: {} }, d.econ);
-  d.look = Object.assign({ helmet: 'open', hc: 0xffffff, visor: 'smoke', suit: 0xff6a13, tone: 2, flag: 'check', fx: 'none' }, d.look || {});
-  d.stats = Object.assign({ stockGold: {}, recs: {}, air: 0, bestStreak: 0, wins: 0, fxSeen: {} }, d.stats || {});
+  d.look = Object.assign({ helmet: 'open', hc: 0xffffff, visor: 'smoke', suit: 0xff6a13, tone: 2, flag: 'check', fx: 'none', hull: 'speed' }, d.look || {});
+  d.stats = Object.assign({ stockGold: {}, recs: {}, air: 0, bestStreak: 0, wins: 0, fxSeen: {}, fin: 0, qd: 0 }, d.stats || {});
   d.maps = d.maps || {};
   if (d.settings.ghost === true) d.settings.ghost = 'mine'; if (d.settings.ghost === false) d.settings.ghost = 'off';
   return d;
@@ -1166,15 +1229,17 @@ const TIMES = {
   storm: { rec: 86.50, by: 'S. Lindqvist', g: 93, s: 106, b: 125 },
   breakers: { rec: 63.50, by: 'K. Moana', g: 69, s: 79, b: 95 },
   bayou: { rec: 61.50, by: 'R. Thibodeaux', g: 66, s: 75, b: 88 },
+  magma: { rec: 73.00, by: 'A. Vulkan', g: 77.5, s: 88, b: 103 },
 };
 // how hard each map is: scales money + mastery payouts
-const DIFF = { harbor: 1.0, canyon: 1.15, lagoon: 1.2, storm: 1.45, breakers: 1.3, bayou: 1.4 };
+const DIFF = { harbor: 1.0, canyon: 1.15, lagoon: 1.2, storm: 1.45, breakers: 1.3, bayou: 1.4, magma: 1.65 };
 const ENV = {
   harbor: { top: 0x3d85db, fog: 0xa9c6d8, fogD: 0.0016, sun: [-0.45, 0.55, -0.7], sunC: 0xfff1dc, sunI: 1.0, hemi: [0xcfe6ff, 0x2a4a55, 0.45], deep: 0x041a2b, scat: 0x0a5c66, foam: 0.55, cloud: 0.32, rock: 'gray', mtn: 0x5d7078 },
   canyon: { top: 0x4b86c9, fog: 0xd9b18b, fogD: 0.0019, sun: [0.5, 0.5, 0.55], sunC: 0xffd9a8, sunI: 1.15, hemi: [0xffe2c4, 0x6b3a24, 0.4], deep: 0x0b2422, scat: 0x2f6650, foam: 0.0, cloud: 0.12, rock: 'red', mtn: null },
   lagoon: { top: 0x2a8de6, fog: 0xbfe6f0, fogD: 0.0012, sun: [0.3, 0.75, -0.5], sunC: 0xfff6e0, sunI: 1.15, hemi: [0xdff5ff, 0x3a7a6a, 0.5], deep: 0x05506a, scat: 0x2fd8c8, foam: 0.25, cloud: 0.28, rock: 'coral', mtn: 0x6f8f8a },
   storm: { top: 0x2b3540, fog: 0x4b5662, fogD: 0.0040, sun: [-0.2, 0.6, 0.5], sunC: 0xbfc8d0, sunI: 0.5, hemi: [0x9aa6b2, 0x1c2328, 0.5], deep: 0x08161d, scat: 0x1d3a42, foam: 0.8, cloud: 0.95, rock: 'dark', mtn: 0x2c353c, rain: true },
   breakers: { top: 0x2f7fd6, fog: 0xc9dde6, fogD: 0.0013, sun: [0.55, 0.42, -0.6], sunC: 0xffe9c8, sunI: 1.1, hemi: [0xd6ecff, 0x2f5a62, 0.5], deep: 0x032238, scat: 0x0f7a8a, foam: 0.7, cloud: 0.4, rock: 'gray', mtn: 0x5f7a80 },
+  magma: { top: 0x0d0607, fog: 0x2c120a, fogD: 0.0042, sun: [0.2, 0.5, -0.8], sunC: 0xff9a6a, sunI: 0.32, hemi: [0x3a2a2a, 0x5a2206, 0.55], deep: 0x04070a, scat: 0x301508, foam: 0.05, cloud: 0.8, rock: 'dark', mtn: null, night: true },
   bayou: { top: 0x25302a, fog: 0x34432f, fogD: 0.0135, sun: [0.3, 0.85, -0.4], sunC: 0xd2e0b4, sunI: 0.5, hemi: [0x8fa882, 0x141c10, 0.5], deep: 0x0a1206, scat: 0x2c4417, foam: 0.0, cloud: 0.55, rock: 'dark', mtn: null },
 };
 // weather + wave presets for the map builder
@@ -1207,6 +1272,7 @@ const SKINS = [
   { id: 'reef', name: 'Reef Glow', hull: 0x12bfb8, stripe: 0xff3d9a, glow: true, bottom: 0x0b3a4a, deck: 0xf7fbfb, motor: 0xf7fbfb, cap: 0xff3d9a, metal: 0.05, rough: 0.25, unlock: 'lagoon' },
   { id: 'thunder', name: 'Thunderbolt', hull: 0x16181d, stripe: 0xffd400, glow: true, bottom: 0x2a2d33, deck: 0x30343a, motor: 0x16181d, cap: 0xffd400, metal: 0.35, rough: 0.22, unlock: 'storm' },
   { id: 'surf', name: 'Surf Jaws', hull: 0x2ec4f1, stripe: 0xffffff, bottom: 0xff5d5d, deck: 0xfdf6e3, motor: 0xffffff, cap: 0xff5d5d, metal: 0.05, rough: 0.25, unlock: 'breakers' },
+  { id: 'lava', name: 'Lava Flow', hull: 0x141010, stripe: 0xff5a00, glow: true, bottom: 0x2a0800, deck: 0x221c1a, motor: 0x141010, cap: 0xffb347, metal: 0.25, rough: 0.35, unlock: 'magma', under: 0xff4a00 },
   { id: 'swamp', name: 'Swamp Lantern', hull: 0x3d4a1e, stripe: 0xc9f04a, glow: true, bottom: 0x161c0c, deck: 0x2e2a20, motor: 0x3d4a1e, cap: 0xffb347, metal: 0.1, rough: 0.4, unlock: 'bayou' },
   { id: 'champion', name: 'Champion Chrome', hull: 0xe3e9f0, stripe: 0x3d7bff, glow: true, bottom: 0x1b1f27, deck: 0x1b1f27, motor: 0xe3e9f0, cap: 0x3d7bff, metal: 1.0, rough: 0.1, unlock: 'all' },
   // admin exclusives: can't be bought or unlocked, only given from the admin panel
@@ -1260,6 +1326,26 @@ const FLAGS = [
   { id: 'flame', name: 'Hot Rod Flames', cost: 3000, lvl: 11 }, { id: 'champ', name: "Champion's Gold", unlock: 'all' },
   { id: 'x_staff', name: 'Staff Crest', excl: true }, { id: 'x_phoenix', name: 'Phoenix', excl: true },
 ];
+// whole boats. Every boat handles the same (engines decide speed), so leaderboards stay fair. The new ones need
+// mastery + money + challenges. Challenges lean on finishing races and daily quests, so they take days, not marathons.
+const HULLS = [
+  { id: 'speed', name: 'Riptide Runabout', desc: 'The classic 18-foot speedboat.' },
+  { id: 'patrol', name: 'Patrol Boat', desc: 'Grey military RHIB with a T-top, radar mast and a bow gun mount.', cost: 5000, lvl: 8, ch: [['fin', 30], ['medal2', 4], ['quests', 6]] },
+  { id: 'yacht', name: 'Mini Yacht', desc: 'Sleek sport yacht: tinted cabin, hardtop, sun deck and swim platform.', cost: 10000, lvl: 12, ch: [['fin', 80], ['gold', 3], ['quests', 15], ['air', 90]] },
+  { id: 'airboat', name: 'Swamp Airboat', desc: 'Flat-bottom airboat with a giant caged fan and a high driver\'s chair.', cost: 16000, lvl: 16, ch: [['fin', 150], ['goldmap', 'bayou'], ['gold', 5], ['quests', 30]] },
+  { id: 'x_titanic', name: 'Titanic', desc: 'A four-funnel ocean liner, 16 m long. Smoke and all.', excl: true },
+];
+const medalMaps = m => MAPS.filter(x => !x.custom).filter(x => Object.keys(DATA.runs).some(k => k.startsWith(x.id + ':') && (DATA.runs[k].medal || 0) >= m)).length;
+const CHAL = {
+  fin: n => ({ need: n, have: () => DATA.stats.fin || 0, text: `Finish ${n} races` }),
+  medal2: n => ({ need: n, have: () => medalMaps(2), text: `Silver or better on ${n} maps` }),
+  gold: n => ({ need: n, have: () => medalMaps(3), text: `Gold on ${n} maps` }),
+  quests: n => ({ need: n, have: () => DATA.stats.qd || 0, text: `Complete ${n} quests` }),
+  air: n => ({ need: n, have: () => Math.floor(DATA.stats.air || 0), text: `${n} s of clean-landing airtime` }),
+  goldmap: id => ({ need: 1, have: () => Object.keys(DATA.runs).some(k => k.startsWith(id + ':') && DATA.runs[k].medal === 3) ? 1 : 0, text: `Gold on ${(MAPS.find(m => m.id === id) || {}).name || id}` }),
+};
+const challenges = it => (it.ch || []).map(([k, v]) => CHAL[k](v));
+const chalDone = it => challenges(it).every(c => c.have() >= c.need);
 // engine tiers: mastery level unlocks the right to buy, money buys it
 const ENGINES = [
   { cost: 0, lvl: 0, desc: 'Factory outboard. Honest and reliable.' },
@@ -1395,7 +1481,7 @@ function qEvent(type, d = {}) {
     if (type === 'boost' && q.t === 'boost') add = 1;
     if (!add) continue;
     q.prog = Math.min(q.n, q.prog + add);
-    if (q.prog >= q.n) { q.done = true; const bonus = grantPlain(q.cash, q.xp); done.push(`${q.text} · +${money(q.cash + bonus)} +${q.xp} XP`); }
+    if (q.prog >= q.n) { q.done = true; DATA.stats.qd = (DATA.stats.qd || 0) + 1; const bonus = grantPlain(q.cash, q.xp); done.push(`${q.text} · +${money(q.cash + bonus)} +${q.xp} XP`); }
   }
   if (done.length) { save(); pushProfile(); refreshLabels(); QPEND.push(...done); } // shown when they're back on the main menu
   else if (type !== 'boost' && type !== 'air') save();
@@ -1668,11 +1754,11 @@ function applyLookTo(BM, L) {
 }
 const myLook = () => Object.assign({}, DATA.look, { skin: DATA.skin, eng: E().engine });
 // compact look for the network
-const packLook = L => [L.skin, L.helmet, L.hc, L.visor, L.suit, L.tone, L.flag, L.eng | 0, L.fx || 'none'];
+const packLook = L => [L.skin, L.helmet, L.hc, L.visor, L.suit, L.tone, L.flag, L.eng | 0, L.fx || 'none', L.hull || 'speed'];
 function unpackLook(a) {
   if (!Array.isArray(a)) return { skin: 'classic', helmet: 'open', hc: 0xffffff, visor: 'smoke', suit: 0xff6a13, tone: 2, flag: 'none', eng: 0 };
   const ok = (list, id, d) => list.some(x => x.id === id) ? id : d;
-  return { skin: ok(SKINS, a[0], 'classic'), helmet: ok(HELMETS, a[1], 'open'), hc: +a[2] || 0, visor: ok(VISORS, a[3], 'smoke'), suit: +a[4] || 0, tone: clamp(a[5] | 0, 0, 5), flag: ok(FLAGS, a[6], 'none'), eng: clamp(a[7] | 0, 0, 4), fx: ok(EFFECTS, a[8], 'none') };
+  return { skin: ok(SKINS, a[0], 'classic'), helmet: ok(HELMETS, a[1], 'open'), hc: +a[2] || 0, visor: ok(VISORS, a[3], 'smoke'), suit: +a[4] || 0, tone: clamp(a[5] | 0, 0, 5), flag: ok(FLAGS, a[6], 'none'), eng: clamp(a[7] | 0, 0, 4), fx: ok(EFFECTS, a[8], 'none'), hull: ok(HULLS, a[9], 'speed') };
 }
 // a boat for another racer, dressed in their look
 function lookedClone(L) {
@@ -1807,6 +1893,7 @@ function buildBoat() {
   const prop = new THREE.Group(); prop.name = 'prop'; prop.position.set(0, -0.8, 0.74); motor.add(prop);
   for (let i = 0; i < 3; i++) { const bl = new THREE.Mesh(sph, BM.chrome); bl.scale.set(0.07, 0.17, 0.015); bl.position.set(Math.sin(i * 2.094) * 0.13, Math.cos(i * 2.094) * 0.13, 0); bl.rotation.z = -i * 2.094; bl.rotation.y = 0.5; prop.add(bl); }
   mergeMeshes(grp); mergeMeshes(motor); mergeMeshes(prop);
+  for (const c of grp.children) if (c !== motor) c.userData.base = true;
     return grp;
 }
 // ---- accessories: helmet style, visor, flag, engine-tier band (rebuilt when the look changes) ----
@@ -1851,16 +1938,19 @@ function animateLooks(t) {
       a.glow.position.y = (wy - g.position.y) / Math.max(0.5, up.y); a.glow.visible = g.position.y - wy < 3;
     }
     if (a.visor && a.visor.anim) { M.visor.color.setHSL((t * 0.12) % 1, 0.85, 0.55); M.visor.emissive.setHSL((t * 0.12) % 1, 0.9, 0.2); }
+    if (g.userData.radar) g.userData.radar.rotation.y = t * 2.6;
     if (a.halo) { a.halo.rotation.z = t * 0.8; a.halo.position.y = a.halo.userData.y + Math.sin(t * 2) * 0.012; }
   }
 }
 function dressBoat(grp, M, L) {
   const old = grp.getObjectByName('acc'); if (old) { grp.remove(old); old.traverse(o => { if (o.geometry) o.geometry.dispose(); }); const i = FLAGS_LIVE.findIndex(f => f.grp === grp); if (i >= 0) FLAGS_LIVE.splice(i, 1); }
   const acc = new THREE.Group(); acc.name = 'acc'; grp.add(acc);
-  const zf = HZ(0.5), hp = new THREE.Vector3(0.5, 1.23, zf + 1.19);
+  const hdef = setHull(grp, M, L.hull);
+  const zf = HZ(0.5), hp = hdef.hp ? hdef.hp.clone() : new THREE.Vector3(0.5, 1.23, zf + 1.19);
+  const noHead = hdef.noDriver;
   const put = (g, m, x, y, z, sx = 1, sy = 1, sz = 1, rx = 0, ry = 0, rz = 0) => { const me = new THREE.Mesh(g, m); me.position.set(hp.x + x, hp.y + y, hp.z + z); me.scale.set(sx, sy, sz); me.rotation.set(rx, ry, rz); me.castShadow = true; acc.add(me); return me; };
-  const st = L.helmet;
-  const full = st !== 'open' && st !== 'viking';
+  const st = noHead ? 'none' : L.helmet;
+  const full = st !== 'open' && st !== 'viking' && st !== 'none';
   // three.js sphere: phi = -PI/2 faces forward (-Z), theta = PI/2 is the equator; head centre sits 0.02 below hp
   const FWD = -Math.PI / 2;
   const front = (r, wide, t0, t1) => new THREE.SphereGeometry(r, 40, 10, FWD - wide / 2, wide, Math.PI * t0, Math.PI * (t1 - t0));
@@ -1873,7 +1963,7 @@ function dressBoat(grp, M, L) {
     put(front(0.1606, Math.PI * 0.64, 0.6, 0.615), M.trim, 0, 0, 0, ...SH);
     // chin vent
     put(front(0.1607, Math.PI * 0.18, 0.72, 0.78), M.trim, 0, 0, 0, ...SH);
-  } else {
+  } else if (st !== 'none') {
     // open-face shell sits high on the head with a short peak; goggles on a strap across the eyes below it
     put(new THREE.SphereGeometry(0.158, 36, 16, 0, Math.PI * 2, 0, Math.PI * 0.5), M.helmet, 0, 0.03, 0.01, 1, 1, 1.06);
     put(new THREE.CylinderGeometry(0.159, 0.159, 0.022, 36, 1, true), M.trim, 0, 0.03, 0.01, 1, 1, 1.06);
@@ -1910,10 +2000,11 @@ function dressBoat(grp, M, L) {
   }
   // flag on a stern pole
   if (L.flag && L.flag !== 'none') {
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 1.7, 8), M.chrome); pole.position.set(-0.78, SHEER(0.05) + 0.85, HZ(0.05)); acc.add(pole);
+    const fp = hdef.flag || new THREE.Vector3(-0.78, SHEER(0.05) + 0.85, HZ(0.05));
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 1.7, 8), M.chrome); pole.position.copy(fp); acc.add(pole);
     const fg = new THREE.PlaneGeometry(0.95, 0.6, 12, 6); fg.translate(0.475, 0, 0);
     const fm = M.flag; fm.map = flagTexture(L.flag); fm.needsUpdate = true;
-    const fl = new THREE.Mesh(fg, fm); fl.rotation.y = -Math.PI / 2; fl.position.set(-0.78, SHEER(0.05) + 1.42, HZ(0.05)); fl.castShadow = true; acc.add(fl);
+    const fl = new THREE.Mesh(fg, fm); fl.rotation.y = -Math.PI / 2; fl.position.set(fp.x, fp.y + 0.57, fp.z); fl.castShadow = true; acc.add(fl);
     FLAGS_LIVE.push({ grp, mesh: fl, base: Float32Array.from(fg.attributes.position.array) });
   }
   // exclusive paints: neon underglow on the water
@@ -1924,6 +2015,187 @@ function dressBoat(grp, M, L) {
   }
   grp.userData.anim = { M, skin: sk, visor: VISORS.find(x => x.id === L.visor) || VISORS[0], glow: acc.getObjectByName('underglow'), halo: acc.getObjectByName('halo') };
   grp.traverse(o => { if (o.isMesh && o.material !== M.glass && o.name !== 'underglow') o.castShadow = true; });
+}
+// ---- whole-boat models: Patrol Boat, Mini Yacht, Swamp Airboat, Titanic ----
+// Built once with the shared skinnable materials (paint still applies); other racers get a clone with their own paint.
+const TM = { // fixed Titanic livery
+  black: std(0x15161a, { roughness: 0.5 }), red: std(0x8a1f16, { roughness: 0.7 }), white: std(0xf1eee6, { roughness: 0.6 }), gold: std(0xd9b44a, { roughness: 0.4, metalness: 0.6 }),
+  buff: std(0xd29c45, { roughness: 0.6 }), wood: std(0xb08a5a, { roughness: 0.85 }), teak: std(0x9a6b3c, { roughness: 0.8 }), tint: new THREE.MeshStandardMaterial({ color: 0x0d1820, roughness: 0.05, metalness: 0.6 }),
+  rig: new THREE.LineBasicMaterial({ color: 0x222222 }), alu: std(0xb9c1c8, { roughness: 0.35, metalness: 0.7 }), prop: std(0x7a5230, { roughness: 0.6 }),
+};
+// any hull from a few profile functions (u: 0 = stern, 1 = bow; v: 0 = keel, 0.5 = chine, 1 = sheer)
+function shapedHull(add, o) {
+  const z = u => o.z0 + (o.z1 - o.z0) * u, cx = u => o.hw(u) * (o.chine || 0.86), cy = u => Math.min(o.sh(u) - 0.06, o.kl(u) + (o.flat ? 0.05 : 0.36) * cx(u));
+  const pt = (u, v, side) => { const k = o.kl(u), x0 = cx(u), y0 = cy(u), w = o.hw(u), s0 = o.sh(u);
+    if (v <= 0.5) { const s = v / 0.5; return [x0 * s * side, k + (y0 - k) * s - (o.flat ? 0 : 0.04 * Math.sin(s * Math.PI)), z(u)]; }
+    const s = (v - 0.5) / 0.5; return [side * (x0 + (w - x0) * Math.sin(s * Math.PI / 2)), y0 + (s0 - y0) * s, z(u)]; };
+  const bands = o.bands || [[0.5, 0.62, 'hull'], [0.62, 0.71, 'stripe'], [0.71, 1, 'hull']];
+  for (const side of [-1, 1]) {
+    add(surface(60, 6, (u, v) => pt(u, v * 0.5, side)), o.mat.bottom);
+    for (const [a, b, k] of bands) add(surface(60, Math.max(2, Math.round((b - a) * 16)), (u, v) => pt(u, a + v * (b - a), side)), o.mat[k]);
+  }
+  { const pts = []; for (let i = 0; i <= 12; i++) pts.push(pt(0, 1 - i / 12, -1)); for (let i = 1; i <= 12; i++) pts.push(pt(0, i / 12, 1));
+    const pos = [], idx = []; pos.push(0, (o.kl(0) + o.sh(0)) / 2, z(0)); pts.forEach(p => pos.push(...p)); for (let i = 1; i < pts.length; i++) idx.push(0, i, i + 1);
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); add(g, o.mat.transom || o.mat.hull); }
+  add(surface(40, 8, (u, v) => { const w = v * 2 - 1; return [w * o.hw(u) * 0.995, o.sh(u) + 0.02 + 0.05 * (1 - w * w), z(u)]; }), o.mat.deck);
+  return { pt, z };
+}
+// a seated driver; S = top of the seat, facing forward (-z)
+function seatedDriver(add, M, S) {
+  const V = (x, y, z) => new THREE.Vector3(S.x + x, S.y + y, S.z + z);
+  const torso = add(new THREE.LatheGeometry([[0, 0], [0.2, 0.02], [0.23, 0.18], [0.24, 0.36], [0.26, 0.46], [0.2, 0.54], [0.08, 0.58], [0, 0.58]].map(p => new THREE.Vector2(p[0], p[1])), 16), M.jacket);
+  torso.position.copy(V(0, 0.075, -0.01)); torso.scale.set(1, 1, 0.78); torso.rotation.x = -0.12;
+  const neck = add(new THREE.CylinderGeometry(0.06, 0.07, 0.1, 10), M.skinT); neck.position.copy(V(0, 0.645, -0.05));
+  const head = add(new THREE.SphereGeometry(0.125, 16, 12), M.skinT); head.position.copy(V(0, 0.735, -0.06));
+  const seg = (a, b, r, m) => { const d = new THREE.Vector3().subVectors(b, a); const c = add(new THREE.CylinderGeometry(r, r * 0.9, d.length(), 8), m); c.position.copy(a).addScaledVector(d, 0.5); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); const j = add(new THREE.SphereGeometry(r, 8, 6), m); j.position.copy(b); };
+  for (const s of [-1, 1]) {
+    const sh = V(s * 0.2, 0.545, -0.05), el = V(s * 0.24, 0.365, -0.27), hd = V(s * 0.13, 0.405, -0.49);
+    const sj = add(new THREE.SphereGeometry(0.075, 10, 8), M.jacket); sj.position.copy(sh); seg(sh, el, 0.058, M.jacket); seg(el, hd, 0.05, M.jacket);
+    const gl = add(new THREE.SphereGeometry(0.048, 8, 6), M.trim); gl.position.copy(hd);
+    const hip = V(s * 0.11, 0.085, -0.07), kn = V(s * 0.13, 0.125, -0.37), ft = V(s * 0.13, -0.315, -0.43); seg(hip, kn, 0.075, M.pants); seg(kn, ft, 0.06, M.pants);
+  }
+  return V(0, 0.755, -0.06); // helmet centre
+}
+const HULLDEF = {
+  speed: { cam: 1, fxs: [1, 1], blob: [1, 1] },
+  patrol: { cam: 1.15, fxs: [1.1, 1.3], blob: [1.15, 1.15], motor: [0, 0.48, 3.38, 1.15] },
+  yacht: { cam: 1.25, fxs: [1.25, 1.45], blob: [1.3, 1.3] },
+  airboat: { cam: 1.1, fxs: [1.05, 0.95], blob: [1.1, 0.85] },
+  x_titanic: { cam: 2.1, fxs: [1.05, 2.8], blob: [1.1, 2.4], noDriver: true },
+};
+function buildHullModel(id, M) {
+  const grp = new THREE.Group(), add = (g, m) => { const me = new THREE.Mesh(g, m); grp.add(me); return me; };
+  const box = (w, h, d, m, x, y, z, r = 0.04) => { const me = add(rbox(w, h, d, Math.min(r, w / 2 - 0.001, h / 2 - 0.001, d / 2 - 0.001), 2), m); me.position.set(x, y, z); return me; };
+  const cyl = (r1, r2, h, m, x, y, z, seg = 10) => { const me = add(new THREE.CylinderGeometry(r1, r2, h, seg), m); me.position.set(x, y, z); return me; };
+  const rod = (a, b, r, m) => { const d = new THREE.Vector3().subVectors(b, a); const c = add(new THREE.CylinderGeometry(r, r, d.length(), 6), m); c.position.copy(a).addScaledVector(d, 0.5); c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return c; };
+  const V3 = (x, y, z) => new THREE.Vector3(x, y, z);
+  const def = HULLDEF[id];
+  if (id === 'patrol') {
+    const hw = u => u < 0.55 ? 1.25 : 1.25 * Math.pow(Math.max(0, 1 - ((u - 0.55) / 0.45) ** 2), 0.6), sh = u => 0.5 + 0.25 * u * u, kl = u => -0.45 + (sh(u) + 0.4) * Math.pow(Math.max(0, (u - 0.55) / 0.45), 2.2);
+    const H = shapedHull(add, { z0: 3.3, z1: -4.3, hw, sh, kl, mat: { bottom: M.bottom, hull: M.hull, stripe: M.stripe, deck: M.floor } });
+    // grey inflatable collar all the way round
+    const cp = []; for (let i = 0; i <= 30; i++) { const u = 0.02 + i / 30 * 0.96; const p = H.pt(u, 1, -1); cp.push(V3(p[0] - 0.14, p[1] + 0.12, p[2])); } for (let i = 30; i >= 0; i--) { const u = 0.02 + i / 30 * 0.96; const p = H.pt(u, 1, 1); cp.push(V3(p[0] + 0.14, p[1] + 0.12, p[2])); }
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cp), 140, 0.24, 10, false), M.dark);
+    // console + windshield, T-top on posts, radar mast
+    box(1.0, 0.95, 0.75, M.deck, 0, sh(0.5) + 0.48, -0.35); const ws = add(new THREE.PlaneGeometry(1.1, 0.45), M.glass); ws.position.set(0, sh(0.5) + 1.12, -0.62); ws.rotation.x = -0.45;
+    const wh = add(new THREE.TorusGeometry(0.16, 0.022, 8, 22), M.dark); wh.position.set(0, sh(0.5) + 0.95, 0.07); wh.rotation.x = -0.7;
+    for (const [x, z] of [[-0.8, -0.9], [0.8, -0.9], [-0.8, 0.85], [0.8, 0.85]]) rod(V3(x, sh(0.5), z), V3(x * 0.95, 2.35, z), 0.035, M.chrome);
+    box(2.0, 0.09, 2.2, M.stripe, 0, 2.4, -0.02, 0.04);
+    const dome = add(new THREE.SphereGeometry(0.32, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.deck); dome.position.set(0, 2.44, 0.4); dome.scale.set(1, 0.6, 1);
+    rod(V3(-0.5, 2.44, -0.7), V3(-0.5, 3.6, -0.7), 0.02, M.chrome); rod(V3(0.55, 2.44, -0.7), V3(0.55, 3.2, -0.7), 0.02, M.chrome);
+    const radar = new THREE.Group(); radar.name = 'radar'; radar.position.set(0, 2.62, -0.45); grp.add(radar);
+    const bar = new THREE.Mesh(rbox(1.1, 0.08, 0.12, 0.03, 2), M.dark); radar.add(bar); const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.08, 0.16, 8), M.dark); ped.position.y = -0.1; radar.add(ped);
+    // leaning post and bow gun mount
+    box(0.8, 0.5, 0.45, M.seat2, 0, sh(0.5) + 0.26, 0.75); box(0.8, 0.12, 0.5, M.seat, 0, sh(0.5) + 0.55, 0.72);
+    cyl(0.12, 0.16, 0.6, M.dark, 0, sh(0.78) + 0.3, -2.4); box(0.75, 0.48, 0.07, M.dark, 0, sh(0.78) + 0.78, -2.62); cyl(0.05, 0.05, 1.1, M.dark, 0, sh(0.78) + 0.72, -3.1).rotation.x = Math.PI / 2;
+    box(0.34, 0.2, 0.26, M.dark, 0, sh(0.78) + 0.62, -2.35);
+    for (const s of [-1, 1]) { const nl = add(new THREE.SphereGeometry(0.05, 8, 6), s < 0 ? M.navR : M.navG); nl.position.set(s * 0.95, 2.48, -1.0); }
+    def.hp = seatedDriver(add, M, V3(0, sh(0.5) + 0.6, 0.7)); def.flag = V3(-0.95, sh(0.02) + 0.9, 3.0);
+  } else if (id === 'yacht') {
+    const hw = u => u < 0.5 ? 1.42 : 1.42 * Math.pow(Math.max(0, 1 - ((u - 0.5) / 0.5) ** 2), 0.55), sh = u => 0.72 + 0.3 * u * u, kl = u => -0.48 + (sh(u) + 0.45) * Math.pow(Math.max(0, (u - 0.5) / 0.5), 2.2);
+    const H = shapedHull(add, { z0: 3.8, z1: -5.0, hw, sh, kl, mat: { bottom: M.bottom, hull: M.hull, stripe: M.stripe, deck: TM.teak } });
+    // swept cabin with a wrap-around tinted window band
+    const prof = (y0, y1, x) => { const s = new THREE.Shape(); s.moveTo(-0.2, y0); s.lineTo(-0.2, y1); s.lineTo(-2.3, y1 - 0.18); s.quadraticCurveTo(-3.3, y1 - 0.35, -3.9, y0 + 0.02); s.lineTo(-3.9, y0); s.closePath();
+      const g = new THREE.ExtrudeGeometry(s, { depth: x * 2, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 3, curveSegments: 12 }); g.translate(0, 0, -x); g.rotateY(-Math.PI / 2); return g; };
+    const cab = add(prof(0, 0.82, 1.0), M.deck); cab.position.y = sh(0.55);
+    const win = add(prof(0.36, 0.6, 1.03), TM.tint); win.position.y = sh(0.55) - 0.02;
+    // hardtop on a radar arch over the cockpit
+    for (const s of [-1, 1]) rod(V3(s * 1.05, sh(0.3) + 0.05, 1.7), V3(s * 0.95, sh(0.3) + 1.85, 0.6), 0.09, M.deck);
+    box(2.3, 0.1, 2.3, M.deck, 0, sh(0.3) + 1.9, 0.65, 0.05); const dome = add(new THREE.SphereGeometry(0.26, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), M.deck); dome.position.set(0, sh(0.3) + 1.95, 0.4);
+    // helm, sofa, table, bow sun pad, swim platform, rails, underwater props
+    box(0.7, 0.75, 0.55, M.deck, 0.55, sh(0.4) + 0.38, -0.15); box(0.62, 0.1, 0.5, M.seat, 0.55, sh(0.4) + 0.5, 0.65); const wh = add(new THREE.TorusGeometry(0.15, 0.02, 8, 22), M.chrome); wh.position.set(0.55, sh(0.4) + 0.85, 0.2); wh.rotation.x = -0.7;
+    box(2.2, 0.32, 0.5, M.seat, 0, sh(0.15) + 0.16, 3.1); box(0.5, 0.32, 1.2, M.seat, -0.85, sh(0.15) + 0.16, 2.35); box(0.9, 0.06, 0.6, TM.teak, 0, sh(0.15) + 0.45, 2.3);
+    box(1.7, 0.14, 1.5, M.seat, 0, sh(0.78) + 0.1, -2.9); box(1.7, 0.25, 0.25, M.seat, 0, sh(0.78) + 0.22, -2.2);
+    box(2.6, 0.08, 0.75, TM.teak, 0, sh(0) - 0.45, 4.15);
+    for (const s of [-1, 1]) { const pts = []; for (let i = 0; i <= 10; i++) { const u = 0.55 + i / 10 * 0.43; const p = H.pt(u, 1, s); pts.push(V3(p[0] - s * 0.1, p[1] + 0.32, p[2])); } add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 30, 0.022, 6, false), M.chrome); }
+    const props = new THREE.Group(); props.name = 'fan'; props.position.set(0, -0.55, 3.2); grp.add(props);
+    for (let i = 0; i < 3; i++) { const bl = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), M.chrome); bl.scale.set(0.08, 0.2, 0.02); bl.position.set(Math.sin(i * 2.094) * 0.15, Math.cos(i * 2.094) * 0.15, 0); bl.rotation.z = -i * 2.094; props.add(bl); }
+    def.hp = seatedDriver(add, M, V3(0.55, sh(0.4) + 0.55, 0.65)); def.flag = V3(-1.2, sh(0) + 0.9, 3.6);
+  } else if (id === 'airboat') {
+    const hw = u => u < 0.8 ? 1.2 : 1.2 - 0.38 * ((u - 0.8) / 0.2) ** 2, sh = u => 0.36 + 0.3 * Math.pow(u, 4), kl = u => -0.36 + 0.75 * Math.pow(Math.max(0, (u - 0.68) / 0.32), 2);
+    shapedHull(add, { z0: 2.5, z1: -2.9, hw, sh, kl, chine: 0.97, flat: true, mat: { bottom: M.bottom, hull: M.hull, stripe: M.stripe, deck: TM.alu } });
+    // caged fan, engine, rudders
+    const fy = 2.15, fz = 2.05, R0 = 1.3;
+    for (const dz of [-0.12, 0.28]) { const ring = add(new THREE.TorusGeometry(R0, 0.035, 6, 48), M.chrome); ring.position.set(0, fy, fz + dz); }
+    for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; rod(V3(0, fy, fz + 0.28), V3(Math.cos(a) * R0, fy + Math.sin(a) * R0, fz + 0.28), 0.012, M.chrome); }
+    for (const yy of [-0.8, -0.4, 0, 0.4, 0.8]) { const w = Math.sqrt(R0 * R0 - yy * yy); rod(V3(-w, fy + yy, fz + 0.29), V3(w, fy + yy, fz + 0.29), 0.01, M.chrome); }
+    for (const s of [-1, 1]) { rod(V3(s * 0.9, sh(0.1), 1.3), V3(s * 0.85, fy - 0.9, fz - 0.1), 0.05, M.chrome); rod(V3(s * 0.9, sh(0.1), 2.4), V3(s * 0.9, fy - 0.9, fz + 0.28), 0.05, M.chrome); }
+    box(0.7, 0.62, 1.0, M.motor, 0, fy - 0.15, 1.35, 0.08); cyl(0.12, 0.12, 0.35, M.engBand, 0, fy - 0.15, 1.85).rotation.x = Math.PI / 2;
+    for (const s of [-1, 1]) cyl(0.04, 0.04, 0.5, M.chrome, s * 0.28, fy + 0.3, 1.2);
+    const fan = new THREE.Group(); fan.name = 'fan'; fan.position.set(0, fy, fz + 0.06); grp.add(fan);
+    for (const a of [0, Math.PI]) { const bl = new THREE.Mesh(rbox(0.22, 1.15, 0.05, 0.02, 2), TM.prop); bl.position.set(Math.sin(a) * 0.62, Math.cos(a) * 0.62, 0); bl.rotation.set(0, 0.25, -a); fan.add(bl); }
+    fan.add(new THREE.Mesh(new THREE.SphereGeometry(0.14, 12, 8), M.chrome));
+    for (const s of [-0.45, 0.45]) { const rd = box(0.04, 1.4, 0.75, M.stripe, s, fy - 0.05, fz + 0.75, 0.015); rd.rotation.y = 0.0; }
+    // the high chair
+    for (const s of [-1, 1]) { rod(V3(s * 0.32, sh(0.5), -0.3), V3(s * 0.3, sh(0.5) + 1.3, 0.05), 0.035, M.chrome); rod(V3(s * 0.32, sh(0.5), 0.45), V3(s * 0.3, sh(0.5) + 1.3, 0.25), 0.035, M.chrome); }
+    box(0.7, 0.12, 0.55, M.seat, 0, sh(0.5) + 1.35, 0.15); box(0.7, 0.55, 0.1, M.seat, 0, sh(0.5) + 1.65, 0.42); box(0.6, 0.05, 0.3, M.chrome, 0, sh(0.5) + 0.75, -0.42);
+    rod(V3(-0.42, sh(0.5) + 1.2, -0.1), V3(-0.42, sh(0.5) + 1.75, -0.3), 0.025, M.dark);
+    def.hp = seatedDriver(add, M, V3(0, sh(0.5) + 1.41, 0.17)); def.flag = V3(-0.9, sh(0.1) + 0.9, 2.3);
+  } else if (id === 'x_titanic') {
+    const L = 16, hw = u => 1.15 * Math.min(1, 0.4 + 0.6 * Math.sqrt(Math.min(1, u / 0.07))) * (u > 0.8 ? Math.pow(Math.max(0, 1 - ((u - 0.8) / 0.2) ** 2), 0.5) : 1);
+    const sh = u => 1.45 + 0.18 * Math.pow(u, 3), kl = u => -0.5 + 0.35 * Math.pow(Math.max(0, (u - 0.9) / 0.1), 2);
+    shapedHull(add, { z0: L / 2, z1: -L / 2, hw, sh, kl, chine: 0.95, bands: [[0.5, 0.62, 'red'], [0.62, 0.965, 'black'], [0.965, 1, 'gold']], mat: { bottom: TM.red, red: TM.red, black: TM.black, gold: TM.gold, deck: TM.wood, transom: TM.black } });
+    // rows of lit portholes and windows (canvas textures on thin side panels)
+    const panelTex = (rows, rw, lit) => { const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 64 * rows; const c = cv.getContext('2d');
+      for (let r = 0; r < rows; r++) for (let x = 10; x < 1024; x += rw) { c.fillStyle = Math.random() < lit ? '#ffd98a' : '#3a3a34'; if (rw < 20) { c.beginPath(); c.arc(x, r * 64 + 32, 5, 0, 6.283); c.fill(); } else c.fillRect(x, r * 64 + 18, rw * 0.55, 28); }
+      const t = new THREE.CanvasTexture(cv); return t; };
+    const deco = (tex, w, h, x, y, z, ry) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ map: tex, transparent: true, alphaTest: 0.05 })); m.position.set(x, y, z); m.rotation.y = ry; grp.add(m); return m; };
+    const port = (() => { const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 192; const c = cv.getContext('2d'); for (let r = 0; r < 3; r++) for (let x = 8; x < 1024; x += 14) { c.fillStyle = Math.random() < 0.55 ? '#ffd98a' : '#4a4a40'; c.beginPath(); c.arc(x, r * 64 + 32, 4.5, 0, 6.283); c.fill(); } return new THREE.CanvasTexture(cv); })();
+    for (const s of [-1, 1]) deco(port, 13.5, 0.9, s * 1.157, 0.75, -0.2, s * Math.PI / 2);
+    // superstructure decks
+    box(2.0, 0.5, 11.2, TM.white, 0, 1.72, -0.3, 0.03); box(1.75, 0.45, 9.2, TM.white, 0, 2.2, -0.6, 0.03); box(1.9, 0.08, 9.4, TM.wood, 0, 2.46, -0.6, 0.02);
+    box(1.6, 0.42, 1.0, TM.white, 0, 2.7, -4.8, 0.03); box(2.1, 0.06, 1.2, TM.white, 0, 2.94, -4.8, 0.02); // bridge
+    const win = panelTex(1, 26, 0.7); for (const s of [-1, 1]) { deco(win, 10.6, 0.36, s * 1.006, 1.74, -0.3, s * Math.PI / 2); deco(win, 8.8, 0.32, s * 0.881, 2.2, -0.6, s * Math.PI / 2); }
+    // four raked funnels (buff with black tops)
+    def.funnels = [];
+    for (const fz of [-3.7, -1.25, 1.2, 3.65]) {
+      const f = new THREE.Group(); f.position.set(0, 2.5, fz); f.rotation.x = 0.1; grp.add(f);
+      const body = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.36, 2.0, 20), TM.buff); body.position.y = 1.0; body.scale.x = 0.82; f.add(body);
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(0.345, 0.345, 0.42, 20), TM.black); top.position.y = 1.82; top.scale.x = 0.83; f.add(top);
+      def.funnels.push(new THREE.Vector3(0, 2.5 + 2.0 * Math.cos(0.1), fz + 2.0 * Math.sin(0.1)));
+    }
+    // masts, rigging, lifeboats, vents, bow and stern deck gear
+    const fore = V3(0, 6.4, -6.3), main = V3(0, 6.0, 5.9);
+    rod(V3(0, 1.5, -6.1), fore, 0.05, TM.wood); rod(V3(0, 1.5, 5.7), main, 0.05, TM.wood);
+    const rig = [[V3(0, 1.62, -8), fore], [fore, V3(0, 4.6, -3.7)], [V3(0, 4.6, -3.7), V3(0, 4.6, 3.65)], [V3(0, 4.6, 3.65), main], [main, V3(0, 1.5, 8)], [fore, V3(-1.0, 1.5, -5.6)], [fore, V3(1.0, 1.5, -5.6)], [main, V3(-1.0, 1.5, 5.2)], [main, V3(1.0, 1.5, 5.2)]];
+    const lp = []; rig.forEach(([a, b]) => lp.push(a.x, a.y, a.z, b.x, b.y, b.z)); const lg = new THREE.BufferGeometry(); lg.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3)); const lines = new THREE.LineSegments(lg, TM.rig); grp.add(lines);
+    for (const s of [-1, 1]) for (let k = 0; k < 8; k++) { const z = -3.2 + k * 0.95 + (k > 3 ? 0.9 : 0); const b = add(new THREE.SphereGeometry(1, 10, 6), TM.white); b.scale.set(0.14, 0.11, 0.42); b.position.set(s * 0.82, 2.62, z); }
+    for (let k = 0; k < 6; k++) { const v = cyl(0.07, 0.07, 0.3, TM.white, (k % 2 ? 0.5 : -0.5), 2.62, -2.5 + k * 1.1, 8); }
+    box(0.6, 0.3, 0.8, TM.white, 0, 1.6, -6.9, 0.03); box(0.9, 0.3, 1.2, TM.white, 0, 1.6, 6.9, 0.03);
+    def.hp = null; def.flag = V3(0, 6.2, 5.9);
+  }
+  mergeMeshes(grp);
+  return grp;
+}
+const HULLTPL = {};
+function hullTemplate(id) { return HULLTPL[id] || (HULLTPL[id] = buildHullModel(id, BM)); }
+// swap the whole boat body for the racer's chosen hull (the classic speedboat is the base model)
+function setHull(grp, M, id) {
+  const hid = HULLDEF[id] ? id : 'speed', def = HULLDEF[hid];
+  let alt = grp.getObjectByName('hullAlt'); if (alt && alt.userData.id !== hid) { grp.remove(alt); alt = null; }
+  for (const c of grp.children) if (c.userData.base) c.visible = hid === 'speed';
+  if (hid !== 'speed' && !alt) {
+    alt = hullTemplate(hid).clone(true); alt.name = 'hullAlt'; alt.userData.id = hid;
+    if (M !== BM) alt.traverse(o => { if (o.isMesh) { const k = MATKEY.get(o.material); if (k) o.material = M[k]; } });
+    grp.add(alt);
+  }
+  const motor = grp.getObjectByName('motor');
+  if (motor) {
+    motor.visible = hid === 'speed' || !!def.motor;
+    if (def.motor) motor.position.set(def.motor[0], def.motor[1], def.motor[2]); else motor.position.set(0, SHEER(0) - 0.02, HZ(0) + 0.08);
+  }
+  grp.userData.prop = (alt && alt.getObjectByName('fan')) || grp.getObjectByName('prop');
+  grp.userData.radar = alt && alt.getObjectByName('radar');
+  grp.userData.hull = hid;
+  return def;
+}
+// Titanic: coal smoke rolling out of the first three funnels (the fourth was a dummy on the real ship too)
+function hullSmoke(g, q, dt) {
+  if (g.userData.hull !== 'x_titanic') return;
+  g.userData.smk = (g.userData.smk || 0) + dt * 26; let n = Math.min(6, Math.floor(g.userData.smk)); g.userData.smk -= n;
+  const F = HULLDEF.x_titanic.funnels; if (!F) return; _q.set(q.x, q.y, q.z, q.w);
+  while (n-- > 0) { const f = F[Math.floor(Math.random() * 3)]; _v.copy(f).applyQuaternion(_q).add(g.position); const k = 0.12 + Math.random() * 0.12;
+    fxSpawn(FX.S, _v.x + (Math.random() - 0.5) * 0.2, _v.y, _v.z + (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.4, 1.6 + Math.random(), 1.2 + Math.random() * 0.6, 3.2, 1.0, 1.4, k, k, k * 1.05, 0.55); }
 }
 function animateFlags(t) {
   for (const f of FLAGS_LIVE) {
@@ -2177,13 +2449,17 @@ function buildWorld(i) {
     cx.fillStyle = '#f2f2ee'; cx.fillRect(0, 0, 128, 256);
     for (let k = -2; k < 10; k++) { cx.fillStyle = '#ff6a13'; cx.beginPath(); cx.moveTo(0, k * 32); cx.lineTo(64, k * 32 - 24); cx.lineTo(128, k * 32); cx.lineTo(128, k * 32 + 14); cx.lineTo(64, k * 32 - 10); cx.lineTo(0, k * 32 + 14); cx.fill(); }
     cx.fillStyle = '#111'; cx.fillRect(0, 0, 10, 256); cx.fillRect(118, 0, 10, 256); cx.fillStyle = '#ffd23f'; cx.fillRect(0, 0, 128, 12);
-    if (world.ramps.some(r => r.style === 'wood')) { // swamp kickers: weathered planks with mossy edges
+    if (world.ramps.some(r => r.style === 'basalt')) { // volcano kickers: black stone, glowing chevrons
+      cx.fillStyle = '#17120f'; cx.fillRect(0, 0, 128, 256); for (let k = 0; k < 400; k++) { const v = 20 + Math.random() * 30 | 0; cx.fillStyle = `rgb(${v + 8},${v},${v - 4})`; cx.fillRect(Math.random() * 128, Math.random() * 256, 3, 3); }
+      for (let k = -2; k < 10; k++) { cx.fillStyle = '#ff6a13'; cx.beginPath(); cx.moveTo(10, k * 32); cx.lineTo(64, k * 32 - 22); cx.lineTo(118, k * 32); cx.lineTo(118, k * 32 + 8); cx.lineTo(64, k * 32 - 14); cx.lineTo(10, k * 32 + 8); cx.fill(); }
+      cx.fillStyle = '#ffb347'; cx.fillRect(0, 0, 128, 8);
+    } else if (world.ramps.some(r => r.style === 'wood')) { // swamp kickers: weathered planks with mossy edges
       for (let y = 0; y < 256; y += 16) { const l = 70 + ((y * 37) % 40); cx.fillStyle = `rgb(${l + 30},${l + 12},${l - 18})`; cx.fillRect(0, y, 128, 14); cx.fillStyle = '#1a120a'; cx.fillRect(0, y + 14, 128, 2); for (let k = 0; k < 6; k++) { cx.fillStyle = 'rgba(40,25,10,.35)'; cx.fillRect((y * 13 + k * 41) % 128, y + 2 + (k % 3) * 4, 18, 1); } }
       cx.fillStyle = '#3f5a22'; cx.fillRect(0, 0, 9, 256); cx.fillRect(119, 0, 9, 256); cx.fillStyle = '#c9f04a'; cx.fillRect(0, 0, 128, 6);
     }
     const tex = new THREE.CanvasTexture(cv); tex.anisotropy = 8;
-    const wood = world.ramps.some(r => r.style === 'wood');
-    const deckM = std(0xffffff, { map: tex, roughness: wood ? 0.95 : 0.6, side: THREE.DoubleSide }), sideM = std(wood ? 0x3a2c1c : 0x2a3540, { roughness: 0.9 }), floatM = std(wood ? 0x4a3a28 : 0xffd23f, { roughness: wood ? 0.9 : 0.4 });
+    const wood = world.ramps.some(r => r.style === 'wood' || r.style === 'basalt'), hot = world.ramps.some(r => r.style === 'basalt');
+    const deckM = std(0xffffff, { map: tex, roughness: wood ? 0.95 : 0.6, side: THREE.DoubleSide, emissive: hot ? 0xffffff : 0x000000, emissiveMap: hot ? tex : null, emissiveIntensity: hot ? 0.35 : 0 }), sideM = std(wood ? 0x3a2c1c : 0x2a3540, { roughness: 0.9 }), floatM = std(wood ? 0x4a3a28 : 0xffd23f, { roughness: wood ? 0.9 : 0.4 });
     for (const rp of world.ramps) {
       const NU = 16, NV = 6, pos = [], uv = [], idx = [];
       const hAt = (u, v) => { const f = u / rp.len, e = Math.min(1, (rp.w / 2 - Math.abs(v)) / 1.2); return Core.RAMP_BASE + (rp.h - Core.RAMP_BASE) * (0.35 * f + 0.65 * f * f) * e; };
@@ -2204,7 +2480,8 @@ function buildWorld(i) {
     const drops = []; for (let k = 0; k < N; k++) drops.push({ x: (rr() - 0.5) * 60, y: rr() * 30, z: (rr() - 0.5) * 60 });
     W3.rain = { ls, drops, pos };
   }
-  if (world.chans) buildSwamp(group, rr);
+  if (world.bayou) buildSwamp(group, rr);
+  if (world.magma) buildMagmaScene(group, rr);
   group.traverse(o => { if ((o.isMesh || o.isInstancedMesh) && o.name !== 'far') { o.castShadow = !o.userData.noCast; o.receiveShadow = true; } });
   W3.lightT = 6; skyMat.uniforms.uFlash.value = 0; $('flash').style.opacity = 0;
   if (!meta.custom) { DATA.sel = i; save(); }
@@ -2497,6 +2774,158 @@ function buildSwamp(group, rr) {
     });
   }
 }
+// ================= Magma Rift: volcano scenery =================
+// rock that glows along its cracks: vertex colour + a per-vertex "aGlow" that feeds emissive light
+function glowRockMat(side) {
+  const m = std(0xffffff, { vertexColors: true, roughness: 0.95, side: side || THREE.FrontSide });
+  m.customProgramCacheKey = () => 'glowrock';
+  m.onBeforeCompile = sh => {
+    sh.uniforms.uTime = waterU.uTime;
+    sh.vertexShader = 'attribute float aGlow;varying float vGlow;varying vec3 vGW;\n' + sh.vertexShader.replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow; vGW = (modelMatrix * vec4(position, 1.0)).xyz;');
+    sh.fragmentShader = 'uniform float uTime;varying float vGlow;varying vec3 vGW;\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\ntotalEmissiveRadiance += vec3(1.0, 0.33, 0.05) * vGlow * (0.75 + 0.25 * sin(uTime * 1.7 + vGW.x * 0.11 + vGW.z * 0.07));');
+  };
+  return m;
+}
+// molten lava: flowing noise, glowing cracks under a dark crust
+const LAVA_GLSL = `float lh(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+  float ln(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(lh(i),lh(i+vec2(1.,0.)),f.x),mix(lh(i+vec2(0.,1.)),lh(i+vec2(1.,1.)),f.x),f.y);}
+  float lf(vec2 p){float s=0.,a=.5;for(int i=0;i<4;i++){s+=a*ln(p);p*=2.07;a*=.5;}return s;}`;
+const lavaMat = () => new THREE.ShaderMaterial({ uniforms: { uTime: waterU.uTime, uFog: waterU.uFog, uFogD: waterU.uFogD },
+  vertexShader: 'varying vec3 vW;void main(){vec4 w=modelMatrix*vec4(position,1.);vW=w.xyz;gl_Position=projectionMatrix*viewMatrix*w;}',
+  fragmentShader: `uniform float uTime,uFogD;uniform vec3 uFog;varying vec3 vW;${LAVA_GLSL}
+    void main(){vec2 p=vW.xz*.09;float f=lf(p+vec2(uTime*.05,uTime*.03));float g=lf(p*2.4-vec2(uTime*.04,-uTime*.02)+f*1.6);
+      float crust=smoothstep(.42,.68,g);vec3 hot=mix(vec3(1.,.82,.32),vec3(1.,.3,.02),clamp(f*1.3,0.,1.));
+      vec3 col=mix(hot*1.7,vec3(.07,.025,.015),crust*.9)+vec3(1.,.4,.05)*pow(1.-crust,3.)*.4;
+      float d=length(cameraPosition-vW);col=mix(col,uFog,(1.-exp(-d*uFogD*.45))*.8);gl_FragColor=vec4(col,1.);}` });
+function buildMagmaScene(group, rr) {
+  const chans = world.chans, CH = world.chanMap, Q = S.quality, sdAt = (x, z) => Core.chansSD(chans, x, z).sd;
+  W3.dcull = W3.dcull || []; W3.magma = { vents: world.vents.map(v => ({ v, acc: 0 })), erupt: 6, smk: 0, steam: 0 };
+  const col = h => new THREE.Color(h), tc = new THREE.Color();
+  // lava rivers on the land beside the course (decoration only)
+  const rivers = [];
+  for (const [name, side, s0, s1] of [['rift', 1, 30, 300], ['flats', -1, 20, 280], ['gorge', 1, 40, 300], ['final', -1, 10, 200]]) {
+    const ch = CH[name], pts = [];
+    for (let s = s0; s < Math.min(s1, ch.len - 5); s += 8) { const a = Core.chanAt(ch, s), off = side * (a.hw + 26 + 8 * Math.sin(s * 0.03)); pts.push([a.x - a.tz * off, a.z + a.tx * off]); }
+    if (pts.length > 3) rivers.push(pts.filter(p => sdAt(p[0], p[1]) > 12));
+  }
+  const rDist = (x, z) => { let b = 1e9; for (const P of rivers) for (let i = 0; i < P.length - 1; i++) { const a = P[i], c = P[i + 1], ex = c[0] - a[0], ez = c[1] - a[1]; const t = clamp(((x - a[0]) * ex + (z - a[1]) * ez) / (ex * ex + ez * ez), 0, 1); b = Math.min(b, Math.hypot(x - a[0] - ex * t, z - a[1] - ez * t)); } return b; };
+  // ---- terrain: black basalt cliffs walling in the rift, glowing cracks, lava rivers in carved trenches ----
+  const X0 = -330, X1 = 200, Z0 = -200, Z1 = 1270, STEP = [6, 5, 4][Q], BAND = 160, rmat = glowRockMat();
+  const cA = col(0x18130f), cB = col(0x2e2520), cAsh = col(0x48423c), cHot = col(0x4a1608);
+  for (let zb = Z0; zb < Z1; zb += BAND) {
+    const nx = Math.round((X1 - X0) / STEP), nz = Math.round(BAND / STEP), pos = [], cl = [], gl = [], idx = [];
+    for (let j = 0; j <= nz; j++) for (let i = 0; i <= nx; i++) {
+      const x = X0 + i * STEP, z = zb + j * STEP, d = sdAt(x, z), rd = d > 8 ? rDist(x, z) : 1e9;
+      const n = fbm(x * 0.03, z * 0.03, 2.2, 4), n2 = vnoise(x * 0.25, z * 0.25, 9);
+      let y = d < 0 ? Math.max(-3, -0.35 + d * 0.3) : -0.35 + 17 * Math.pow(smooth(0.3, 10, d), 0.8) * (0.7 + 0.6 * n) + smooth(8, 40, d) * (n - 0.4) * 22 + (n2 - 0.5) * 0.8;
+      if (rd < 9) y = y * smooth(4.5, 9, rd) + 0.3 * (1 - smooth(4.5, 9, rd));
+      pos.push(x, y, z);
+      const crack = d > 2 ? Math.pow(1 - smooth(0, 0.028, Math.abs(fbm(x * 0.05 + 7, z * 0.05, 4.4, 3) - 0.5)), 2) : 0;
+      let g = crack * 0.9 * smooth(2, 6, d) + (rd < 14 ? (1 - smooth(4, 14, rd)) * 0.75 : 0) + (d > -0.5 && d < 1.2 ? 0.12 : 0);
+      tc.copy(cA).lerp(cB, clamp(n2 * 1.3 - 0.1, 0, 1)); if (y > 14) tc.lerp(cAsh, clamp((y - 14) / 12, 0, 0.8)); if (rd < 14) tc.lerp(cHot, 1 - smooth(5, 14, rd));
+      cl.push(tc.r, tc.g, tc.b); gl.push(Math.min(1.4, g));
+    }
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) { const a = j * (nx + 1) + i, b = a + nx + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(cl, 3)); g.setAttribute('aGlow', new THREE.Float32BufferAttribute(gl, 1)); g.setIndex(idx); g.computeVertexNormals(); g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, rmat); m.userData.noCast = true; group.add(m); W3.dcull.push({ obj: m, x: (X0 + X1) / 2, z: zb + BAND / 2, r: 300 });
+  }
+  // ---- lava: the three gaps across the course, and the rivers on land ----
+  const LM = lavaMat(), glows = [];
+  for (const l of world.lava) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(l.w, l.len, 8, 8), LM); m.rotation.set(-Math.PI / 2, 0, 0); const g = new THREE.Group(); g.add(m); g.position.set(l.x, 0.16, l.z); g.rotation.y = l.yaw; m.name = 'far'; group.add(g);
+    // a crusted rock lip on the near and far edges
+    for (const s of [-1, 1]) { const lip = new THREE.Mesh(new THREE.BoxGeometry(l.w, 0.5, 1.4), rmat); lip.geometry.setAttribute('aGlow', new THREE.Float32BufferAttribute(new Array(lip.geometry.attributes.position.count).fill(0.5), 1)); lip.position.set(0, 0, s * l.len / 2); g.add(lip); }
+    for (let k = 0; k < 6; k++) { const f = (k / 5 - 0.5); glows.push([l.x - Math.cos(l.yaw) * f * l.w * 0.7, 1.5, l.z + Math.sin(l.yaw) * f * l.w * 0.7, 14, 1, 0.42, 0.08]); }
+  }
+  for (const P of rivers) {
+    if (P.length < 2) continue; const pos = [], idx = [];
+    P.forEach((p, i) => { const a = P[Math.max(0, i - 1)], b = P[Math.min(P.length - 1, i + 1)]; let tx = b[0] - a[0], tz = b[1] - a[1]; const l = Math.hypot(tx, tz) || 1; tx /= l; tz /= l; for (const s of [-1, 1]) pos.push(p[0] - tz * s * 5, 0.32, p[1] + tx * s * 5); });
+    for (let i = 0; i < P.length - 1; i++) { const a = i * 2; idx.push(a, a + 2, a + 1, a + 1, a + 2, a + 3); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeBoundingSphere();
+    const m = new THREE.Mesh(g, LM); m.name = 'far'; group.add(m);
+    for (let i = 0; i < P.length; i += 4) glows.push([P[i][0], 3, P[i][1], 16, 1, 0.38, 0.06]);
+  }
+  // ---- basalt columns: hexagonal pillars in the water (obstacles) and crowding the banks ----
+  const hexG = mergeColored([[new THREE.CylinderGeometry(1, 1.08, 1, 6), M4(0, 0.5, 0), (x, y) => col(0x231d19).lerp(col(0x3a332d), y > 0.98 ? 0.8 : vnoise(x * 3, y * 6, 1) * 0.4)]]);
+  const hexM = std(0xffffff, { vertexColors: true, roughness: 0.85, flatShading: true });
+  const colItems = [];
+  for (const o of world.cols) { const cnt = 1 + Math.floor(rr() * 3); for (let k = 0; k < cnt; k++) { const a = rr() * 6.28, r = k ? o.r * (0.35 + rr() * 0.3) : o.r; const dd = k ? o.r * 0.7 : 0; colItems.push({ x: o.x + Math.cos(a) * dd, z: o.z + Math.sin(a) * dd, y: -1.5, s: 1, sx: r, sz: r, sy: 2.5 + rr() * 4 + (k ? 0 : 1.5), ry: rr() }); } }
+  for (let tries = 0, n = 0; n < [160, 300, 460][Q] && tries < 9000; tries++) {
+    const ch = chans[Math.floor(rr() * chans.length)], a = Core.chanAt(ch, rr() * ch.len), side = rr() < 0.5 ? -1 : 1, lat = side * (a.hw + 1.5 + rr() * 6);
+    const x = a.x - a.tz * lat, z = a.z + a.tx * lat, d = sdAt(x, z); if (d < 1.4) continue;
+    const r = 0.8 + rr() * 1.4; colItems.push({ x, z, y: -1, s: 1, sx: r, sz: r, sy: 3 + rr() * 10, ry: rr() }); n++;
+  }
+  instChunks(group, hexG, hexM, colItems);
+  // ---- the lava tube: a rock arch over the whole tube route, ribs glowing ----
+  { const T = CH.tube, pos = [], cl = [], gl = [], idx = [], A = 14, rows = [];
+    for (let s = 22; s <= T.len - 22; s += 4) rows.push(s);
+    rows.forEach((s, j) => { const a = Core.chanAt(T, s), R0 = a.hw + 1.4, rib = (j % 6 === 0) ? 1 : 0;
+      for (let i = 0; i <= A; i++) { const t = i / A * Math.PI, nn = vnoise(s * 0.2, i * 0.7, 3), r = R0 * (0.95 + nn * 0.12); const lat = Math.cos(t) * r;
+        pos.push(a.x - a.tz * lat, Math.sin(t) * r * 0.82 - 0.4, a.z + a.tx * lat); tc.copy(cA).lerp(cB, nn); cl.push(tc.r, tc.g, tc.b); gl.push(rib * 1.1 + (nn > 0.82 ? 0.7 : 0)); } });
+    for (let j = 0; j < rows.length - 1; j++) for (let i = 0; i < A; i++) { const a = j * (A + 1) + i, b = a + A + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(cl, 3)); g.setAttribute('aGlow', new THREE.Float32BufferAttribute(gl, 1)); g.setIndex(idx); g.computeVertexNormals();
+    group.add(new THREE.Mesh(g, glowRockMat(THREE.DoubleSide)));
+    for (let s = 30; s < T.len - 25; s += 24) { const a = Core.chanAt(T, s); glows.push([a.x, 5.5, a.z, 9, 1, 0.4, 0.08]); }
+  }
+  // steam vent craters
+  const ventG = new THREE.TorusGeometry(1.6, 0.45, 8, 20), ventM = rmat;
+  for (const v of world.vents) { const m = new THREE.Mesh(ventG, ventM); if (!ventG.attributes.aGlow) ventG.setAttribute('aGlow', new THREE.Float32BufferAttribute(new Array(ventG.attributes.position.count).fill(0.35), 1)); m.rotation.x = -Math.PI / 2; m.position.set(v.x, 0.05, v.z); group.add(m); }
+  // ---- the volcano over the finish: dark cone, glowing crater, lava streaks (drawn through the fog) ----
+  { const vx = -150, vz = 1560, Rv = 330, Hv = 270, SEG = 64, ROWS = 14, pos = [], cl = [], idx = [];
+    for (let j = 0; j <= ROWS; j++) for (let i = 0; i <= SEG; i++) {
+      const a = i / SEG * Math.PI * 2, v = j / ROWS, n = fbm(Math.cos(a) * 3, Math.sin(a) * 3, v * 4, 4), r = Rv * (1 - v * 0.86) * (0.9 + n * 0.2), y = -5 + Hv * Math.pow(v, 0.85) * (0.95 + (n - 0.5) * 0.1);
+      pos.push(vx + Math.cos(a) * r, y, vz + Math.sin(a) * r);
+      const streak = Math.pow(Math.max(0, Math.sin(a * 9 + n * 6)), 40) * v; tc.setRGB(0.06, 0.035, 0.03).lerp(col(0xff5a10), Math.min(1, streak * 2.2 + (v > 0.95 ? 0.8 : 0))); cl.push(tc.r, tc.g, tc.b);
+    }
+    for (let j = 0; j < ROWS; j++) for (let i = 0; i < SEG; i++) { const a = j * (SEG + 1) + i, b = a + SEG + 1; idx.push(a, b, a + 1, a + 1, b, b + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setAttribute('color', new THREE.Float32BufferAttribute(cl, 3)); g.setIndex(idx);
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, fog: false, side: THREE.DoubleSide })); m.name = 'far'; m.frustumCulled = false; group.add(m);
+    W3.magma.crater = new THREE.Vector3(vx, Hv - 8, vz);
+    glows.push([vx, Hv - 6, vz, 220, 1, 0.42, 0.1]);
+  }
+  // ---- warm glows, rising embers, falling ash ----
+  const pointsMat = (mode) => new THREE.ShaderMaterial({
+    uniforms: { uScale: pU.uScale, uTime: waterU.uTime, uCam: waterU.uCam }, transparent: true, depthWrite: false, blending: mode === 'ash' ? THREE.NormalBlending : THREE.AdditiveBlending,
+    vertexShader: `attribute float aS;attribute vec3 aC;uniform float uScale,uTime;uniform vec3 uCam;varying vec3 vC;varying float vA;
+      void main(){vec3 p=position;float a=1.;vC=aC;
+      ${mode === 'glow' ? '' : `vec3 sd=aC*100.;float H=${mode === 'ash' ? '40.' : '30.'};p=mod(position-uCam+vec3(70.,0.,70.),vec3(140.,1.,140.))+uCam-vec3(70.,0.,70.);
+        float y=mod(position.y ${mode === 'ash' ? '-' : '+'} uTime*${mode === 'ash' ? '1.6' : '2.4'}+sd.x,H);p.y=y-2.;p.x+=sin(uTime*.6+sd.y)*1.8;p.z+=cos(uTime*.5+sd.z)*1.8;
+        a=smoothstep(0.,4.,y)*smoothstep(H,H-6.,y)${mode === 'ash' ? '*.5;vC=vec3(.55,.5,.47);' : '*(.5+.5*sin(uTime*5.+sd.x*7.));vC=vec3(1.,.45+aC.y*.3,.1);'}`}
+      vec4 mv=modelViewMatrix*vec4(p,1.);float d=-mv.z;vA=a${mode === 'glow' ? '' : '*exp(-d*.012)'};gl_PointSize=min(aS*uScale/max(d,1.),${mode === 'glow' ? '320.' : '20.'});gl_Position=projectionMatrix*mv;}`,
+    fragmentShader: `varying vec3 vC;varying float vA;void main(){float d=length(gl_PointCoord-.5)*2.;float a=${mode === 'glow' ? 'pow(max(0.,1.-d),2.4)*.45' : mode === 'ash' ? 'smoothstep(1.,.3,d)' : 'smoothstep(1.,0.,d)'}*vA;if(a<.01)discard;gl_FragColor=${mode === 'ash' ? 'vec4(vC,a)' : 'vec4(vC*a,1.)'};}`
+  });
+  const pts = (list, mode) => { const n = list.length, pos = new Float32Array(n * 3), sz = new Float32Array(n), c = new Float32Array(n * 3); list.forEach(([x, y, z, s, r, g, b], k) => { pos.set([x, y, z], k * 3); sz[k] = s; c.set([r, g, b], k * 3); });
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aS', new THREE.BufferAttribute(sz, 1)); g.setAttribute('aC', new THREE.BufferAttribute(c, 3));
+    const p = new THREE.Points(g, pointsMat(mode)); p.frustumCulled = false; p.name = 'far'; group.add(p); };
+  pts(glows, 'glow');
+  pts([...Array([160, 300, 450][Q])].map(() => [rr() * 140, rr() * 30, rr() * 140, 0.14 + rr() * 0.14, rr(), rr(), rr()]), 'ember');
+  pts([...Array([150, 260, 380][Q])].map(() => [rr() * 140, rr() * 40, rr() * 140, 0.2 + rr() * 0.15, rr(), rr(), rr()]), 'ash');
+}
+// vents hiss and blast, the volcano smokes and erupts
+function updateMagma(dt) {
+  const M = W3.magma; if (!M) return;
+  for (const o of M.vents) {
+    const v = o.v, on = Core.ventOn(v, simT), soon = !on && ((simT + v.ph) % v.per) > v.per - 0.6;
+    o.acc += dt * (on ? 70 : soon ? 25 : 3); let n = Math.min(10, Math.floor(o.acc)); o.acc -= n;
+    if (Math.hypot(v.x - camera.position.x, v.z - camera.position.z) > 180) continue;
+    while (n-- > 0) {
+      if (on) fxSpawn(FX.S, v.x + (Math.random() - 0.5) * 2, 0.4, v.z + (Math.random() - 0.5) * 2, (Math.random() - 0.5) * 2, 9 + Math.random() * 7, (Math.random() - 0.5) * 2, 1.2 + Math.random() * 0.6, 1.6, 2.4, 0.92, 0.92, 0.95, 0.55);
+      else fxSpawn(FX.A, v.x + (Math.random() - 0.5) * 2.4, 0.2, v.z + (Math.random() - 0.5) * 2.4, 0, 0.8 + Math.random() * (soon ? 3 : 0.6), 0, 0.6, soon ? 0.5 : 0.3, 0.2, 1, 0.5, 0.1, 0.9);
+    }
+  }
+  // the smoke plume
+  M.smk += dt * 6; let n = Math.min(4, Math.floor(M.smk)); M.smk -= n; const c = M.crater;
+  while (n-- > 0) { const k = 0.08 + Math.random() * 0.06; fxSpawn(FX.S, c.x + (Math.random() - 0.5) * 30, c.y, c.z + (Math.random() - 0.5) * 30, 2 + Math.random() * 3, 14 + Math.random() * 8, (Math.random() - 0.5) * 4, 9, 40, 30, k, k * 0.8, k * 0.75, 0.75); }
+  // an eruption every so often: a fountain of lava bombs, an orange flash and a rumble
+  M.erupt -= dt;
+  if (M.erupt < 0) {
+    M.erupt = 11 + Math.random() * 8;
+    for (let i = 0; i < 90; i++) { const a = Math.random() * 6.28, v = 20 + Math.random() * 40; fxSpawn(FX.A, c.x, c.y, c.z, Math.cos(a) * v * 0.5, 50 + Math.random() * 60, Math.sin(a) * v * 0.5, 3 + Math.random() * 2, 9, 2, 1, 0.4 + Math.random() * 0.4, 0.08, 1, -30); }
+    const dist = Math.hypot(c.x - camera.position.x, c.z - camera.position.z);
+    noiseHit(0.7, 90, 3.2, dist / 340); M.flash = 1; if (state === 'racing' && S.shake) shake = Math.max(shake, 0.35 * clamp(900 / dist, 0.2, 1));
+  }
+  if (M.flash > 0) { M.flash = Math.max(0, M.flash - dt * 0.8); hemi.intensity = W3.hemiBase + M.flash * 0.9; }
+}
 function updateSwamp(dt) {
   if (!W3.dcull) return;
   const cp = camera.position, far = 185;
@@ -2568,7 +2997,8 @@ function fxEmit(id, o, dt, t) {
   const rate = { flames: 110, sparks: 80, smoke: sp > 3 ? 20 : 6, stardust: 60, bubbles: sp > 2 ? 35 : 10, x_rainbow: sp > 2 ? 150 : 40, x_inferno: 200, x_galaxy: 190, x_storm: 120, x_royal: 150 }[id] || 0;
   o.acc = (o.acc || 0) + dt * rate;
   let n = Math.min(12, Math.floor(o.acc)); o.acc -= n;
-  const edge = () => { const u = 0.04 + R() * 0.92, s = R() < 0.5 ? -1 : 1; const p = hullPt(u, 1, s); return [p[0] * 1.04, p[1] + 0.05, p[2], s]; };
+  const hs = (HULLDEF[o.hull] || HULLDEF.speed).fxs;
+  const edge = () => { const u = 0.04 + R() * 0.92, s = R() < 0.5 ? -1 : 1; const p = hullPt(u, 1, s); return [p[0] * 1.04 * hs[0], p[1] + 0.05, p[2] * hs[1], s]; };
   while (n-- > 0) {
     if (id === 'flames' || id === 'x_inferno') {
       const [x, y, z, sd] = edge(), w = W(x, y, z), blue = id === 'x_inferno', k = R();
@@ -2727,7 +3157,16 @@ let ghostPick = null;   // a leaderboard ghost chosen to race against: { g, n, t
 let TUNE = Core.TIERS[0];
 let fromEditor = false;
 const H = 1 / 120;
-const physWorld = () => ({ obstacles: world.obstacles, channel: world.channel, chans: world.chans, limit: world.limit, cx: world.cx, cz: world.cz, ramps: world.ramps });
+const physWorld = () => ({ obstacles: world.obstacles, channel: world.channel, chans: world.chans, limit: world.limit, cx: world.cx, cz: world.cz, ramps: world.ramps, vents: world.vents });
+// touched the lava: a hiss, a burst of sparks, back to the last checkpoint
+function burned() {
+  const p = boat.pos;
+  for (let i = 0; i < 70; i++) { const a = Math.random() * 6.283, v = 2 + Math.random() * 6; fxSpawn(FX.A, p.x, p.y + 0.3, p.z, Math.cos(a) * v, 3 + Math.random() * 7, Math.sin(a) * v, 0.9 + Math.random() * 0.6, 0.35, 0.2, 1, 0.45 + Math.random() * 0.4, 0.1, 1, -14); }
+  for (let i = 0; i < 26; i++) fxSpawn(FX.S, p.x + (Math.random() - 0.5) * 3, p.y + 0.5, p.z + (Math.random() - 0.5) * 3, 0, 2 + Math.random() * 2, 0, 1.6, 1.4, 1.6, 0.85, 0.85, 0.85, 0.5);
+  noiseHit(0.9, 2400, 0.9); noiseHit(0.5, 400, 0.6); beep(140, 0.4, 'sawtooth', 0.1); shake = Math.max(shake, 0.6);
+  flash('BURNED!', 'var(--bad)', 1300);
+  resetToCheckpoint();
+}
 function placeBoat(x, z, yaw) { boat = Core.makeBoat(x, z, yaw); boat.pos.y = waveH(x, z, simT); prevPos = { ...boat.pos }; camSnap = true; }
 function loadMap(i) {
   mapIdx = i; buildWorld(i); P.length = 0;
@@ -2856,6 +3295,7 @@ function finishRace() {
   if (!adminRun && allGold && !DATA.unlocked[champ.id]) { DATA.unlocked[champ.id] = true; unlocked.push(champ); unlocked.push({ name: "Champion's Gold flag" }); }
   // effect achievements (real runs only: no admin boost, no custom maps)
   if (!adminRun && !meta.custom) {
+    DATA.stats.fin = (DATA.stats.fin || 0) + 1;
     if (tier === 3 && E().engine === 0 && TUNE === Core.TIERS[0]) DATA.stats.stockGold[meta.id] = true;
     if (t < tg.rec) DATA.stats.recs[meta.id] = true;
   }
@@ -2894,12 +3334,13 @@ function finishRace() {
   if (ups.length) setTimeout(() => beep(1760, 0.3), 1600);
   refreshLabels(); renderMaps();
 }
+const myTier = () => clamp(E().engine | 0, 0, 4);
 function recordOf(m) {
-  const tg = targets(m), r = DATA.runs[runKey(m)] || {}, wb = worldBest(runKey(m));
+  const key = runKey(m), tier = myTier(), tg = targets(m), r = DATA.runs[key] || {}, tb = NET.tboards[key + '|' + tier], wb = tb && tb.list.length ? tb.list[0] : null;
   let t = m.custom ? Infinity : tg.rec, by = m.custom ? '—' : tg.by;
   if (wb && wb.t < t) { t = wb.t; by = wb.n; }
-  if (r.best && r.best < t) { t = r.best; by = me() ? me().name : 'You'; }
-  return { t, by };
+  if (r.best && (r.e | 0) === tier && r.best < t) { t = r.best; by = me() ? me().name : 'You'; }
+  return { t, by, tier };
 }
 function refreshLabels() {
   const meta = MAPS[mapIdx], r = DATA.runs[runKey(meta)];
@@ -2933,7 +3374,7 @@ function renderMaps() {
       <div class="stars">${starsHTML(r.medal || 0)}</div>
       <div class="tm"><span style="color:var(--gold)">★</span> ${fmt(tg.g)} · <span style="color:var(--silver)">★</span> ${fmt(tg.s)} · <span style="color:var(--bronze)">★</span> ${fmt(tg.b)}</div>
       <div class="tm">Best <b>${fmt(r.best)}</b>${lapsFor(m) > 1 ? ` · ${lapsFor(m)} laps` : ''}</div>
-      <div class="tm">Record <b>${fmt(recordOf(m).t)}</b> · ${esc(recordOf(m).by)}</div>
+      <div class="tm">Record <span class="tier" style="background:${hexc(ENG_COL[myTier()])}" title="your engine's leaderboard">T${myTier() + 1}</span> <b>${fmt(recordOf(m).t)}</b> · ${esc(recordOf(m).by)}</div>
       <div class="rw ${got ? 'ok' : ''}">${got ? '✓' : '🔒'} Gold reward: ${skin.name}</div></div>`;
   }).join('') + (MAPS[mapIdx].custom ? `<div class="map sel" data-i="${mapIdx}"><span class="tag">CUSTOM</span><div class="nm">${esc(MAPS[mapIdx].name)}</div><div class="ds">Your map${MAPS[mapIdx].code ? ' · code ' + MAPS[mapIdx].code : ''}</div><div class="tm">Best <b>${fmt((DATA.runs[runKey(MAPS[mapIdx])] || {}).best)}</b></div></div>` : '')
     + `<div class="map add" id="mapAdd"><div class="nm">🛠 CUSTOM MAPS</div><div class="ds">Build your own course, or load a friend's by code</div></div>`;
@@ -2948,6 +3389,7 @@ function itemState(cat, it) {
   let own;
   if (it.excl) return { own: ownsExcl(cat, it.id), lvlLock: false, cost: 0, canBuy: false, excl: true };
   if (cat === 'fx') return { own: it.id === 'none' || fxEarned(it.id) || owns('fx', it.id), lvlLock: false, cost: 0, canBuy: false };
+  if (cat === 'hull') { const own = !it.cost || owns('hull', it.id), ok = chalDone(it), c = it.cost || 0; return { own, lvlLock: !own && it.lvl > L, cost: c, chal: ok, canBuy: !own && ok && (it.lvl || 0) <= L && cash() >= c }; }
   if (cat === 'eng') own = owns('eng', it.k);
   else if (it.unlock === 'all') own = !!DATA.unlocked.champion || ADM.all || owns(cat, it.id);
   else if (it.unlock) own = !!DATA.unlocked[it.id] || ADM.all || owns(cat, it.id);
@@ -2966,8 +3408,9 @@ function itemCard(cat, it, equipped, sw, extra = '') {
   else if (it.req) { const r = FXREQ[it.req]; right = `<span class="price lk">🔒 ${Math.min(r.have(), r.need)}/${r.need}</span>`; }
   else if (it.unlock) right = `<span class="price lk">🔒</span>`;
   else if (st.lvlLock) right = `<span class="price lk">🔒 LV ${it.lvl}</span>`;
+  else if (cat === 'hull' && !st.chal) right = `<span class="price lk">🔒 ${money(st.cost)}</span>`;
   else right = `<span class="price ${st.canBuy ? '' : 'lk'}">${gPending === cat + ':' + (it.id ?? it.k) ? 'CONFIRM?' : money(st.cost)}</span>`;
-  const sub = equipped ? (it.excl ? '👑 Exclusive · equipped' : 'Equipped') : st.own ? (it.excl ? '👑 Exclusive · tap to equip' : 'Tap to equip') : it.req ? '🔒 ' + FXREQ[it.req].text(Math.min(FXREQ[it.req].have(), FXREQ[it.req].need)) : it.excl ? '👑 Admin exclusive — can\'t be bought' : it.unlock ? '🔒 ' + req : st.lvlLock ? `Reach mastery ${it.lvl}, then ${money(st.cost)}` : st.canBuy ? 'Tap to buy' : `Need ${money(Math.max(1, st.cost - cash()))} more`;
+  const sub = equipped ? (it.excl ? '👑 Exclusive · equipped' : 'Equipped') : st.own ? (it.excl ? '👑 Exclusive · tap to equip' : 'Tap to equip') : it.req ? '🔒 ' + FXREQ[it.req].text(Math.min(FXREQ[it.req].have(), FXREQ[it.req].need)) : it.excl ? '👑 Admin exclusive — can\'t be bought' : it.unlock ? '🔒 ' + req : st.lvlLock ? `Reach mastery ${it.lvl}, then ${money(st.cost)}` : cat === 'hull' && !st.chal ? 'Finish the challenges below to unlock' : st.canBuy ? 'Tap to buy' : `Need ${money(Math.max(1, st.cost - cash()))} more`;
   return `<div class="skin ${st.own ? '' : 'lock'} ${equipped ? 'sel' : ''} ${it.excl ? 'excl' : ''} ${gPending === cat + ':' + (it.id ?? it.k) ? 'buy' : ''}" data-cat="${cat}" data-id="${it.id ?? it.k}">
     ${sw}<div style="min-width:0"><b>${it.name}</b><small>${sub}</small>${extra}</div>${right}</div>`;
 }
@@ -2976,7 +3419,7 @@ function itemCard(cat, it, equipped, sw, extra = '') {
 const exclOrder = (cat, list) => [...list.filter(x => x.excl && ownsExcl(cat, x.id)), ...list.filter(x => !x.excl)];
 function swatches(key, list, cur) { return `<div class="swrow">${list.map((c, i) => `<button data-sw="${key}" data-v="${key === 'tone' ? i : c}" class="${(key === 'tone' ? i : c) === cur ? 'on' : ''}" style="background:${hexc(c)}"></button>`).join('')}</div>`; }
 function renderSkins() {
-  const tabs = [['paint', 'PAINT'], ['driver', 'DRIVER'], ['flag', 'FLAG'], ['fx', 'EFFECTS'], ['eng', 'ENGINE']];
+  const tabs = [['hull', 'BOAT'], ['paint', 'PAINT'], ['driver', 'DRIVER'], ['flag', 'FLAG'], ['fx', 'EFFECTS'], ['eng', 'ENGINE']];
   $('gTabs').innerHTML = tabs.map(([k, l]) => `<button class="chip" data-t="${k}" style="${k === gTab ? 'background:var(--accent);color:#14202a' : ''}">${l}</button>`).join('');
   $('gTabs').querySelectorAll('button').forEach(b => b.onclick = () => { gTab = b.dataset.t; gPending = null; renderSkins(); });
   const L = DATA.look;
@@ -2984,6 +3427,16 @@ function renderSkins() {
   if (gTab === 'paint') {
     $('gSub').innerHTML = 'Buy paint jobs with race money, or earn the special ones with a <b style="color:var(--gold)">GOLD</b> medal.';
     h = exclOrder('paint', SKINS).map(s => itemCard('paint', s, DATA.skin === s.id, s.anim === 'rainbow' ? '<div class="sw" style="background:conic-gradient(#ff3d3d,#ffd23f,#3ddc84,#12d6ff,#3d7bff,#b05cff,#ff3d9a,#ff3d3d)"></div>' : `<div class="sw" style="background:linear-gradient(135deg,${hexc(s.hull)} 0 55%,${hexc(s.stripe)} 55% 68%,${hexc(s.bottom)} 68%)"></div>`)).join('');
+  } else if (gTab === 'hull') {
+    const lv = levelOf(totalXp()).L;
+    $('gSub').innerHTML = `Whole new boats. They all handle the same — your engine decides speed. Unlocking one takes mastery, money <b>and</b> challenges (you're level <b>${lv}</b>).`;
+    const ic = { speed: '🚤', patrol: '🪖', yacht: '🛥', airboat: '🌀', x_titanic: '🚢' };
+    h = exclOrder('hull', HULLS).map(x => {
+      const st = itemState('hull', x), ch = challenges(x);
+      const list = !st.own && ch.length ? `<div class="chal">${[[`Mastery level ${x.lvl}`, lv >= x.lvl, `${Math.min(lv, x.lvl)}/${x.lvl}`], [`${money(x.cost)} to buy it`, cash() >= x.cost, '']]
+        .map(([t, ok, p]) => `<span class="${ok ? 'ok' : ''}">${ok ? '✓' : '○'} ${t} <i>${p}</i></span>`).join('')}${ch.map(c => { const hv = Math.min(c.have(), c.need), ok = hv >= c.need; return `<span class="${ok ? 'ok' : ''}">${ok ? '✓' : '○'} ${c.text} <i>${hv}/${c.need}</i></span>`; }).join('')}</div>` : '';
+      return itemCard('hull', x, (L.hull || 'speed') === x.id, `<div class="sw" style="display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(255,255,255,.08)">${ic[x.id] || '🚤'}</div>`, `<small style="display:block">${x.desc}</small>${list}`);
+    }).join('');
   } else if (gTab === 'driver') {
     $('gSub').innerHTML = 'Your racer — everyone in your lobby sees this.';
     h = `<div class="sect">HELMET</div>` + exclOrder('helmet', HELMETS).map(x => itemCard('helmet', x, L.helmet === x.id, `<div class="sw" style="background:${hexc(L.hc)};display:flex;align-items:center;justify-content:center;font-size:20px">⛑</div>`)).join('')
@@ -3008,7 +3461,7 @@ function renderSkins() {
         `<small style="display:block">${ENGINES[k].desc}</small>${bar('THRUST', 30 + (T.thrust - 1) * 300)}${bar('TOP', 30 + (T.top - 1) * 450)}${bar('BOOST', 30 + (9 - T.cd) * 30)}`);
     }).join('');
   }
-  $('skins').innerHTML = h;
+  $('skins').innerHTML = h; $('skins').classList.toggle('one', gTab === 'hull');
   $('skins').querySelectorAll('.skin').forEach(el => el.onclick = () => garageClick(el.dataset.cat, el.dataset.id));
   $('skins').querySelectorAll('[data-sw]').forEach(el => el.onclick = () => { DATA.look[el.dataset.sw] = +el.dataset.v; lookChanged(); });
   garageFocus = gTab;
@@ -3016,7 +3469,7 @@ function renderSkins() {
 }
 function lookChanged() { save(); applyMyLook(); renderSkins(); pushProfile(); if (LOBBY.code) lobbyPushMe(); }
 function garageClick(cat, id) {
-  const list = { paint: SKINS, helmet: HELMETS, visor: VISORS, flag: FLAGS, fx: EFFECTS }[cat];
+  const list = { paint: SKINS, helmet: HELMETS, visor: VISORS, flag: FLAGS, fx: EFFECTS, hull: HULLS }[cat];
   const it = cat === 'eng' ? { k: +id, cost: ENGINES[+id].cost, lvl: ENGINES[+id].lvl } : list.find(x => x.id === id);
   const st = itemState(cat, it), key = cat + ':' + id;
   if (!st.own) {
@@ -3030,7 +3483,7 @@ function garageClick(cat, id) {
     gPending = null; beep(1200, 0.1); beep(1600, 0.2);
   }
   gPending = null;
-  if (cat === 'paint') DATA.skin = id; else if (cat === 'eng') E().engine = +id; else DATA.look[cat] = id;
+  if (cat === 'paint') DATA.skin = id; else if (cat === 'eng') { E().engine = +id; refreshBoards(true); } else DATA.look[cat] = id;
   lookChanged();
 }
 let garageFocus = 'paint';
@@ -3180,7 +3633,12 @@ function updateCamera(dt, speed) {
     const cv = camera.view && camera.view.enabled ? camera.view : null;
     if ((cv ? cv.offsetX : 0) !== vx || (cv ? cv.offsetY : 0) !== vy || (cv && cv.fullWidth !== innerWidth)) { if (vx || vy) camera.setViewOffset(innerWidth, innerHeight, vx, vy, innerWidth, innerHeight); else camera.clearViewOffset(); }
     if (garage) {
-      const [fx, fy, fz, rad, hh] = GFOCUS[garageFocus] || GFOCUS.paint;
+      const hd = HULLDEF[boatMesh.userData.hull] || HULLDEF.speed, ck = hd.cam;
+      let [fx, fy, fz, rad, hh] = GFOCUS[garageFocus] || GFOCUS.paint;
+      if (garageFocus === 'driver' && hd.hp) { fx = hd.hp.x; fy = hd.hp.y - 0.08; fz = hd.hp.z + 0.1; }
+      else if (garageFocus === 'flag' && hd.flag) { fx = hd.flag.x; fy = hd.flag.y + 0.4; fz = hd.flag.z; }
+      else if (garageFocus === 'driver' && hd.noDriver) { fx = 0; fy = 2.5; fz = 0; rad = 7 * ck; hh = 3 * ck; }
+      else if (garageFocus !== 'driver' && garageFocus !== 'flag') { rad *= ck; hh *= ck; fy *= ck; }
       const q = new THREE.Quaternion(b.q.x, b.q.y, b.q.z, b.q.w);
       const fp = new THREE.Vector3(fx, fy, fz).applyQuaternion(q).add(bp);
       const yaw = Math.atan2(f.x, f.z), oa = garageFocus === 'driver' ? yaw + 0.55 + Math.sin(orbit * 3) * 0.45 : garageFocus === 'flag' || garageFocus === 'eng' ? yaw + Math.sin(orbit * 3) * 1.1 : orbit;
@@ -3194,10 +3652,12 @@ function updateCamera(dt, speed) {
     camSnap = false;
   } else if (camMode === 2 && !spec) {
     const q = new THREE.Quaternion(b.q.x, b.q.y, b.q.z, b.q.w);
-    camera.position.set(0.5, 1.45, HZ(0.5) + 1.3).applyQuaternion(q).add(bp);
-    lookV.set(0.5, 1.2, -10).applyQuaternion(q).add(bp); camera.up.set(0, 1, 0).applyQuaternion(q); camera.lookAt(lookV);
+    const hd = HULLDEF[boatMesh.userData.hull] || HULLDEF.speed, eye = hd.hp ? [hd.hp.x, hd.hp.y + 0.22, hd.hp.z + 0.1] : hd.noDriver ? [0, 3.3, -4.6] : [0.5, 1.45, HZ(0.5) + 1.3];
+    camera.position.set(eye[0], eye[1], eye[2]).applyQuaternion(q).add(bp);
+    lookV.set(eye[0], eye[1] - 0.25, -10).applyQuaternion(q).add(bp); camera.up.set(0, 1, 0).applyQuaternion(q); camera.lookAt(lookV);
   } else {
-    const dist = camMode === 0 ? 10.5 + speed * 0.06 : 19, hgt = camMode === 0 ? 3.6 : 7.5;
+    const ck = spec ? 1 : (HULLDEF[boatMesh.userData.hull] || HULLDEF.speed).cam;
+    const dist = (camMode === 0 ? 10.5 + speed * 0.06 : 19) * ck, hgt = (camMode === 0 ? 3.6 : 7.5) * (0.6 + 0.4 * ck);
     tmpV.copy(bp).addScaledVector(camDir, -dist); tmpV.y = bp.y + hgt;
     if (camSnap) camera.position.copy(tmpV); else camera.position.lerp(tmpV, 1 - Math.exp(-7 * dt));
     lookV.copy(bp).addScaledVector(camDir, 7); lookV.y += 1.3; camera.lookAt(lookV);
@@ -3228,7 +3688,7 @@ function updateGhost() {
 
 // ================= online (Firebase Realtime Database over REST + live stream) =================
 const DB = ONLINE_DB.replace(/\/+$/, '');
-const NET = { on: !!DB, status: DB ? 'connecting' : 'off', peers: {}, es: null, liveMap: null, sendT: 0, sending: false, boards: {}, first: true, joinedAt: 0, count: 0 };
+const NET = { on: !!DB, status: DB ? 'connecting' : 'off', peers: {}, es: null, liveMap: null, sendT: 0, sending: false, boards: {}, tboards: {}, first: true, joinedAt: 0, count: 0 };
 const cyrb53 = (str, seed = 0) => { let h1 = 0xdeadbeef ^ seed, h2 = 0x41c6ce57 ^ seed; for (let i = 0; i < str.length; i++) { const ch = str.charCodeAt(i); h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677); } h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909); h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909); return 4294967296 * (2097151 & h2) + (h1 >>> 0); };
 const nameKey = n => n.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_');
 function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
@@ -3343,7 +3803,7 @@ function mergeProfile(p) {
   if (p.quests && typeof p.quests === 'object') { const Q = ensureQuests(), P = p.quests;
     if (P.day === Q.day && Array.isArray(P.list)) Q.list.forEach((q, i) => { const o = P.list[i]; if (o && o.t === q.t) { q.prog = Math.max(q.prog, +o.prog || 0); q.done = q.done || !!o.done; } });
     if (P.week === Q.week && P.weekly && P.weekly.t === Q.weekly.t) { Q.weekly.prog = Math.max(Q.weekly.prog, +P.weekly.prog || 0); Q.weekly.done = Q.weekly.done || !!P.weekly.done; Q.weekly.seen = [...new Set([...(Q.weekly.seen || []), ...(P.weekly.seen || [])])]; } }
-  if (p.stats && typeof p.stats === 'object') { const a = DATA.stats, b = p.stats; Object.assign(a.stockGold, b.stockGold || {}); Object.assign(a.recs, b.recs || {}); Object.assign(a.fxSeen, b.fxSeen || {}); a.air = Math.max(a.air, +b.air || 0); a.wins = Math.max(a.wins, +b.wins || 0); a.bestStreak = Math.max(a.bestStreak, +b.bestStreak || 0); }
+  if (p.stats && typeof p.stats === 'object') { const a = DATA.stats, b = p.stats; Object.assign(a.stockGold, b.stockGold || {}); Object.assign(a.recs, b.recs || {}); Object.assign(a.fxSeen, b.fxSeen || {}); a.air = Math.max(a.air, +b.air || 0); a.wins = Math.max(a.wins, +b.wins || 0); a.fin = Math.max(a.fin || 0, +b.fin || 0); a.qd = Math.max(a.qd || 0, +b.qd || 0); a.bestStreak = Math.max(a.bestStreak, +b.bestStreak || 0); }
   applyMyLook();
   save();
 }
@@ -3355,7 +3815,7 @@ async function pushProfile() {
 }
 // ---- admin panel hooks: gifts, speed boost, resets, bans and event settings (polled every few seconds) ----
 function ownedNow(cat, id) {
-  const list = { paint: SKINS, helmet: HELMETS, visor: VISORS, flag: FLAGS, fx: EFFECTS }[cat];
+  const list = { paint: SKINS, helmet: HELMETS, visor: VISORS, flag: FLAGS, fx: EFFECTS, hull: HULLS }[cat];
   if (cat === 'eng') return itemState('eng', { k: id, cost: 1, lvl: 0 }).own;
   const it = list.find(x => x.id === id); return !!it && itemState(cat, it).own;
 }
@@ -3363,7 +3823,7 @@ function fixEquipped() {
   let ch = false;
   if (!ownedNow('paint', DATA.skin)) { DATA.skin = 'classic'; ch = true; }
   if (!ownedNow('eng', E().engine)) { let k = 0; for (let i = 0; i < 5; i++) if (ownedNow('eng', i)) k = i; E().engine = k; ch = true; }
-  for (const [cat, d] of [['helmet', 'open'], ['visor', 'smoke'], ['flag', 'check'], ['fx', 'none']]) if (!ownedNow(cat, DATA.look[cat])) { DATA.look[cat] = d; ch = true; }
+  for (const [cat, d] of [['helmet', 'open'], ['visor', 'smoke'], ['flag', 'check'], ['fx', 'none'], ['hull', 'speed']]) if (!ownedNow(cat, DATA.look[cat])) { DATA.look[cat] = d; ch = true; }
   return ch;
 }
 function resetProgress(rs) {
@@ -3574,7 +4034,7 @@ function worldBest(key) { const b = NET.boards[key]; return b && b.list.length ?
 let boardsBusy = false;
 async function refreshBoards(force) {
   if (!NET.on || boardsBusy) return; boardsBusy = true;
-  try { await Promise.all(MAPS.filter(m => !m.custom || m.code).map(m => fetchBoard(runKey(m), force))); } finally { boardsBusy = false; }
+  try { const tier = myTier(); await Promise.all(MAPS.filter(m => !m.custom || m.code).map(async m => { const key = runKey(m); await fetchBoard(key, force); const c = NET.tboards[key + '|' + tier]; if (force || !c || performance.now() - c.at > 20000) { const list = await fetchTierBoard(key, tier); if (list) NET.tboards[key + '|' + tier] = { list, at: performance.now() }; } })); } finally { boardsBusy = false; }
   renderMaps(); refreshLabels();
 }
 async function submitRun(key, t, ghost, sp) {
@@ -3783,7 +4243,7 @@ function raceGhost(mi, pick) {
   if (mi !== mapIdx) loadMap(mi);
   renderMaps(); startRace();
 }
-$('boardBtn').onclick = () => { boardMap = mapIdx; $('menu').classList.add('hidden'); $('board').classList.remove('hidden'); renderBoard(); };
+$('boardBtn').onclick = () => { boardMap = mapIdx; boardTier = myTier(); $('menu').classList.add('hidden'); $('board').classList.remove('hidden'); renderBoard(); };
 $('bDone').onclick = () => { $('board').classList.add('hidden'); $('menu').classList.remove('hidden'); };
 
 // ================= lobbies: race your friends (Firebase REST + event stream) =================
@@ -4082,6 +4542,7 @@ function lobbyDone(place, t, laps) {
   if (t != null) pay = payout(meta, t, { place, field });
   else { const diff = DIFF[meta.id] || 1, c = Math.round(28 * diff * Math.max(laps, 0)) + Math.round([0, 100, 60, 35, 20][place] || 10) * (field > 1 ? 1 : 0), x = 25 * Math.max(laps, 0) + 15; pay = { cash: meta.custom ? 0 : c, xp: x, lines: [[laps ? `Survived ${laps} lap${laps > 1 ? 's' : ''} · P${place} of ${field}` : `Did not finish · P${place}`, meta.custom ? 0 : c, x]] }; }
   if (place === 1 && t != null && field >= 2 && !boosted() && !LOBBY.out) DATA.stats.wins++;
+  if (t != null && !boosted() && !LOBBY.out && !MAPS[mapIdx].custom) DATA.stats.fin = (DATA.stats.fin || 0) + 1;
   LOBBY.pay = pay; LOBBY.ups = award(pay); checkFx();
   qEvent('lobby', { custom: meta.custom, finished: t != null, place, field, map: meta.id, stock: !LOBBY.eq && E().engine === 0 || LOBBY.eq });
   if (LOBBY.out) { flash('KNOCKED OUT', 'var(--bad)', 1800); beep(180, 0.6, 'sawtooth', 0.2); }
@@ -4451,6 +4912,7 @@ function frame(now) {
     if (state === 'racing') {
       raceT += H;
       handleEvents(Core.raceUpdate(R, world, prevPos, boat.pos));
+      if (world.lava && state === 'racing' && Core.lavaHit(world, boat)) { burned(); break; }
       recT += H; if (recT >= 0.1 - 1e-9) { recT -= 0.1; const b = boat; rec.push([r3(b.pos.x), r3(b.pos.y), r3(b.pos.z), r3(b.q.x), r3(b.q.y), r3(b.q.z), r3(b.q.w)]); }
       if (state !== 'racing') break;
     }
@@ -4471,7 +4933,7 @@ function frame(now) {
   boatMesh.userData.motor.rotation.y = b.steer * 0.55;
   boatMesh.userData.prop.rotation.z += dt * b.rpm * 60 * Math.sign(b.throttle || 1);
   boatMesh.userData.speed = speed; animateFlags(simT); animateLooks(simT);
-  { const wh = waveH(b.pos.x, b.pos.z, simT), hgt = Math.max(0, b.pos.y - wh); blob.position.set(b.pos.x, wh + 0.05, b.pos.z); const bf0 = Core.qrot(b.q, { x: 0, y: 0, z: -1 }); blob.rotation.set(-Math.PI / 2, Math.atan2(-bf0.x, -bf0.z), 0); blob.material.opacity = Math.max(0, 1 - hgt / 8); blob.scale.setScalar(1 + hgt * 0.08); }
+  { const wh = waveH(b.pos.x, b.pos.z, simT), hgt = Math.max(0, b.pos.y - wh); blob.position.set(b.pos.x, wh + 0.05, b.pos.z); const bf0 = Core.qrot(b.q, { x: 0, y: 0, z: -1 }); blob.rotation.set(-Math.PI / 2, Math.atan2(-bf0.x, -bf0.z), 0); blob.material.opacity = Math.max(0, 1 - hgt / 8); const bs = (HULLDEF[boatMesh.userData.hull] || HULLDEF.speed).blob; blob.scale.set(bs[0] * (1 + hgt * 0.08), bs[1] * (1 + hgt * 0.08), 1); }
   if (b.boostT > 0 && b.propWet) { const p0 = Core.qrot(b.q, { x: 0, y: -0.2, z: 3.1 }); for (let i = 0; i < 3; i++) spawn(b.pos.x + p0.x, b.pos.y + p0.y, b.pos.z + p0.z, (Math.random() - .5) * 3 + b.vel.x * 0.2, 2 + Math.random() * 3, (Math.random() - .5) * 3 + b.vel.z * 0.2, 0.7, 0.5, 0); }
   // keep the shadow camera centred on the action
   const fc = spec && NET.peers[spec] ? NET.peers[spec].pos : b.pos;
@@ -4491,8 +4953,10 @@ function frame(now) {
   if (slam > 3) { for (let i = 0; i < Math.min(30, slam * 4); i++) { const s = Math.random() < 0.5 ? -1 : 1; const p = qv(s * 0.7, -0.1, -1.6 + Math.random()); spawn(p.x, p.y, p.z, rt.x * s * (3 + Math.random() * 4) + b.vel.x * 0.6, 2 + Math.random() * 3, rt.z * s * (3 + Math.random() * 4) + b.vel.z * 0.6, 1.1, 0.45 + Math.random() * 0.4, 0); } }
   updateParticles(dt, simT);
   // boat effects: yours, plus other racers' (when close enough to see)
-  if (boatMesh.visible && DATA.look.fx && DATA.look.fx !== 'none') { boat.fxo = Object.assign(boat.fxo || {}, { pos: boatMesh.position, q: boat.q, vx: b.vel.x, vz: b.vel.z, stripe: (SKINS.find(k => k.id === DATA.skin) || SKINS[0]).stripe }); fxEmit(DATA.look.fx, boat.fxo, dt, simT); }
-  for (const pid in NET.peers) { const pr = NET.peers[pid]; if (!pr.mesh || !pr.mesh.visible || !pr.look || !pr.look.fx || pr.look.fx === 'none' || pr.pos.distanceTo(camera.position) > 160) continue; pr.fxo = pr.fxo || {}; Object.assign(pr.fxo, { pos: pr.pos, q: pr.q, vx: pr.v[0], vz: pr.v[1], stripe: (SKINS.find(k => k.id === pr.look.skin) || SKINS[0]).stripe }); fxEmit(pr.look.fx, pr.fxo, dt, simT); }
+  if (boatMesh.visible && DATA.look.fx && DATA.look.fx !== 'none') { boat.fxo = Object.assign(boat.fxo || {}, { pos: boatMesh.position, q: boat.q, vx: b.vel.x, vz: b.vel.z, hull: boatMesh.userData.hull, stripe: (SKINS.find(k => k.id === DATA.skin) || SKINS[0]).stripe }); fxEmit(DATA.look.fx, boat.fxo, dt, simT); }
+  if (boatMesh.visible) hullSmoke(boatMesh, b.q, dt);
+  for (const pid in NET.peers) { const pr = NET.peers[pid]; if (pr.mesh && pr.mesh.visible && pr.pos.distanceTo(camera.position) < 220) hullSmoke(pr.mesh, pr.q, dt); }
+  for (const pid in NET.peers) { const pr = NET.peers[pid]; if (!pr.mesh || !pr.mesh.visible || !pr.look || !pr.look.fx || pr.look.fx === 'none' || pr.pos.distanceTo(camera.position) > 160) continue; pr.fxo = pr.fxo || {}; Object.assign(pr.fxo, { pos: pr.pos, q: pr.q, vx: pr.v[0], vz: pr.v[1], hull: pr.mesh.userData.hull, stripe: (SKINS.find(k => k.id === pr.look.skin) || SKINS[0]).stripe }); fxEmit(pr.look.fx, pr.fxo, dt, simT); }
   fxUpdate(dt);
   // world animation
   for (const o of W3.bobbers) {
@@ -4504,7 +4968,7 @@ function frame(now) {
   for (const im of W3.inst) im.instanceMatrix.needsUpdate = true;
   for (const g of W3.rings) { g.m.position.set(g.r.x, waveH(g.r.x, g.r.z, simT) + 2.6, g.r.z); g.m.rotation.y = g.r.yaw + simT * 0.6; }
   for (const bm of W3.beacons) bm.rotation.y = simT * 0.8;
-  updateSwamp(dt);
+  updateSwamp(dt); updateMagma(dt);
   if (W3.rain) {
     const rn = W3.rain, cp = camera.position;
     for (let k = 0; k < rn.drops.length; k++) {
