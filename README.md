@@ -14,7 +14,7 @@ A browser powerboat racing game in a single file: open `riptide.html`.
 On touch screens the ⚡ button is boost.
 
 ## What's in the game
-- **Six maps**: Harbor Point, Red Rock Canyon, Coral Lagoon, Storm Point, **Breakers Bay** (a stunt circuit with huge swells and kicker ramps, where clean landings refill your boost), and **Gator Bayou**.
+- **Seven maps**: Harbor Point, Red Rock Canyon, Coral Lagoon, Storm Point, **Breakers Bay** (a stunt circuit with huge swells and kicker ramps, where clean landings refill your boost), and **Gator Bayou**.
 - **Gator Bayou** is a dark, foggy cypress swamp sprint. The channel splits twice, so you pick your route:
   - First split: Cypress Run (wide and long), Root Tunnel (tight and short, full of trunks) or Gator Bend (log jumps and gators).
   - Second split: Sunken Village (under the stilt shacks) or Hollow Log (drive through a giant fallen tree).
@@ -77,4 +77,15 @@ Vice admins can never unlock everything, ban, reset progress, rename, give exclu
 - **Online now**: the home screen lists who's playing, which map they're on, and whether they're in a lobby. Use GO TO MAP to switch to a friend's map, or JOIN LOBBY to join their lobby.
 - **Quests** finished during a race no longer interrupt you. The pop-up waits until you're back on the main menu.
 - **Change PIN** (admin only): makes a fresh sign-in for the racer with a new PIN and moves all their progress onto it. Every device using the old PIN is signed out. PINs are never stored, so they can't be looked up, only replaced.
+
+## Magma Rift, new boats, engine leaderboards
+
+- **Magma Rift** is a night sprint down a volcanic rift, and the hardest map.
+  - Three lava gaps (16, 20 and 24 m) have to be jumped off basalt ramps. Touch lava and you burn back to the last checkpoint.
+  - The lava tube has steam vents that blast on a beat. The other route crosses basalt flats.
+  - A tight hairpin gorge leads to the finish under an erupting volcano.
+  - Gold unlocks the Lava Flow paint.
+- **Boats** (Garage → BOAT): Patrol Boat, Mini Yacht and Swamp Airboat. Each needs mastery, money and challenges (races finished, medals, quests completed, airtime). All boats handle the same, because engines decide speed.
+- **Titanic**: a 16 m ocean liner with smoking funnels. It's admin-exclusive and given from the admin panel's Exclusives box. It completes every map like any other boat.
+- **Engine leaderboards**: the home screen records and the leaderboard default to the engine you have equipped.
 
