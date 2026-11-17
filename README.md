@@ -67,7 +67,7 @@ You switch each ability on or off per friend:
 
 Vice admins can never unlock everything, ban, reset progress, rename, give exclusives or engines, take things away, change event settings or edit times. The database rules enforce this, and every vice action must write a server-timestamped entry to `vlog`. Those entries show up in your Activity Log. You can remove a vice admin, or pause all of them, at any time.
 
-Vice admins can't boost, gift or give items to themselves or to each other.
+Vice admins can give speed boosts to anyone, including themselves (boosted runs never reach the leaderboard). They can't give money, mastery or items to themselves or to each other.
 
 To clean up after vice admins, use these buttons in the Vice Admins tab:
 
