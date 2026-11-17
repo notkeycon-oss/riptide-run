@@ -144,9 +144,10 @@ const pub = async path => { const r = await fetch(`${DB}/${path}.json`); return 
 const SV = { '.sv': 'timestamp' };
 function say(t, ok = true) { $('flashMsg').textContent = t; $('flashMsg').className = 'msg ' + (ok ? 'ok' : 'bad'); }
 // every vice action is one write: the change itself + a new entry in your activity log (the database refuses it otherwise)
-async function act(updates, text) {
+// "x" records what the owner needs to undo it later
+async function act(updates, text, x) {
   const k = 'k' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  updates[`vlog/${A.uid}/${k}`] = { t: SV, a: text, n: ME.name };
+  updates[`vlog/${A.uid}/${k}`] = Object.assign({ t: SV, a: text, n: ME.name }, x ? { x } : {});
   updates[`vlast/${A.uid}`] = { t: SV, k };
   try { await db('', 'PATCH', updates); return true; }
   catch (e) { await refreshMe(); say(e.message === 'DENIED' ? "Not allowed — the owner may have changed what you can do." : "Couldn't save: " + e.message, false); return false; }
@@ -233,18 +234,19 @@ async function renderCard() {
   const id = sel, who = pname(id);
   const adm = async () => (await pub('adm/' + id)) || {};
   const withEp = (a, u) => { if (!a.ep) u[`adm/${id}/ep`] = Date.now(); return u; };
-  document.querySelectorAll('#pCard [data-a="msg"]').forEach(b => b.onclick = async () => { const t = $('vMsg').value.trim(); if (!t) return say('Type a message first.', false); if (await act({ [`msg/${id}`]: { t: SV, text: t, from: ME.name } }, `Messaged ${who}: "${t}"`)) { $('vMsg').value = ''; say('Message sent to ' + who + '.'); } });
-  document.querySelectorAll('#pCard [data-a="kick"]').forEach(b => b.onclick = async () => { const t = $('vMsg').value.trim(); if (!confirm(`Kick ${who}?`)) return; if (await act({ [`msg/${id}`]: Object.assign({ t: SV, text: t || 'Kicked by a vice admin.', from: ME.name, kick: true }) }, `Kicked ${who}${t ? ': "' + t + '"' : ''}`)) say('Kicked ' + who + '.'); });
-  document.querySelectorAll('#pCard [data-speed]').forEach(b => b.onclick = async () => { const m = +b.dataset.speed; if (await act(withEp(await adm(), { [`adm/${id}/speed`]: m }), m === 1 ? `Turned off ${who}'s speed boost` : `Gave ${who} a ×${m} speed boost`)) say(m === 1 ? 'Boost off for ' + who + '.' : `${who} has a ×${m} boost.`); });
+  document.querySelectorAll('#pCard [data-a="msg"]').forEach(b => b.onclick = async () => { const t = $('vMsg').value.trim(); if (!t) return say('Type a message first.', false); if (await act({ [`msg/${id}`]: { t: SV, text: t, from: ME.name } }, `Messaged ${who}: "${t}"`, { type: 'msg', p: id })) { $('vMsg').value = ''; say('Message sent to ' + who + '.'); } });
+  document.querySelectorAll('#pCard [data-a="kick"]').forEach(b => b.onclick = async () => { const t = $('vMsg').value.trim(); if (!confirm(`Kick ${who}?`)) return; if (await act({ [`msg/${id}`]: Object.assign({ t: SV, text: t || 'Kicked by a vice admin.', from: ME.name, kick: true }) }, `Kicked ${who}${t ? ': "' + t + '"' : ''}`, { type: 'kick', p: id })) say('Kicked ' + who + '.'); });
+  document.querySelectorAll('#pCard [data-speed]').forEach(b => b.onclick = async () => { const m = +b.dataset.speed, a = await adm(); if (await act(withEp(a, { [`adm/${id}/speed`]: m }), m === 1 ? `Turned off ${who}'s speed boost` : `Gave ${who} a ×${m} speed boost`, { type: 'speed', p: id, old: a.speed == null ? 1 : +a.speed })) say(m === 1 ? 'Boost off for ' + who + '.' : `${who} has a ×${m} boost.`); });
   document.querySelectorAll('#pCard [data-a="cash"],#pCard [data-a="xp"]').forEach(b => b.onclick = async () => {
     const k = b.dataset.a, n = Math.round(+$(k === 'cash' ? 'vCash' : 'vXp').value);
     if (!(n >= 1 && n <= MAXGIFT)) return say(`Pick an amount from 1 to ${MAXGIFT.toLocaleString()}.`, false);
     const a = await adm(), cur = +a[k] || 0;
-    if (await act(withEp(a, { [`adm/${id}/${k}`]: cur + n }), k === 'cash' ? `Gave ${who} ${money(n)}` : `Gave ${who} ${n.toLocaleString()} XP`)) say(k === 'cash' ? `Gave ${money(n)} to ${who}.` : `Gave ${n.toLocaleString()} XP to ${who}.`);
+    if (await act(withEp(a, { [`adm/${id}/${k}`]: cur + n }), k === 'cash' ? `Gave ${who} ${money(n)}` : `Gave ${who} ${n.toLocaleString()} XP`, { type: k, p: id, add: n })) say(k === 'cash' ? `Gave ${money(n)} to ${who}.` : `Gave ${n.toLocaleString()} XP to ${who}.`);
   });
   document.querySelectorAll('#pCard [data-a="item"]').forEach(b => b.onclick = async () => {
     const c = $('vCat').value, k = $('vItem').value, n = (ITEMS[c].find(x => x[0] === k) || [k, k])[1];
-    if (await act(withEp(await adm(), { [`adm/${id}/items/${c}/${k}`]: true }), `Gave ${who} the ${CATNAME[c].toLowerCase()} "${n}"`)) say(`Gave ${n} to ${who}.`);
+    const a = await adm(), had = !!(a.items && a.items[c] && a.items[c][k]);
+    if (await act(withEp(a, { [`adm/${id}/items/${c}/${k}`]: true }), `Gave ${who} the ${CATNAME[c].toLowerCase()} "${n}"`, { type: 'item', p: id, c, k, had })) say(`Gave ${n} to ${who}.`);
   });
 }
 
@@ -264,15 +266,16 @@ async function loadBoard() {
     const v = board[+b.dataset.del]; if (!confirm(`Delete ${v.n}'s ${fmt(v.t)} on ${key}? This also removes their ghost and the copy on their device.`)) return;
     // the overall board, every engine-tier board, the ghosts, the record ghost if it's theirs, and a note so their game drops its copy
     const u = { [`lb/${key}/${v.id}`]: null, [`gh/${key}/${v.id}`]: null, [`lbdel/${v.id}/${key}`]: Date.now() };
+    const before = { [`lb/${key}/${v.id}`]: await pub(`lb/${key}/${v.id}`), [`gh/${key}/${v.id}`]: await pub(`gh/${key}/${v.id}`) }; // kept so the owner can put it back
     const tiers = (await pub(`lbt/${key}`)) || {};
-    for (const tk in tiers) if (tiers[tk] && tiers[tk][v.id]) { u[`lbt/${key}/${tk}/${v.id}`] = null; u[`ght/${key}/${tk}/${v.id}`] = null; }
-    const wr = await pub('wr/' + key); if (wr && wr.n === v.n) u['wr/' + key] = null;
-    if (await act(u, `Deleted ${v.n}'s ${key} time (${fmt(v.t)})`)) { say(`Deleted ${v.n}'s time.`); loadBoard(); }
+    for (const tk in tiers) if (tiers[tk] && tiers[tk][v.id]) { u[`lbt/${key}/${tk}/${v.id}`] = null; u[`ght/${key}/${tk}/${v.id}`] = null; before[`lbt/${key}/${tk}/${v.id}`] = tiers[tk][v.id]; before[`ght/${key}/${tk}/${v.id}`] = await pub(`ght/${key}/${tk}/${v.id}`); }
+    const wr = await pub('wr/' + key); if (wr && wr.n === v.n) { u['wr/' + key] = null; before['wr/' + key] = wr; }
+    if (await act(u, `Deleted ${v.n}'s ${key} time (${fmt(v.t)})`, { type: 'lbdel', p: v.id, run: key, b: JSON.stringify(before) })) { say(`Deleted ${v.n}'s time.`); loadBoard(); }
   });
 }
 
 // ---- announcement ----
-$('annSend').onclick = async () => { const t = $('annText').value.trim(); if (!t) return say('Type the announcement first.', false); if (await act({ 'cfg/ann': { t: SV, text: t } }, `Announcement: "${t}"`)) { $('annText').value = ''; say('Announcement sent.'); } };
+$('annSend').onclick = async () => { const t = $('annText').value.trim(); if (!t) return say('Type the announcement first.', false); if (await act({ 'cfg/ann': { t: SV, text: t } }, `Announcement: "${t}"`, { type: 'ann', text: t })) { $('annText').value = ''; say('Announcement sent.'); } };
 
 // ---- my activity ----
 async function loadMine() {
