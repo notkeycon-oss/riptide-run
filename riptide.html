@@ -336,6 +336,7 @@ input.tx:focus{border-color:var(--accent)}
         <div class="set" style="margin:6px 0"><span>Mode</span><div class="seg" id="lrModes"></div></div>
         <div class="set" style="margin:6px 0" id="lrLapRow"><span>Laps</span><div class="seg" id="lrLaps"></div></div>
         <div class="set" style="margin:6px 0"><span>Engines</span><div class="seg" id="lrEq"></div></div>
+        <div class="set" style="margin:6px 0"><span>Bumping</span><div class="seg" id="lrCo"></div></div>
       </div>
       <div class="sub" id="lrInfo" style="margin:8px 0 0"></div>
       <button class="go" id="lrStart">START RACE</button>
@@ -618,6 +619,7 @@ const Core = (() => {
       if (world.obstacles) collide(b, world.obstacles);
       if (world.channel) channelCollide(b, world.channel);
       if (world.chans) chansCollide(b, world.chans);
+      if (world.boats) boatsCollide(b, world.boats);
       if (world.vents) for (const v of world.vents) { if (!ventOn(v, t)) continue; const dx = b.pos.x - v.x, dz = b.pos.z - v.z, d = Math.hypot(dx, dz); if (d > v.r) continue;
         const k = 1 - d / v.r; b.vel.y += 26 * k * dt; const sl = Math.exp(-2.4 * k * dt); b.vel.x *= sl; b.vel.z *= sl; b.w.z += (dx > 0 ? 1 : -1) * 0.8 * k * dt; }
       if (world.limit) {
@@ -655,6 +657,24 @@ const Core = (() => {
         const d2 = dx * dx + dz * dz; if (d2 >= rr * rr) continue;
         const d = Math.sqrt(d2) || 0.001;
         contact(b, r0, dx / d, dz / d, rr - d, 0.35);
+      }
+    }
+  }
+  // other racers' boats (lobby races): others = [{ x, z, q, vx, vz }]
+  function boatsCollide(b, others) {
+    for (const o of others) {
+      if (Math.abs(o.x - b.pos.x) > 9 || Math.abs(o.z - b.pos.z) > 9) continue;
+      const oc = BOAT_CIRCLES.map(cz => { const r = qrot(o.q, { x: 0, y: 0, z: cz }); return [o.x + r.x, o.z + r.z]; });
+      for (const cz of BOAT_CIRCLES) {
+        const r0 = qrot(b.q, { x: 0, y: 0, z: cz }), cx = b.pos.x + r0.x, cz2 = b.pos.z + r0.z;
+        for (const [ox, oz] of oc) {
+          const dx = cx - ox, dz = cz2 - oz, d2 = dx * dx + dz * dz, rr = 2 * BR; if (d2 >= rr * rr) continue;
+          const d = Math.sqrt(d2) || 0.001;
+          // work in the other boat's frame so the impulse uses the closing speed between the two boats
+          b.vel.x -= o.vx; b.vel.z -= o.vz;
+          contact(b, r0, dx / d, dz / d, (rr - d) * 0.5, -0.35);
+          b.vel.x += o.vx; b.vel.z += o.vz;
+        }
       }
     }
   }
@@ -1135,7 +1155,7 @@ const Core = (() => {
       waves: [[0.03, 26, 0.6, 0.0], [0.02, 12, 1.6, 1.7], [0.012, 6, -0.5, 4.0]], build: buildMagma },
   ];
 
-  return { makeRace, raceUpdate, raceTarget, waveH, setWaves, getWaves: () => W, step, makeBoat, chanQuery, qrot, qrotInv, qFromYaw, yawOfDir, MAPS, M, TIERS, rampAt, RAMP_BASE, rng, loopCheckpoints, gateBuoys, segDistFn, chansSD, chanAt, lavaHit, ventOn };
+  return { makeRace, raceUpdate, raceTarget, waveH, setWaves, getWaves: () => W, step, makeBoat, chanQuery, qrot, qrotInv, qFromYaw, yawOfDir, MAPS, M, TIERS, rampAt, RAMP_BASE, rng, loopCheckpoints, gateBuoys, segDistFn, chansSD, chanAt, lavaHit, ventOn, boatsCollide };
 })();
 if (typeof module !== 'undefined') module.exports = Core;
 
@@ -3166,7 +3186,14 @@ let ghostPick = null;   // a leaderboard ghost chosen to race against: { g, n, t
 let TUNE = Core.TIERS[0];
 let fromEditor = false;
 const H = 1 / 120;
-const physWorld = () => ({ obstacles: world.obstacles, channel: world.channel, chans: world.chans, limit: world.limit, cx: world.cx, cz: world.cz, ramps: world.ramps, vents: world.vents });
+const physWorld = () => ({ obstacles: world.obstacles, channel: world.channel, chans: world.chans, limit: world.limit, cx: world.cx, cz: world.cz, ramps: world.ramps, vents: world.vents, boats: rivalBoats() });
+function rivalBoats() {
+  if (!LOBBY.racing || !LOBBY.coll || LOBBY.out || LOBBY.fin != null || state !== 'racing') return null;
+  const out = [];
+  for (const pid in NET.peers) { const p = NET.peers[pid], d = p.d || {}; if (!p.mesh || !p.mesh.visible || d.o || d.f != null || d.rn !== LOBBY.round) continue;
+    out.push({ x: p.pos.x, z: p.pos.z, q: { x: p.q.x, y: p.q.y, z: p.q.z, w: p.q.w }, vx: +(p.v || [])[0] || 0, vz: +(p.v || [])[1] || 0 }); }
+  return out.length ? out : null;
+}
 // touched the lava: a hiss, a burst of sparks, back to the last checkpoint
 function burned() {
   const p = boat.pos;
@@ -4432,10 +4459,12 @@ function renderRoom() {
     $('lrModes').querySelectorAll('button').forEach(b => b.onclick = () => api(lpath(), 'PATCH', { md: b.dataset.md }).catch(() => {}));
     $('lrLaps').querySelectorAll('button').forEach(b => b.onclick = () => api(lpath(), 'PATCH', { lp: +b.dataset.lp }).catch(() => {}));
     $('lrEq').querySelectorAll('button').forEach(b => b.onclick = () => api(lpath(), 'PATCH', { eq: b.dataset.eq === '1' }).catch(() => {}));
+    $('lrCo').innerHTML = `<button data-co="1" class="${d.co !== false ? 'on' : ''}">ON</button><button data-co="0" class="${d.co === false ? 'on' : ''}">OFF</button>`;
+    $('lrCo').querySelectorAll('button').forEach(b => b.onclick = () => api(lpath(), 'PATCH', { co: b.dataset.co === '1' }).catch(() => {}));
   }
   const n = ids.length;
   const live = d.st === 'run' && d.rn > 0 && !LOBBY.racing && d.go > srvNow() - 600000 && Array.isArray(d.ro) && !d.ro.includes(myId());
-  $('lrInfo').innerHTML = `<b style="color:var(--accent)">${MODES[d.md] ? MODES[d.md].name : 'RACE'}</b> on <b>${esc(mm.name)}</b>${d.md === 'ko' ? ` · ${Math.max(1, n - 1)} lap${n > 2 ? 's' : ''}` : loop ? ` · ${d.lp} lap${d.lp > 1 ? 's' : ''}` : ''}${d.eq ? ' · all stock engines' : ''}<br>${MODES[d.md] ? MODES[d.md].desc : ''}`
+  $('lrInfo').innerHTML = `<b style="color:var(--accent)">${MODES[d.md] ? MODES[d.md].name : 'RACE'}</b> on <b>${esc(mm.name)}</b>${d.md === 'ko' ? ` · ${Math.max(1, n - 1)} lap${n > 2 ? 's' : ''}` : loop ? ` · ${d.lp} lap${d.lp > 1 ? 's' : ''}` : ''}${d.eq ? ' · all stock engines' : ''}${d.co === false ? ' · no bumping' : ' · bumping on'}<br>${MODES[d.md] ? MODES[d.md].desc : ''}`
     + (live ? '<br><b>A race is running — you\'ll join the next one.</b>' : '') + (host ? '' : '<br>Waiting for the host to start…')
     + (d.md === 'ko' && n < 2 ? '<br><span style="color:var(--bad)">Knockout needs at least 2 racers.</span>' : '');
   $('lrStart').classList.toggle('hidden', !host); $('lrReady').classList.toggle('hidden', host);
@@ -4463,7 +4492,7 @@ function lobbyGrid() {
 }
 function beginLobbyRace(d) {
   const mi = lobbyMapIdx(d);
-  Object.assign(LOBBY, { round: d.rn, racing: true, laps: d.lp || 1, eq: !!d.eq, mode: d.md || 'race', go: d.go, out: false, fin: null, done: false, roster: d.ro.slice(), elim: [], place: 0, firstFin: 0, sendT: 0, pay: null, ups: null });
+  Object.assign(LOBBY, { round: d.rn, racing: true, laps: d.lp || 1, eq: !!d.eq, coll: d.co !== false, mode: d.md || 'race', go: d.go, out: false, fin: null, done: false, roster: d.ro.slice(), elim: [], place: 0, firstFin: 0, sendT: 0, pay: null, ups: null });
   $('lrsRewards').innerHTML = ''; $('lrsRewards').dataset.round = '';
   for (const pid in NET.peers) dropPeer(pid);
   if (mi !== mapIdx || MAPS[mi].custom) loadMap(mi);
