@@ -131,6 +131,9 @@ tr.sus td{background:rgba(255,90,95,.1)}
         <div class="row" style="margin-top:8px">Their sign-in page: <span class="uid" id="viceLink"></span><button id="copyVice">COPY LINK</button></div>
         <div class="row" style="margin-top:12px"><label class="row" style="margin:0"><input type="checkbox" id="viceOff"> <b>Pause all vice admins</b></label><span class="msg" style="margin:0">— instantly blocks every vice admin until you untick it.</span></div>
       </div>
+      <div class="card danger"><b>🧹 CLEAN UP AFTER ALL VICE ADMINS</b>
+        <div class="row" style="margin-top:8px"><button class="del" id="vUndoAll">UNDO EVERY VICE ADMIN ACTION</button><button class="del" id="vSelfAll">TAKE BACK EVERYTHING VICE ADMINS GAVE THEMSELVES</button></div>
+        <p class="msg">"Take back" removes all gifts on each vice admin's own account (money, mastery, boost, items) plus anything they bought with gift money, engines/boats above their real level, and their leaderboard times set since they first boosted themselves.</p></div>
       <div class="card"><table><thead><tr><th>VICE ADMIN</th><th>WHAT THEY CAN DO (click to switch on/off)</th><th>LAST ACTION</th><th></th></tr></thead><tbody id="viceBody"></tbody></table>
         <div class="row" style="margin-top:12px"><select id="viceAdd" style="min-width:200px"></select><button class="go" id="viceAddBtn">MAKE VICE ADMIN</button></div>
         <p class="msg">New vice admins start with message/kick, delete leaderboard times and speed boost. Switch on more if you want.</p></div>
@@ -155,7 +158,7 @@ tr.sus td{background:rgba(255,90,95,.1)}
 // Same database and key as riptide.html
 const DB = "https://riptide-run-default-rtdb.firebaseio.com";
 const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
-const RULES_MARK = 'rv10'; // bump together with database.rules.json
+const RULES_MARK = 'rv11'; // bump together with database.rules.json
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -235,6 +238,15 @@ const EXCL = [['hull', 'x_titanic', 'Titanic', 'a 16 m four-funnel ocean liner w
 let EXCD = {};
 const CATNAME = { paint: 'Paint', helmet: 'Helmet', visor: 'Visor', flag: 'Flag', eng: 'Engine', fx: 'Effect', hull: 'Boat' };
 const itemName = (cat, id) => ((CATALOG[cat] || []).find(x => String(x[0]) === String(id)) || [id, id])[1];
+const ENG_LVL = [0, 3, 7, 12, 18], HULL_LVL = { patrol: 8, yacht: 12, airboat: 16 };
+// engines / boats a racer owns that their own (un-gifted) mastery level hasn't reached
+function overLevel(id) {
+  const e = ((P[id] || {}).econ) || {}, L = levelOf(realXp(id, e)), out = [], tk = ((TAKE[id] || {}).items) || {};
+  const has = (c, k) => !(tk[c] && tk[c][k]) && !!((e.own && e.own[c] && e.own[c][k]) || (e.ownAdm && e.ownAdm[c] && e.ownAdm[c][k]));
+  for (let k = 1; k < 5; k++) if (has('eng', k) && ENG_LVL[k] > L) out.push(['eng', k]);
+  for (const h in HULL_LVL) if (has('hull', h) && HULL_LVL[h] > L) out.push(['hull', h]);
+  return out;
+}
 const xpNeed = L => 250 + 100 * L, MAXXP = Array.from({ length: 29 }, (_, i) => xpNeed(i + 1)).reduce((a, b) => a + b, 0);
 function levelOf(xp) { let L = 1; while (L < 30 && xp >= xpNeed(L)) { xp -= xpNeed(L); L++; } return L; }
 const money = n => '$' + Math.round(n || 0).toLocaleString('en-US');
@@ -310,8 +322,9 @@ function renderCard() {
   const inv = [];
   for (const k of Object.keys(p.unlocked || {})) if (p.unlocked[k] && k !== 'classic') inv.push(['paint', k]);
   for (const [c, o] of Object.entries(e.own || {})) for (const k of Object.keys(o || {})) if (o[k] && !(c === 'eng' && k === '0') && c !== 'paint') inv.push([c, k]);
+  for (const [c, o] of Object.entries(e.ownAdm || {})) for (const k of Object.keys(o || {})) if (o[k] && !(c === 'eng' && k === '0') && !inv.some(([a, b]) => a === c && String(b) === String(k))) inv.push([c, k, 'gift']);
   for (const k in FXRULES) if (FXRULES[k](p.stats || {})) inv.push(['fx', k]);
-  const owned = inv;
+  const owned = inv, over = overLevel(sel);
   $('pCard').classList.remove('hidden');
   $('pCard').innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">${isOn(p) ? '<span class="dot"></span>' : ''}${esc(p.name)}</h2><span class="uid">${esc(sel)}</span></div>
     ${banOn(b) ? `<div class="warnbar">⛔ Banned ${b.until ? 'until ' + new Date(b.until).toLocaleString() : 'permanently'}${b.reason ? ' — ' + esc(b.reason) : ''}</div>` : ''}
@@ -326,10 +339,16 @@ function renderCard() {
       <div class="box" style="border:1px solid rgba(255,155,210,.4)"><b>👑 EXCLUSIVES</b><p class="msg" style="margin:0 0 6px">Only you can give these. "Remove admin gifts" doesn't touch them.</p>
         ${EXCL.map(([c, k, n, d]) => { const has = !!(EXCD[sel] && EXCD[sel][c] && EXCD[sel][c][k]); return `<div class="row" style="justify-content:space-between;margin:3px 0"><span>${esc(n)} <small class="msg">${esc(CATNAME[c].toLowerCase())} · ${esc(d)}</small></span><button data-exc="${c}|${k}" class="${has ? 'on' : ''}">${has ? 'GIVEN ✓ — TAKE BACK' : 'GIVE'}</button></div>`; }).join('')}</div>
       <div class="box"><b>INVENTORY (BOUGHT/EARNED)</b><p class="msg" style="margin:0 0 6px">✕ takes an item away. Bought items can be bought again; a taken effect stays locked until you restore it.</p>
-        <div class="row">${owned.map(([c, k]) => gone(c, k) ? `<button disabled title="waiting for their game to sync">${esc(itemName(c, k))} · removing…</button>` : `<button class="del" data-inv="${c}|${esc(k)}" title="take away">${esc(CATNAME[c])}: ${esc(itemName(c, k))} ✕</button>`).join('') || '<span class="msg">Nothing bought or earned yet</span>'}</div>
+        <div class="row">${owned.map(([c, k, g]) => gone(c, k) ? `<button disabled title="waiting for their game to sync">${esc(itemName(c, k))} · removing…</button>` : `<button class="del" data-inv="${c}|${esc(k)}" title="take away">${esc(CATNAME[c])}: ${esc(itemName(c, k))}${g ? ' <small>(gift $)</small>' : ''}${over.some(([a, b]) => a === c && String(b) === String(k)) ? ' <small>⚠ above their level</small>' : ''} ✕</button>`).join('') || '<span class="msg">Nothing bought or earned yet</span>'}</div>
+        ${over.length ? `<div class="row" style="margin-top:6px"><button class="del" data-overlvl="1">TAKE BACK ${over.length} ITEM${over.length > 1 ? 'S' : ''} ABOVE THEIR EARNED LEVEL</button></div><p class="msg">They own engines/boats their own mastery (without gifts) hasn't reached — usually from gifted mastery or gift money.</p>` : ''}
         ${tkItems.fx ? `<div class="row" style="margin-top:6px">${Object.keys(tkItems.fx).map(k => `<button data-restore="${esc(k)}">restore ${esc(itemName('fx', k))}</button>`).join('')}</div>` : ''}${a && a.items ? `<b style="margin-top:8px">GIVEN ITEMS</b><div class="row">${Object.entries(a.items).flatMap(([c, o]) => Object.keys(o).map(k => `<button data-take="${c}|${esc(k)}" title="take back">${esc(itemName(c, k))} ✕</button>`)).join('')}</div>` : ''}</div>
     </div>` + actionsHTML('one');
   bind('one', [sel]);
+  document.querySelectorAll('[data-overlvl]').forEach(btn => btn.onclick = async () => {
+    if (!confirm(`Take back ${over.map(([c, k]) => itemName(c, k)).join(', ')} from ${pname(sel)}?`)) return;
+    for (const [c, k] of over) await db(`take/${sel}/items/${c}/${k}`, 'PUT', Date.now());
+    log(`Took back items above ${pname(sel)}'s earned level: ${over.map(([c, k]) => itemName(c, k)).join(', ')}`); await loadAll(); say(`Took back ${over.length} item${over.length > 1 ? 's' : ''} from ${pname(sel)}.`);
+  });
   document.querySelectorAll('[data-inv]').forEach(btn => btn.onclick = async () => {
     const [c, k] = btn.dataset.inv.split('|'); if (!confirm(`Take ${itemName(c, k)} away from ${pname(sel)}?`)) return;
     await db(`take/${sel}/items/${c}/${k}`, 'PUT', Date.now()); log(`Took ${CATNAME[c].toLowerCase()} "${itemName(c, k)}" from ${pname(sel)}`); await loadAll(); say(`Took ${itemName(c, k)} from ${pname(sel)}. Their game updates within a few seconds.`);
@@ -552,6 +571,24 @@ async function undoVice(v) {
   }
   throw new Error('this action has no undo');
 }
+// take back everything a vice admin gave themselves (or that any gift put on their account)
+async function takeBackSelf(id) {
+  const name = pname(id), mine = VROWS.filter(v => v.uid === id && v.x && v.x.p === id);
+  // 1) all gifts on their account: money, mastery, boost, items — and (new gift batch) anything bought with gift money
+  await db('adm/' + id, 'DELETE');
+  // 2) engines / boats their real level hasn't reached (e.g. bought with earned money after gifted mastery)
+  const over = overLevel(id); for (const [c, k] of over) await db(`take/${id}/items/${c}/${k}`, 'PUT', Date.now());
+  // 3) leaderboard times set since they first boosted themselves
+  const firstBoost = Math.min(...mine.filter(v => v.x.type === 'speed').map(v => v.t), Infinity); let times = 0;
+  if (firstBoost < Infinity) {
+    const lb = (await db('lb')) || {}, lbt = (await db('lbt').catch(() => null)) || {};
+    for (const run in lb) { const v = lb[run][id]; if (v && (+v.d || 0) >= firstBoost - 60000) { await db(`lb/${run}/${id}`, 'DELETE'); await db(`gh/${run}/${id}`, 'DELETE'); await db(`lbdel/${id}/${run}`, 'PUT', Date.now()); times++; const wr = await db('wr/' + run); if (wr && wr.n === name) await db('wr/' + run, 'DELETE'); } }
+    for (const run in lbt) for (const tr in (lbt[run] || {})) { const v = (lbt[run][tr] || {})[id]; if (v && (+v.d || 0) >= firstBoost - 60000) { await db(`lbt/${run}/${tr}/${id}`, 'DELETE'); await db(`ght/${run}/${tr}/${id}`, 'DELETE'); await db(`lbdel/${id}/${run}`, 'PUT', Date.now()); } }
+  }
+  for (const v of mine.filter(v => !v.u)) await db(`vundo/${id}/${v.k}`, 'PUT', Date.now());
+  const what = `all gifts${over.length ? ', ' + over.map(([c, k]) => itemName(c, k)).join(', ') : ''}${times ? `, ${times} boosted leaderboard time${times > 1 ? 's' : ''}` : ''}`;
+  log(`Took back what vice admin ${name} gave themselves: ${what}`); return `${name}: ${what}`;
+}
 async function undoOne(v) { const what = await undoVice(v); await db(`vundo/${v.uid}/${v.k}`, 'PUT', Date.now()); (VUNDO[v.uid] = VUNDO[v.uid] || {})[v.k] = Date.now(); log(`Undid vice admin ${v.who}'s action "${v.a}" — ${what}`); return what; }
 async function makeVice(id) {
   if (!id || id.length < 20) return say('Old-style accounts can\'t be vice admins until they sign in with the new version.', false);
@@ -572,7 +609,7 @@ async function loadVice() {
   const ids = Object.keys(VICE).sort((a, b) => String(VICE[a].name).localeCompare(VICE[b].name));
   $('viceBody').innerHTML = ids.map(id => { const v = VICE[id], l = (last || {})[id]; return `<tr><td><b>${esc(v.name || pname(id))}</b><br><small class="msg">since ${v.at ? new Date(v.at).toLocaleDateString() : '—'}</small></td>
     <td><div class="row" style="gap:6px">${VPERMS.map(([k, n]) => `<button data-vp="${esc(id)}|${k}" class="${v.perms && v.perms[k] ? 'on' : ''}" style="padding:4px 10px;font-size:15px">${n}</button>`).join('')}</div></td>
-    <td style="white-space:nowrap">${l && l.t ? new Date(l.t).toLocaleString() : '<span class="msg">never</span>'}</td><td><div class="row" style="gap:6px"><button data-vundo="${esc(id)}" title="Reverse every action of theirs that hasn't been undone">UNDO ALL</button><button class="del" data-vrm="${esc(id)}">REMOVE</button></div></td></tr>`; }).join('') || '<tr><td colspan="4" class="msg">No vice admins yet. Pick a racer below, or open a racer in the Players tab.</td></tr>';
+    <td style="white-space:nowrap">${l && l.t ? new Date(l.t).toLocaleString() : '<span class="msg">never</span>'}</td><td><div class="row" style="gap:6px"><button data-vundo="${esc(id)}" title="Reverse every action of theirs that hasn't been undone">UNDO ALL</button><button class="del" data-vself="${esc(id)}" title="Remove all gifts on their own account, what they bought with them, and times set while boosted">TAKE BACK SELF-GIFTS</button><button class="del" data-vrm="${esc(id)}">REMOVE</button></div></td></tr>`; }).join('') || '<tr><td colspan="4" class="msg">No vice admins yet. Pick a racer below, or open a racer in the Players tab.</td></tr>';
   const cands = Object.keys(P).filter(id => id.length >= 20 && id !== A.uid && !VICE[id]).sort((a, b) => String(pname(a)).localeCompare(pname(b)));
   $('viceAdd').innerHTML = '<option value="">Pick a racer…</option>' + cands.map(id => `<option value="${esc(id)}">${esc(pname(id))}</option>`).join('');
   const rows = VROWS.slice(0, 200);
@@ -581,6 +618,10 @@ async function loadVice() {
   document.querySelectorAll('[data-undo]').forEach(b => b.onclick = async () => {
     const v = VROWS[+b.dataset.undo]; if (!confirm(`Undo ${v.who}'s action?\n\n"${v.a}"`)) return;
     b.disabled = true; try { say('Undone: ' + await undoOne(v) + '.'); } catch (e) { say("Couldn't undo that: " + e.message, false); } loadVice();
+  });
+  document.querySelectorAll('[data-vself]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.vself; if (!confirm(`Take back everything on ${pname(id)}'s own account that came from gifts (money, mastery, boost, items, things bought with gift money, engines/boats above their real level) and remove their times set while boosted?`)) return;
+    b.disabled = true; try { await loadAll(true); say('Took back — ' + await takeBackSelf(id) + '.'); } catch (e) { say("Couldn't finish: " + e.message, false); } loadVice();
   });
   document.querySelectorAll('[data-vundo]').forEach(b => b.onclick = async () => {
     const id = b.dataset.vundo, list = VROWS.filter(v => v.uid === id && v.x && !v.u); // newest first, so step-by-step changes unwind in order
@@ -599,6 +640,19 @@ $('viceAddBtn').onclick = async () => { const id = $('viceAdd').value; if (!id) 
 $('viceOff').onchange = async () => { const off = $('viceOff').checked; if (off) await db('viceoff', 'PUT', true); else await db('viceoff', 'DELETE'); log(off ? 'Paused all vice admins' : 'Unpaused vice admins'); say(off ? 'All vice admins are paused.' : 'Vice admins are back on.'); };
 $('copyVice').onclick = () => { navigator.clipboard && navigator.clipboard.writeText($('viceLink').textContent); $('copyVice').textContent = 'COPIED ✓'; setTimeout(() => $('copyVice').textContent = 'COPY LINK', 1500); };
 $('reloadVLog').onclick = loadVice;
+$('vUndoAll').onclick = async () => {
+  const list = VROWS.filter(v => v.x && !v.u); if (!list.length) return say('Nothing left to undo.', false);
+  if (!confirm(`Undo all ${list.length} vice admin actions that haven't been undone yet (newest first)?`)) return;
+  let ok = 0, bad = 0; for (const v of list) { try { await undoOne(v); ok++; } catch (e) { bad++; } }
+  log(`Undid every vice admin action (${ok})`); say(`Undid ${ok} vice admin action${ok === 1 ? '' : 's'}${bad ? `, ${bad} couldn't be undone` : ''}.`, !bad); loadVice();
+};
+$('vSelfAll').onclick = async () => {
+  const ids = [...new Set([...Object.keys(VICE), ...VROWS.map(v => v.uid)])].filter(id => P[id]);
+  if (!ids.length) return say('No vice admins found.', false);
+  if (!confirm(`Take back everything ${ids.length} vice admin${ids.length > 1 ? 's have' : ' has'} on their own accounts from gifts, and remove their boosted leaderboard times?`)) return;
+  await loadAll(true); const out = []; for (const id of ids) { try { out.push(await takeBackSelf(id)); } catch (e) { out.push(pname(id) + ': failed'); } }
+  say('Took back — ' + out.join(' · ')); loadVice();
+};
 $('reloadLog').onclick = loadLog;
 // ---- leaderboards ----
 async function loadRuns() {
