@@ -2011,6 +2011,7 @@ function dressBoat(grp, M, L) {
   const sk = SKINS.find(k => k.id === L.skin) || SKINS[0];
   if (sk.under) {
     const ug = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 9), new THREE.MeshBasicMaterial({ map: GLOWTEX(), color: sk.under, transparent: true, opacity: 0.75, blending: THREE.AdditiveBlending, depthWrite: false, fog: true }));
+    const ubs = (HULLDEF[grp.userData.hull] || HULLDEF.speed).blob; ug.scale.set(ubs[0], ubs[1], 1);
     ug.rotation.x = -Math.PI / 2; ug.position.set(0, -0.32, 0.2); ug.renderOrder = 3; ug.name = 'underglow'; acc.add(ug);
   }
   grp.userData.anim = { M, skin: sk, visor: VISORS.find(x => x.id === L.visor) || VISORS[0], glow: acc.getObjectByName('underglow'), halo: acc.getObjectByName('halo') };
@@ -2023,6 +2024,7 @@ const TM = { // fixed Titanic livery
   buff: std(0xd29c45, { roughness: 0.6 }), wood: std(0xb08a5a, { roughness: 0.85 }), teak: std(0x9a6b3c, { roughness: 0.8 }), tint: new THREE.MeshStandardMaterial({ color: 0x0d1820, roughness: 0.05, metalness: 0.6 }),
   rig: new THREE.LineBasicMaterial({ color: 0x222222 }), alu: std(0xb9c1c8, { roughness: 0.35, metalness: 0.7 }), prop: std(0x7a5230, { roughness: 0.6 }),
 };
+for (const k in TM) if (TM[k].isMeshStandardMaterial) TM[k].side = THREE.DoubleSide;
 // any hull from a few profile functions (u: 0 = stern, 1 = bow; v: 0 = keel, 0.5 = chine, 1 = sheer)
 function shapedHull(add, o) {
   const z = u => o.z0 + (o.z1 - o.z0) * u, cx = u => o.hw(u) * (o.chine || 0.86), cy = u => Math.min(o.sh(u) - 0.06, o.kl(u) + (o.flat ? 0.05 : 0.36) * cx(u));
@@ -2036,7 +2038,9 @@ function shapedHull(add, o) {
   }
   { const pts = []; for (let i = 0; i <= 12; i++) pts.push(pt(0, 1 - i / 12, -1)); for (let i = 1; i <= 12; i++) pts.push(pt(0, i / 12, 1));
     const pos = [], idx = []; pos.push(0, (o.kl(0) + o.sh(0)) / 2, z(0)); pts.forEach(p => pos.push(...p)); for (let i = 1; i < pts.length; i++) idx.push(0, i, i + 1);
-    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); add(g, o.mat.transom || o.mat.hull); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); add(g, o.mat.transom || o.mat.hull);
+    // a slightly wider cap over the stern so the transom edge never shows a gap
+    const capS = add(new THREE.ShapeGeometry(new THREE.Shape(pts.map(p => new THREE.Vector2(p[0], p[1])))), o.mat.transom || o.mat.hull); capS.position.z = z(0) + 0.005; }
   add(surface(40, 8, (u, v) => { const w = v * 2 - 1; return [w * o.hw(u) * 0.995, o.sh(u) + 0.02 + 0.05 * (1 - w * w), z(u)]; }), o.mat.deck);
   return { pt, z };
 }
@@ -2061,7 +2065,7 @@ const HULLDEF = {
   patrol: { cam: 1.15, fxs: [1.1, 1.3], blob: [1.15, 1.15], motor: [0, 0.48, 3.38, 1.15] },
   yacht: { cam: 1.25, fxs: [1.25, 1.45], blob: [1.3, 1.3] },
   airboat: { cam: 1.1, fxs: [1.05, 0.95], blob: [1.1, 0.85] },
-  x_titanic: { cam: 2.1, fxs: [1.05, 2.8], blob: [1.1, 2.4], noDriver: true },
+  x_titanic: { cam: 1.5, fxs: [1.05, 2.8], blob: [1.1, 2.4], noDriver: true },
 };
 function buildHullModel(id, M) {
   const grp = new THREE.Group(), add = (g, m) => { const me = new THREE.Mesh(g, m); grp.add(me); return me; };
@@ -2192,10 +2196,10 @@ function setHull(grp, M, id) {
 // Titanic: coal smoke rolling out of the first three funnels (the fourth was a dummy on the real ship too)
 function hullSmoke(g, q, dt) {
   if (g.userData.hull !== 'x_titanic') return;
-  g.userData.smk = (g.userData.smk || 0) + dt * 26; let n = Math.min(6, Math.floor(g.userData.smk)); g.userData.smk -= n;
+  g.userData.smk = (g.userData.smk || 0) + dt * 16; let n = Math.min(6, Math.floor(g.userData.smk)); g.userData.smk -= n;
   const F = HULLDEF.x_titanic.funnels; if (!F) return; _q.set(q.x, q.y, q.z, q.w);
   while (n-- > 0) { const f = F[Math.floor(Math.random() * 3)]; _v.copy(f).applyQuaternion(_q).add(g.position); const k = 0.12 + Math.random() * 0.12;
-    fxSpawn(FX.S, _v.x + (Math.random() - 0.5) * 0.2, _v.y, _v.z + (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.4, 1.6 + Math.random(), 1.2 + Math.random() * 0.6, 3.2, 1.0, 1.4, k, k, k * 1.05, 0.55); }
+    fxSpawn(FX.S, _v.x + (Math.random() - 0.5) * 0.2, _v.y, _v.z + (Math.random() - 0.5) * 0.2, (Math.random() - 0.5) * 0.4, 3.6 + Math.random() * 1.4, (Math.random() - 0.5) * 0.4, 2.4, 0.9, 1.3, k, k, k * 1.05, 0.38); }
 }
 function animateFlags(t) {
   for (const f of FLAGS_LIVE) {
@@ -2942,7 +2946,7 @@ pGeo.setAttribute('position', new THREE.BufferAttribute(pPos, 3)); pGeo.setAttri
 const pU = { uScale: { value: 500 } };
 const pts = new THREE.Points(pGeo, new THREE.ShaderMaterial({
   uniforms: pU, transparent: true, depthWrite: false,
-  vertexShader: 'attribute float aA,aS;uniform float uScale;varying float vA;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aS*uScale/max(-mv.z,0.5);vA=aA;gl_Position=projectionMatrix*mv;}',
+  vertexShader: 'attribute float aA,aS;uniform float uScale;varying float vA;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aS*uScale/max(-mv.z,0.5);vA=aA*smoothstep(1.2,5.,-mv.z);gl_Position=projectionMatrix*mv;}',
   fragmentShader: 'varying float vA;void main(){float d=length(gl_PointCoord-.5);float a=smoothstep(.5,.15,d)*vA;if(a<.01)discard;gl_FragColor=vec4(.93,.97,1.,a);}'
 }));
 pts.frustumCulled = false; scene.add(pts);
@@ -2975,7 +2979,7 @@ const FX = (() => {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('aC', new THREE.BufferAttribute(col, 3)); g.setAttribute('aA', new THREE.BufferAttribute(al, 1)); g.setAttribute('aS', new THREE.BufferAttribute(sz, 1));
     const m = new THREE.ShaderMaterial({ uniforms: pU, transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
-      vertexShader: 'attribute float aA,aS;attribute vec3 aC;uniform float uScale;varying float vA;varying vec3 vC;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aS*uScale/max(-mv.z,0.5);vA=aA;vC=aC;gl_Position=projectionMatrix*mv;}',
+      vertexShader: 'attribute float aA,aS;attribute vec3 aC;uniform float uScale;varying float vA;varying vec3 vC;void main(){vec4 mv=modelViewMatrix*vec4(position,1.);gl_PointSize=aS*uScale/max(-mv.z,0.5);vA=aA*smoothstep(1.5,7.,-mv.z);vC=aC;gl_Position=projectionMatrix*mv;}',
       fragmentShader: additive ? 'varying float vA;varying vec3 vC;void main(){float d=length(gl_PointCoord-.5);float a=smoothstep(.5,.05,d)*vA;if(a<.01)discard;gl_FragColor=vec4(vC*a,a);}'
         : 'varying float vA;varying vec3 vC;void main(){float d=length(gl_PointCoord-.5);float a=smoothstep(.5,.2,d)*vA;if(a<.01)discard;gl_FragColor=vec4(vC,a);}' });
     const pts = new THREE.Points(g, m); pts.frustumCulled = false; pts.renderOrder = 4; scene.add(pts);
@@ -3660,6 +3664,10 @@ function updateCamera(dt, speed) {
     const dist = (camMode === 0 ? 10.5 + speed * 0.06 : 19) * ck, hgt = (camMode === 0 ? 3.6 : 7.5) * (0.6 + 0.4 * ck);
     tmpV.copy(bp).addScaledVector(camDir, -dist); tmpV.y = bp.y + hgt;
     if (camSnap) camera.position.copy(tmpV); else camera.position.lerp(tmpV, 1 - Math.exp(-7 * dt));
+    if (world.chans) { // walk back from the boat to the camera; if a bank or cliff is in the way, bring the camera in front of it
+      const cx = camera.position.x - bp.x, cz = camera.position.z - bp.z;
+      for (let k = 1; k <= 12; k++) { const f = k / 12;
+        if (Core.chansSD(world.chans, bp.x + cx * f, bp.z + cz * f).sd > -3.5) { const keep = Math.max(0.3, f - 0.1); camera.position.x = bp.x + cx * keep; camera.position.z = bp.z + cz * keep; camera.position.y = Math.max(camera.position.y, bp.y + hgt * (1.1 + 0.6 * (1 - keep))); break; } } }
     lookV.copy(bp).addScaledVector(camDir, 7); lookV.y += 1.3; camera.lookAt(lookV);
   }
   if (camMode !== 2 || state === 'menu') {
