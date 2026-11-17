@@ -102,3 +102,7 @@ A racer's card also lists things bought with gift money and can take back items 
 - **Titanic**: a 16 m ocean liner with smoking funnels. It's admin-exclusive and given from the admin panel's Exclusives box. It completes every map like any other boat.
 - **Engine leaderboards**: the home screen records and the leaderboard default to the engine you have equipped.
 
+## Bumping in races with friends
+
+In lobby races, boats now collide. Each player's game resolves its own boat with half the overlap and half the impulse, so a bump is shared between both boats. The host can turn **Bumping** ON or OFF in the lobby (it's on by default). Knocked-out and finished racers can't be hit.
+
