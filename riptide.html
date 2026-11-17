@@ -2041,7 +2041,12 @@ function shapedHull(add, o) {
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals(); add(g, o.mat.transom || o.mat.hull);
     // a slightly wider cap over the stern so the transom edge never shows a gap
     const capS = add(new THREE.ShapeGeometry(new THREE.Shape(pts.map(p => new THREE.Vector2(p[0], p[1])))), o.mat.transom || o.mat.hull); capS.position.z = z(0) + 0.005; }
-  add(surface(40, 8, (u, v) => { const w = v * 2 - 1; return [w * o.hw(u) * 0.995, o.sh(u) + 0.02 + 0.05 * (1 - w * w), z(u)]; }), o.mat.deck);
+  add(surface(40, 8, (u, v) => { const w = v * 2 - 1; return [w * o.hw(u) * 1.004, o.sh(u) - 0.005 + 0.05 * (1 - w * w), z(u)]; }), o.mat.deck);
+  for (const side of [-1, 1]) { // rub rail over the deck/hull seam, wrapping round the stern corner
+    const rp = []; for (let i = 0; i <= 40; i++) { const u = i / 40 * 0.995, p = pt(u, 1, side); rp.push(new THREE.Vector3(p[0] * 1.012, p[1] - 0.01, p[2])); }
+    add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(rp), 120, o.rail || 0.045, 8, false), o.mat.rail || o.mat.hull);
+  }
+  { const a = pt(0, 1, -1), b = pt(0, 1, 1); const tr = add(new THREE.CylinderGeometry(o.rail || 0.045, o.rail || 0.045, b[0] - a[0], 8), o.mat.rail || o.mat.hull); tr.rotation.z = Math.PI / 2; tr.position.set(0, a[1] - 0.01, a[2]); }
   return { pt, z };
 }
 // a seated driver; S = top of the seat, facing forward (-z)
@@ -2076,7 +2081,7 @@ function buildHullModel(id, M) {
   const def = HULLDEF[id];
   if (id === 'patrol') {
     const hw = u => u < 0.55 ? 1.25 : 1.25 * Math.pow(Math.max(0, 1 - ((u - 0.55) / 0.45) ** 2), 0.6), sh = u => 0.5 + 0.25 * u * u, kl = u => -0.45 + (sh(u) + 0.4) * Math.pow(Math.max(0, (u - 0.55) / 0.45), 2.2);
-    const H = shapedHull(add, { z0: 3.3, z1: -4.3, hw, sh, kl, mat: { bottom: M.bottom, hull: M.hull, stripe: M.stripe, deck: M.floor } });
+    const H = shapedHull(add, { z0: 3.3, z1: -4.3, hw, sh, kl, mat: { bottom: M.bottom, hull: M.hull, stripe: M.stripe, deck: M.floor, rail: M.dark } });
     // grey inflatable collar all the way round
     const cp = []; for (let i = 0; i <= 30; i++) { const u = 0.02 + i / 30 * 0.96; const p = H.pt(u, 1, -1); cp.push(V3(p[0] - 0.14, p[1] + 0.12, p[2])); } for (let i = 30; i >= 0; i--) { const u = 0.02 + i / 30 * 0.96; const p = H.pt(u, 1, 1); cp.push(V3(p[0] + 0.14, p[1] + 0.12, p[2])); }
     add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(cp), 140, 0.24, 10, false), M.dark);
@@ -2097,12 +2102,12 @@ function buildHullModel(id, M) {
     def.hp = seatedDriver(add, M, V3(0, sh(0.5) + 0.6, 0.7)); def.flag = V3(-0.95, sh(0.02) + 0.9, 3.0);
   } else if (id === 'yacht') {
     const hw = u => u < 0.5 ? 1.42 : 1.42 * Math.pow(Math.max(0, 1 - ((u - 0.5) / 0.5) ** 2), 0.55), sh = u => 0.72 + 0.3 * u * u, kl = u => -0.48 + (sh(u) + 0.45) * Math.pow(Math.max(0, (u - 0.5) / 0.5), 2.2);
-    const H = shapedHull(add, { z0: 3.8, z1: -5.0, hw, sh, kl, mat: { bottom: M.bottom, hull: M.hull, stripe: M.stripe, deck: TM.teak } });
+    const H = shapedHull(add, { z0: 3.8, z1: -5.0, hw, sh, kl, mat: { bottom: M.bottom, hull: M.hull, stripe: M.stripe, deck: TM.teak, rail: M.chrome } });
     // swept cabin with a wrap-around tinted window band
-    const prof = (y0, y1, x) => { const s = new THREE.Shape(); s.moveTo(-0.2, y0); s.lineTo(-0.2, y1); s.lineTo(-2.3, y1 - 0.18); s.quadraticCurveTo(-3.3, y1 - 0.35, -3.9, y0 + 0.02); s.lineTo(-3.9, y0); s.closePath();
+    const prof = (y0, y1, x) => { if (y0 === 0) y0 = -0.2; const s = new THREE.Shape(); s.moveTo(-0.2, y0); s.lineTo(-0.2, y1); s.lineTo(-2.1, y1 - 0.18); s.quadraticCurveTo(-2.9, y1 - 0.35, -3.3, y0 + 0.22); s.lineTo(-3.3, y0); s.closePath();
       const g = new THREE.ExtrudeGeometry(s, { depth: x * 2, bevelEnabled: true, bevelThickness: 0.08, bevelSize: 0.08, bevelSegments: 3, curveSegments: 12 }); g.translate(0, 0, -x); g.rotateY(-Math.PI / 2); return g; };
-    const cab = add(prof(0, 0.82, 1.0), M.deck); cab.position.y = sh(0.55);
-    const win = add(prof(0.36, 0.6, 1.03), TM.tint); win.position.y = sh(0.55) - 0.02;
+    const cab = add(prof(0, 0.82, 0.96), M.deck); cab.position.y = sh(0.55);
+    const win = add(prof(0.36, 0.6, 0.99), TM.tint); win.position.y = sh(0.55) - 0.02;
     // hardtop on a radar arch over the cockpit
     for (const s of [-1, 1]) rod(V3(s * 1.05, sh(0.3) + 0.05, 1.7), V3(s * 0.95, sh(0.3) + 1.85, 0.6), 0.09, M.deck);
     box(2.3, 0.1, 2.3, M.deck, 0, sh(0.3) + 1.9, 0.65, 0.05); const dome = add(new THREE.SphereGeometry(0.26, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), M.deck); dome.position.set(0, sh(0.3) + 1.95, 0.4);
@@ -2110,14 +2115,14 @@ function buildHullModel(id, M) {
     box(0.7, 0.75, 0.55, M.deck, 0.55, sh(0.4) + 0.38, -0.15); box(0.62, 0.1, 0.5, M.seat, 0.55, sh(0.4) + 0.5, 0.65); const wh = add(new THREE.TorusGeometry(0.15, 0.02, 8, 22), M.chrome); wh.position.set(0.55, sh(0.4) + 0.85, 0.2); wh.rotation.x = -0.7;
     box(2.2, 0.32, 0.5, M.seat, 0, sh(0.15) + 0.16, 3.1); box(0.5, 0.32, 1.2, M.seat, -0.85, sh(0.15) + 0.16, 2.35); box(0.9, 0.06, 0.6, TM.teak, 0, sh(0.15) + 0.45, 2.3);
     box(1.7, 0.14, 1.5, M.seat, 0, sh(0.78) + 0.1, -2.9); box(1.7, 0.25, 0.25, M.seat, 0, sh(0.78) + 0.22, -2.2);
-    box(2.6, 0.08, 0.75, TM.teak, 0, sh(0) - 0.45, 4.15);
+    box(2.6, 0.08, 0.8, TM.teak, 0, sh(0) - 0.45, 4.15); box(2.4, 0.5, 0.06, M.hull, 0, sh(0) - 0.22, 3.79);
     for (const s of [-1, 1]) { const pts = []; for (let i = 0; i <= 10; i++) { const u = 0.55 + i / 10 * 0.43; const p = H.pt(u, 1, s); pts.push(V3(p[0] - s * 0.1, p[1] + 0.32, p[2])); } add(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 30, 0.022, 6, false), M.chrome); }
     const props = new THREE.Group(); props.name = 'fan'; props.position.set(0, -0.55, 3.2); grp.add(props);
     for (let i = 0; i < 3; i++) { const bl = new THREE.Mesh(new THREE.SphereGeometry(1, 10, 6), M.chrome); bl.scale.set(0.08, 0.2, 0.02); bl.position.set(Math.sin(i * 2.094) * 0.15, Math.cos(i * 2.094) * 0.15, 0); bl.rotation.z = -i * 2.094; props.add(bl); }
     def.hp = seatedDriver(add, M, V3(0.55, sh(0.4) + 0.55, 0.65)); def.flag = V3(-1.2, sh(0) + 0.9, 3.6);
   } else if (id === 'airboat') {
     const hw = u => u < 0.8 ? 1.2 : 1.2 - 0.38 * ((u - 0.8) / 0.2) ** 2, sh = u => 0.36 + 0.3 * Math.pow(u, 4), kl = u => -0.36 + 0.75 * Math.pow(Math.max(0, (u - 0.68) / 0.32), 2);
-    shapedHull(add, { z0: 2.5, z1: -2.9, hw, sh, kl, chine: 0.97, flat: true, mat: { bottom: M.bottom, hull: M.hull, stripe: M.stripe, deck: TM.alu } });
+    shapedHull(add, { z0: 2.5, z1: -2.9, hw, sh, kl, chine: 0.97, flat: true, rail: 0.06, mat: { bottom: M.bottom, hull: M.hull, stripe: M.stripe, deck: TM.alu, rail: M.dark } });
     // caged fan, engine, rudders
     const fy = 2.15, fz = 2.05, R0 = 1.3;
     for (const dz of [-0.12, 0.28]) { const ring = add(new THREE.TorusGeometry(R0, 0.035, 6, 48), M.chrome); ring.position.set(0, fy, fz + dz); }
@@ -2138,7 +2143,7 @@ function buildHullModel(id, M) {
   } else if (id === 'x_titanic') {
     const L = 16, hw = u => 1.15 * Math.min(1, 0.4 + 0.6 * Math.sqrt(Math.min(1, u / 0.07))) * (u > 0.8 ? Math.pow(Math.max(0, 1 - ((u - 0.8) / 0.2) ** 2), 0.5) : 1);
     const sh = u => 1.45 + 0.18 * Math.pow(u, 3), kl = u => -0.5 + 0.35 * Math.pow(Math.max(0, (u - 0.9) / 0.1), 2);
-    shapedHull(add, { z0: L / 2, z1: -L / 2, hw, sh, kl, chine: 0.95, bands: [[0.5, 0.62, 'red'], [0.62, 0.965, 'black'], [0.965, 1, 'gold']], mat: { bottom: TM.red, red: TM.red, black: TM.black, gold: TM.gold, deck: TM.wood, transom: TM.black } });
+    shapedHull(add, { z0: L / 2, z1: -L / 2, hw, sh, kl, chine: 0.95, bands: [[0.5, 0.62, 'red'], [0.62, 0.965, 'black'], [0.965, 1, 'gold']], rail: 0.05, mat: { bottom: TM.red, red: TM.red, black: TM.black, gold: TM.gold, deck: TM.wood, transom: TM.black, rail: TM.white } });
     // rows of lit portholes and windows (canvas textures on thin side panels)
     const panelTex = (rows, rw, lit) => { const cv = document.createElement('canvas'); cv.width = 1024; cv.height = 64 * rows; const c = cv.getContext('2d');
       for (let r = 0; r < rows; r++) for (let x = 10; x < 1024; x += rw) { c.fillStyle = Math.random() < lit ? '#ffd98a' : '#3a3a34'; if (rw < 20) { c.beginPath(); c.arc(x, r * 64 + 32, 5, 0, 6.283); c.fill(); } else c.fillRect(x, r * 64 + 18, rw * 0.55, 28); }
@@ -3612,7 +3617,7 @@ function drawMini() {
 
 // ================= camera =================
 const camDir = new THREE.Vector3(0, 0, -1), tmpV = new THREE.Vector3(), lookV = new THREE.Vector3();
-let orbit = 0;
+let orbit = 0, camK = 1;
 let spec = null; // spectating another racer (lobby): peer id
 const GFOCUS = { fx: [0, 0.8, 0, 8.5, 3], paint: [0, 0.4, 0, 7, 2.4], driver: [0.5, 1.15, HZ(0.5) + 1.2, 2.6, 0.75], flag: [-0.78, 1.5, HZ(0.05), 3.6, 0.9], eng: [0, 0.6, HZ(0) + 0.4, 3.2, 0.8] };
 function updateCamera(dt, speed) {
@@ -3663,11 +3668,12 @@ function updateCamera(dt, speed) {
     const ck = spec ? 1 : (HULLDEF[boatMesh.userData.hull] || HULLDEF.speed).cam;
     const dist = (camMode === 0 ? 10.5 + speed * 0.06 : 19) * ck, hgt = (camMode === 0 ? 3.6 : 7.5) * (0.6 + 0.4 * ck);
     tmpV.copy(bp).addScaledVector(camDir, -dist); tmpV.y = bp.y + hgt;
+    // on narrow channel maps: how much of the full distance is clear water behind the boat? ease the camera to that, never snap
+    let allow = 1;
+    if (world.chans) { const cx = tmpV.x - bp.x, cz = tmpV.z - bp.z; for (let k = 2; k <= 12; k++) { const f = k / 12; if (Core.chansSD(world.chans, bp.x + cx * f, bp.z + cz * f).sd > -2.5) { allow = Math.max(0.4, f - 0.12); break; } } }
+    camK = camSnap ? allow : camK + (allow - camK) * (1 - Math.exp(-(allow < camK ? 3 : 1.2) * dt));
+    tmpV.x = bp.x + (tmpV.x - bp.x) * camK; tmpV.z = bp.z + (tmpV.z - bp.z) * camK; tmpV.y = bp.y + hgt * (1 + 0.2 * (1 - camK));
     if (camSnap) camera.position.copy(tmpV); else camera.position.lerp(tmpV, 1 - Math.exp(-7 * dt));
-    if (world.chans) { // walk back from the boat to the camera; if a bank or cliff is in the way, bring the camera in front of it
-      const cx = camera.position.x - bp.x, cz = camera.position.z - bp.z;
-      for (let k = 1; k <= 12; k++) { const f = k / 12;
-        if (Core.chansSD(world.chans, bp.x + cx * f, bp.z + cz * f).sd > -3.5) { const keep = Math.max(0.3, f - 0.1); camera.position.x = bp.x + cx * keep; camera.position.z = bp.z + cz * keep; camera.position.y = Math.max(camera.position.y, bp.y + hgt * (1.1 + 0.6 * (1 - keep))); break; } } }
     lookV.copy(bp).addScaledVector(camDir, 7); lookV.y += 1.3; camera.lookAt(lookV);
   }
   if (camMode !== 2 || state === 'menu') {
