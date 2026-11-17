@@ -218,6 +218,7 @@ async function renderCard() {
   const e = p.econ || {}, owner = sel === ME.owner;
   const boxes = [];
   if (owner) boxes.push('<div class="box"><b>👑 THE OWNER</b><p class="msg">Vice admins can\'t use tools on the owner.</p></div>');
+  else if (sel === A.uid) boxes.push('<div class="box"><b>🙋 THAT\'S YOU</b><p class="msg">Vice admins can\'t boost, gift or give items to themselves (or to other vice admins).</p></div>');
   else {
     if (can('msg')) boxes.push(`<div class="box"><b>💬 MESSAGE / KICK</b><input id="vMsg" maxlength="200" placeholder="Message or kick reason" style="width:100%"><div class="row" style="margin-top:6px"><button data-a="msg">SEND MESSAGE</button><button class="del" data-a="kick">KICK</button></div><p class="msg">Kick drops them out of their race or lobby to the menu. They see your name.</p></div>`);
     if (can('boost')) boxes.push(`<div class="box"><b>⚡ SPEED BOOST</b><div class="row">${[1, 1.25, 1.5, 2].map(m => `<button data-speed="${m}">${m === 1 ? 'OFF' : '×' + m}</button>`).join('')}</div><p class="msg">Boosted runs never count as records.</p></div>`);

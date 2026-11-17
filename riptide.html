@@ -3290,7 +3290,7 @@ function finishRace() {
   const wb0 = worldBest(key);
   const recBefore = Math.min(tg.rec, prevBest || Infinity, wb0 ? wb0.t : Infinity);
   const tier = meta.custom ? 0 : tierOf(t, tg);
-  const adminRun = boosted(); // admin-boosted runs never count as records
+  const adminRun = boosted() || !!TUNE.mult; // boosted at the start OR the finish: never a record, never on the leaderboard
   const r = adminRun ? Object.assign({}, DATA.runs[key]) : DATA.runs[key] || (DATA.runs[key] = {});
   const oldMedal = r.medal || 0;
   r.medal = Math.max(oldMedal, tier);
@@ -3325,7 +3325,7 @@ function finishRace() {
   let note = (isPB && prevBest ? `Personal best by ${(prevBest - t).toFixed(2)}s. ` : isPB ? 'First run logged. ' : `${(t - prevBest).toFixed(2)}s off your best. `);
   if (!meta.custom) note += nextT ? `${MT[tier + 1]} needs ${fmt(nextT)}.` : t > tg.rec ? `Record is ${(t - tg.rec).toFixed(2)}s faster.` : '';
   if (ghostPick) note = (t < ghostPick.t ? `You beat ${ghostPick.n}'s ghost by ${(ghostPick.t - t).toFixed(2)}s! ` : `${ghostPick.n}'s ghost was ${(t - ghostPick.t).toFixed(2)}s faster. `) + note;
-  if (adminRun) note = `⚡ Admin speed boost ×${ADM.speed} — this run isn't a record and its pay is an admin gift. ` + note;
+  if (adminRun) note = `⚡ Admin speed boost ×${TUNE.mult || ADM.speed} — this run isn't a record and its pay is an admin gift. ` + note;
   $('fnote').textContent = note;
   $('funlock').innerHTML = unlocked.map(s => `<div class="unlock">🔓 Unlocked: <span style="color:var(--accent)">${s.name}</span> — find it in the Garage</div>`).join('');
   $('frewards').innerHTML = rewardsHTML(pay, ups); animateBars($('frewards'));

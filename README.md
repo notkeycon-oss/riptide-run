@@ -67,6 +67,19 @@ You switch each ability on or off per friend:
 
 Vice admins can never unlock everything, ban, reset progress, rename, give exclusives or engines, take things away, change event settings or edit times. The database rules enforce this, and every vice action must write a server-timestamped entry to `vlog`. Those entries show up in your Activity Log. You can remove a vice admin, or pause all of them, at any time.
 
+Vice admins can't boost, gift or give items to themselves or to each other.
+
+To clean up after vice admins, use these buttons in the Vice Admins tab:
+
+- **UNDO EVERY VICE ADMIN ACTION** undoes every vice admin action that hasn't been undone yet.
+- **TAKE BACK SELF-GIFTS** (per vice admin) or **TAKE BACK EVERYTHING VICE ADMINS GAVE THEMSELVES** removes:
+  - every gift on their own account
+  - anything bought with gift money
+  - engines or boats above their real (un-gifted) mastery level
+  - leaderboard times set since they first boosted themselves
+
+A racer's card also lists things bought with gift money and can take back items above their earned level. A run that was boosted at the start or at the finish never reaches the leaderboard.
+
 ## Chat, online list and PIN changes
 
 - **Map chat**: every map has its own chat room, shown on the home screen and floating on the left during a race. Press Enter or the 💬 button to type while racing.
