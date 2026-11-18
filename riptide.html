@@ -33,7 +33,11 @@ canvas#gl{display:block;width:100%;height:100%}
 #wrong{top:190px;left:50%;transform:translateX(-50%);font-size:34px;font-weight:800;color:var(--bad);display:none;letter-spacing:3px}
 #hint{bottom:16px;left:50%;transform:translateX(-50%);font-size:15px;color:var(--dim);letter-spacing:1px;white-space:nowrap}
 #flash{position:fixed;inset:0;background:#dfe8ff;opacity:0;pointer-events:none}
+#speedfx{position:fixed;inset:-10%;pointer-events:none;opacity:0;background:repeating-conic-gradient(from 0deg at 50% 50%,rgba(255,255,255,0) 0deg 3.2deg,rgba(255,255,255,.22) 3.2deg 3.6deg,rgba(255,255,255,0) 3.6deg 7.1deg,rgba(255,255,255,.12) 7.1deg 7.3deg);-webkit-mask:radial-gradient(circle at 50% 55%,transparent 34%,#000 78%);mask:radial-gradient(circle at 50% 55%,transparent 34%,#000 78%)}
+#boostfx{position:fixed;inset:0;pointer-events:none;opacity:0;box-shadow:inset 0 0 140px 30px rgba(120,220,255,.55);transition:opacity .25s}
 .panel{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:radial-gradient(ellipse at center,rgba(4,18,28,.25),rgba(4,18,28,.7));z-index:5;overflow-y:auto;padding:16px;touch-action:pan-y}
+.helpc{max-width:min(760px,94vw)}.hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;text-align:left;margin:8px 0 6px}
+.hgrid div{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:10px 12px}.hgrid b{display:block;font-size:16px;letter-spacing:1px;margin-bottom:3px}.hgrid span{font-size:14px;color:var(--dim);line-height:1.35}
 .card{background:var(--glass);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.14);border-radius:18px;padding:24px 28px;max-width:min(560px,94vw);width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.4);margin:auto}
 .card.wide{max-width:min(980px,96vw)}
 h1{font-size:64px;font-weight:800;font-style:italic;letter-spacing:2px;line-height:.95}
@@ -51,6 +55,8 @@ button.sec{margin:10px 6px 0;font-size:19px;font-weight:700;letter-spacing:2px;p
 button.sec:hover{background:rgba(255,255,255,.18)}
 button.alt{margin-top:10px;font-size:16px;background:none;border:none;color:var(--dim);text-decoration:underline;letter-spacing:1px}
 .hidden{display:none!important}
+.betabar{font-size:14px;color:#9fe8ff;background:rgba(80,200,255,.1);border:1px solid rgba(80,200,255,.35);border-radius:10px;padding:6px 10px;margin:-6px 0 10px}.betabar a{color:#ffd23f}
+.nextTag{font-size:22px;vertical-align:middle;background:linear-gradient(90deg,#7ff5ff,#b05cff);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:4px}
 #maps{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;margin:14px 0 6px;text-align:left}
 .map{background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;cursor:pointer;transition:border-color .15s,background .15s;display:flex;flex-direction:column;gap:4px}
 .map:hover{background:rgba(255,255,255,.1)}
@@ -202,6 +208,7 @@ input.tx:focus{border-color:var(--accent)}
 <body>
 <canvas id="gl"></canvas>
 <div id="flash"></div>
+<div id="speedfx"></div><div id="boostfx"></div>
 
 <div id="timer" class="hud">
   <div class="big" id="tnow">0:00.00</div>
@@ -242,9 +249,13 @@ input.tx:focus{border-color:var(--accent)}
     <div id="maps"></div>
     <div class="row" style="margin-top:8px">
       <button class="chip" id="lapChip">LAPS: 1</button>
+      <button class="chip" id="rivChip">RIVALS: NORMAL</button>
       <button class="chip" id="playerChip">👤 SIGN IN</button>
     </div>
-    <button class="go" id="startBtn">TIME TRIAL</button>
+    <div class="row" style="justify-content:center;gap:10px">
+      <button class="go" id="startBtn">TIME TRIAL</button>
+      <button class="go" id="rivalsBtn" style="background:linear-gradient(90deg,#7ff5ff,#b05cff);box-shadow:0 6px 20px rgba(176,92,255,.35)">🏆 RACE RIVALS</button>
+    </div>
     <div class="row">
       <button class="sec" id="lobbyBtn" style="border-color:var(--accent)">🏁 PLAY WITH FRIENDS</button>
       <button class="sec" id="builderBtn">🛠 MAP BUILDER</button>
@@ -254,6 +265,7 @@ input.tx:focus{border-color:var(--accent)}
       <button class="sec" id="garageBtn">GARAGE</button>
       <button class="sec" id="boardBtn">LEADERBOARD</button>
       <button class="sec" id="setBtn">SETTINGS</button>
+      <button class="sec" id="helpBtn">❓ HOW TO PLAY</button>
     </div>
     <div class="social">
       <div class="sbox"><div class="shead">🟢 ONLINE NOW <span id="onCount"></span></div><div id="onList" class="slist"></div></div>
@@ -273,6 +285,23 @@ input.tx:focus{border-color:var(--accent)}
     <button class="go" id="loginGo">SIGN IN</button><br>
     <button class="alt" id="loginSkip">play offline for now</button>
     <button class="alt" id="logout">sign out</button>
+  </div>
+</div>
+
+<div class="panel hidden" id="help">
+  <div class="card helpc">
+    <h2>HOW TO PLAY</h2>
+    <div class="hgrid">
+      <div><b>🚤 Drive</b><span>↑ / W throttle · ↓ / S brake &amp; reverse · ← → / A D steer. Your engine steers the boat, so keep the throttle on through corners.</span></div>
+      <div><b>⚡ Boost</b><span>SPACE when the bar says BOOST READY. Big jumps, clean landings and drafting behind other boats charge it faster.</span></div>
+      <div><b>🏁 Gates</b><span>Go through every gate in order (follow the arrow). Flags in Storm Point must be passed on the marked side or you get +3 s.</span></div>
+      <div><b>🥇 Medals</b><span>Beat the bronze, silver and gold times on each map to earn medals, money and mastery. Spend them in the GARAGE.</span></div>
+      <div><b>🏆 Race Rivals</b><span>Five AI boats to beat when your friends aren't on. EASY races at bronze pace, NORMAL at silver, HARD at gold. Bump them out of the way!</span></div>
+      <div><b>🎮 Controller</b><span>Plug in a gamepad: left stick steers, RT / A throttle, LT / B brake, X or RB boost, Y resets, START pauses.</span></div>
+      <div><b>📱 Touch</b><span>On a tablet use the on-screen pedals and arrows. R puts you back on the last gate.</span></div>
+      <div><b>⌨ Keys</b><span>R reset to last gate · C change camera · M sound on/off · ESC pause.</span></div>
+    </div>
+    <button class="go" id="helpDone">LET'S RACE</button>
   </div>
 </div>
 
@@ -687,6 +716,7 @@ const Core = (() => {
       const px = a.x + ex * t, pz = a.z + ez * t; const d2 = (x - px) ** 2 + (z - pz) ** 2;
       if (d2 < bd) { bd = d2; const L = Math.sqrt(L2); best = { i, t, raw, px, pz, nx: -ez / L, nz: ex / L, tx: ex / L, tz: ez / L, hw: a.hw + (b.hw - a.hw) * t }; }
     }
+    if (!best) return { i: 0, t: 0, raw: 0.5, px: x, pz: z, nx: 1, nz: 0, tx: 0, tz: 1, hw: 1e9, d: 0 };
     best.d = (x - best.px) * best.nx + (z - best.pz) * best.nz;
     return best;
   }
@@ -1030,7 +1060,7 @@ const Core = (() => {
     for (let s = 46, side = 1; s < C.snake.len - 20; s += 21) { if (put(C.snake, s, side * 2.1, 0.8, 'stump', stumps, 3)) side = -side; }
     const st = chanAt(C.start, 60);
     return { type: 'sprint', bayou: true, cps, obstacles: obstacles.filter(o => o.type !== 'mark'), islands: [], rocks: [], logs: [], ramps, chans, chanMap: C,
-      swamp: { trees, gators, stumps, shacks, hollow }, path: null, closed: false, limit: 0, start: { x: st.x, z: st.z, yaw: yawOfDir(st.tx, st.tz) } };
+      swamp: { trees, gators, stumps, shacks, hollow }, routes: [['start', 'cypress', 'mid', 'village', 'end'], ['start', 'tunnel', 'mid', 'hollow', 'end'], ['start', 'gator', 'mid', 'village', 'end'], ['start', 'cypress', 'mid', 'hollow', 'end'], ['start', 'tunnel', 'mid', 'village', 'end']], path: null, closed: false, limit: 0, start: { x: st.x, z: st.z, yaw: yawOfDir(st.tx, st.tz) } };
   }
 
   // 7) Magma Rift — a night sprint down a volcanic rift: three lava gaps you must jump, steam vents, a lava tube, a hairpin gorge
@@ -1079,7 +1109,7 @@ const Core = (() => {
     for (const name in dense) { const ch = C[name], [gap, r0, r1] = dense[name]; let side = 1;
       for (let s = 30; s < ch.len - 25; s += gap * (0.8 + rand() * 0.4)) { const a = chanAt(ch, s), r = r0 + rand() * (r1 - r0); if (put(ch, s, side * (1.5 + rand() * Math.max(0.5, a.hw - r - 4.5)), r, 'col', cols)) side = -side; } }
     const st = chanAt(C.start, 60);
-    return { type: 'sprint', magma: true, cps, obstacles, islands: [], rocks: [], logs: [], ramps, lava, vents, chans, chanMap: C, cols,
+    return { type: 'sprint', magma: true, cps, obstacles, islands: [], rocks: [], logs: [], ramps, lava, vents, chans, chanMap: C, cols, routes: [['start', 'rift', 'tube', 'mid', 'gorge', 'final'], ['start', 'rift', 'flats', 'mid', 'gorge', 'final']],
       path: null, closed: false, limit: 0, start: { x: st.x, z: st.z, yaw: yawOfDir(st.tx, st.tz) } };
   }
   // touching lava: a boat on the surface (not flying over it) inside a lava rectangle
@@ -1174,14 +1204,25 @@ const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
 
 // ================= save data =================
-const DEF_SET = { laps: 1, ghost: 'mine', splits: true, minimap: true, chat: true, cam: 0, units: 'mph', volume: 2, quality: 2, shake: true, shadows: true };
+const DEF_SET = { laps: 1, ghost: 'mine', splits: true, minimap: true, chat: true, cam: 0, units: 'mph', volume: 2, music: 2, speedfx: true, quality: (navigator.hardwareConcurrency || 8) <= 4 ? 1 : 2, shake: true, shadows: true };
 // each signed-in racer gets their own save slot on this device; the guest slot holds offline play
+// ===== PREVIEW SWITCH =====
+// BETA = true turns this file into a sandboxed preview: its own save (copied from the real one the first time),
+// leaderboards and profiles read-only. The live game runs with BETA = false.
+const BETA = false;
+const LS = (() => {
+  if (!BETA) return localStorage;
+  const P = 'rrnext:';
+  try { if (!localStorage.getItem(P + 'init')) { const keys = []; for (let i = 0; i < localStorage.length; i++) keys.push(localStorage.key(i)); for (const k of keys) if (/^(rr_u_|riptide_run_v2$|rr_cur$)/.test(k)) localStorage.setItem(P + k, localStorage.getItem(k)); localStorage.setItem(P + 'init', '1'); } } catch (e) {}
+  const keys = () => { const o = []; try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith(P)) o.push(k.slice(P.length)); } } catch (e) {} return o; };
+  return { getItem: k => localStorage.getItem(P + k), setItem: (k, v) => localStorage.setItem(P + k, v), removeItem: k => localStorage.removeItem(P + k), key: i => keys()[i] || null, get length() { return keys().length; } };
+})();
 const GUEST = 'riptide_run_v2', SLOT = id => 'rr_u_' + id;
-function readLS(k) { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch (e) { return null; } }
-function writeLS(k, v) { try { localStorage.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); return true; } catch (e) { return false; } }
-function hasSlots() { try { for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i).startsWith('rr_u_')) return true; } catch (e) {} return false; }
+function readLS(k) { try { return JSON.parse(LS.getItem(k) || 'null'); } catch (e) { return null; } }
+function writeLS(k, v) { try { LS.setItem(k, typeof v === 'string' ? v : JSON.stringify(v)); return true; } catch (e) { return false; } }
+function hasSlots() { try { for (let i = 0; i < LS.length; i++) if (LS.key(i).startsWith('rr_u_')) return true; } catch (e) {} return false; }
 function loadData() {
-  let cur = ''; try { cur = localStorage.getItem('rr_cur') || ''; } catch (e) {}
+  let cur = ''; try { cur = LS.getItem('rr_cur') || ''; } catch (e) {}
   let d = cur ? readLS(SLOT(cur)) : null;
   if (!d) {
     d = readLS(GUEST);
@@ -1193,7 +1234,7 @@ function loadData() {
   }
   if (!d) {
     d = { settings: {}, skin: 'classic', unlocked: { classic: true }, runs: {}, sel: 0 };
-    try { const o = JSON.parse(localStorage.getItem('riptide_run_v1') || 'null'); if (o && o.best) d.runs['harbor:1'] = { best: o.best, splits: o.splits, ghost: o.ghost }; } catch (e) {}
+    try { const o = JSON.parse(LS.getItem('riptide_run_v1') || 'null'); if (o && o.best) d.runs['harbor:1'] = { best: o.best, splits: o.splits, ghost: o.ghost }; } catch (e) {}
   }
   return normData(d);
 }
@@ -1225,7 +1266,7 @@ function useAccount(player) {
   let d = newId ? readLS(SLOT(newId)) : readLS(GUEST);
   if (!d && player) {
     // upgrading from an old-style account with the same name: carry its save over
-    try { for (let i = 0; i < localStorage.length && !d; i++) { const k = localStorage.key(i); if (!k.startsWith('rr_u_') || k.length >= 25) continue; const o = readLS(k); if (o && o.player && String(o.player.name).toLowerCase() === String(player.name).toLowerCase()) d = o; } } catch (e) {}
+    try { for (let i = 0; i < LS.length && !d; i++) { const k = LS.key(i); if (!k.startsWith('rr_u_') || k.length >= 25) continue; const o = readLS(k); if (o && o.player && String(o.player.name).toLowerCase() === String(player.name).toLowerCase()) d = o; } } catch (e) {}
   }
   if (!d && player) {
     // first sign-in on this device: keep the progress made while playing as a guest (or under this name before)
@@ -1420,7 +1461,7 @@ function payout(meta, t, opts = {}) {
   lines.push([`Run pay · ${perf >= 1 ? 'gold pace' : Math.round(perf * 100) + '% of gold pace'}`, c, x]);
   if (opts.newMedal) { const MB = [0, 60, 120, 250], MX = [0, 25, 50, 100]; let mc = 0, mx = 0; for (let k = opts.oldMedal + 1; k <= opts.newMedal; k++) { mc += MB[k]; mx += MX[k]; } mc = Math.round(mc * diff); lines.push(['First-time medal bonus', mc, mx]); c += mc; x += mx; }
   if (opts.pb) { const pc = Math.round(c * 0.15); lines.push(['Personal best', pc, 20]); c += pc; x += 20; }
-  if (opts.place) { const PB = [0, 100, 60, 35, 20], n = opts.field || 1; const pc = Math.round((PB[opts.place] || 15) * Math.min(1, (n - 1) / 3) * diff); if (pc) { lines.push([`Finished P${opts.place} of ${n}`, pc, Math.round(pc / 2)]); c += pc; x += Math.round(pc / 2); } }
+  if (opts.place) { const PB = [0, 100, 60, 35, 20], n = opts.field || 1; const pc = Math.round((PB[opts.place] || 15) * Math.min(1, (n - 1) / 3) * diff * (opts.placeMul || 1)); if (pc) { lines.push([`Finished P${opts.place} of ${n}${opts.placeTag || ''}`, pc, Math.round(pc / 2)]); c += pc; x += Math.round(pc / 2); } }
   if (featuredMap().id === meta.id) { lines.push(['Featured map of the day ×1.25', Math.round(c * 0.25), Math.round(x * 0.25)]); c = Math.round(c * 1.25); x = Math.round(x * 1.25); }
   const di = dailyInfo();
   if (di.fresh) { const dc = dailyCash(di.streak); lines.push([`Daily bonus · ${di.streak}-day streak`, dc, 30]); c += dc; x += 30; }
@@ -1442,6 +1483,8 @@ const QDAY = [
   { t: 'ghost', n: 1, text: 'Beat a ghost from the leaderboard', cash: 200, xp: 100 },
   { t: 'lobby', n: 1, text: 'Finish an online race with friends', cash: 170, xp: 85 },
   { t: 'stock', n: 2, text: 'Finish 2 races on the STOCK engine', cash: 130, xp: 65 },
+  { t: 'rivpod', n: 1, text: 'Finish in the top 3 in a Race Rivals race', cash: 150, xp: 75 },
+  { t: 'rivwin', n: 1, text: 'Win a Race Rivals race on NORMAL or HARD', cash: 200, xp: 100 },
 ];
 const QWEEK = [
   { t: 'races', n: 20, text: 'Finish 20 races this week', cash: 650, xp: 320 },
@@ -1449,6 +1492,7 @@ const QWEEK = [
   { t: 'air', n: 60, text: 'Catch 60 s of clean airtime this week', cash: 750, xp: 380 },
   { t: 'lobbywin', n: 2, text: 'Win 2 online races this week', cash: 850, xp: 420 },
   { t: 'allmaps', n: 5, text: 'Finish a race on every map this week', cash: 700, xp: 350 },
+  { t: 'rivhard', n: 3, text: 'Beat HARD rivals 3 times this week', cash: 900, xp: 450 },
 ];
 const builtinMaps = () => MAPS.filter(m => !m.custom);
 const weekNum = d => Math.floor((d + 3) / 7);
@@ -1482,7 +1526,7 @@ function qEvent(type, d = {}) {
   for (const q of [...Q.list, Q.weekly]) {
     if (q.done) continue;
     let add = 0;
-    if (type === 'finish' || type === 'lobby') {
+    if (type === 'finish' || type === 'lobby' || type === 'rival') {
       const fin = type === 'finish' || d.finished;
       if (q.t === 'races' && fin) add = 1;
       if (q.t === 'map' && fin && d.map === q.map) add = 1;
@@ -1497,6 +1541,7 @@ function qEvent(type, d = {}) {
       if (q.t === 'ghost' && d.ghostBeat) add = 1;
     }
     if (type === 'lobby') { if (q.t === 'lobby' && d.finished) add = 1; if (q.t === 'lobbywin' && d.place === 1 && d.field >= 2) add = 1; }
+    if (type === 'rival') { if (q.t === 'rivpod' && d.place <= 3) add = 1; if (q.t === 'rivwin' && d.place === 1 && d.diff !== 'easy') add = 1; if (q.t === 'rivhard' && d.place === 1 && d.diff === 'hard') add = 1; }
     if (type === 'air' && q.t === 'air') add = d.s;
     if (type === 'boost' && q.t === 'boost') add = 1;
     if (!add) continue;
@@ -3116,8 +3161,16 @@ function initAudio() {
     const ng = AC.createGain(); ng.gain.value = 0; ns.connect(bp); bp.connect(ng); ng.connect(master);
     const rs = AC.createBufferSource(); rs.buffer = nb; rs.loop = true; const rf = AC.createBiquadFilter(); rf.type = 'highpass'; rf.frequency.value = 2500;
     const rg = AC.createGain(); rg.gain.value = 0; rs.connect(rf); rf.connect(rg); rg.connect(master);
-    o1.start(); o2.start(); ns.start(); rs.start();
-    eng = { o1, o2, lp, eg, ng, rg, master, nb };
+    // engine character: a sub-octave rumble plus a cylinder "chug" that pulses the volume with the revs
+    const o3 = AC.createOscillator(); o3.type = 'sine'; const g3 = AC.createGain(); g3.gain.value = 0.5; o3.connect(g3); g3.connect(eg);
+    const lfo = AC.createOscillator(); lfo.type = 'sine'; const lfoG = AC.createGain(); lfoG.gain.value = 0; lfo.connect(lfoG); lfoG.connect(eg.gain);
+    const ws = AC.createWaveShaper(), cv = new Float32Array(256); for (let i = 0; i < 256; i++) { const x = i / 128 - 1; cv[i] = Math.tanh(x * 2.2); } ws.curve = cv;
+    lp.disconnect(); lp.connect(ws); ws.connect(eg);
+    // boost: a rushing jet whoosh
+    const bs = AC.createBufferSource(); bs.buffer = nb; bs.loop = true; const bf = AC.createBiquadFilter(); bf.type = 'bandpass'; bf.frequency.value = 1400; bf.Q.value = 1.2;
+    const bg = AC.createGain(); bg.gain.value = 0; bs.connect(bf); bf.connect(bg); bg.connect(master);
+    o1.start(); o2.start(); o3.start(); lfo.start(); ns.start(); rs.start(); bs.start();
+    eng = { o1, o2, o3, lfo, lfoG, lp, eg, ng, rg, bf, bg, master, nb };
   } catch (e) { AC = null; }
 }
 function updateAudio(b, speed) {
@@ -3125,7 +3178,9 @@ function updateAudio(b, speed) {
   const t = AC.currentTime, r = b.rpm;
   eng.master.gain.setTargetAtTime(VOL[S.volume], t, 0.05);
   const f = 38 + r * 120 + Math.sin(t * 31) * 1.5;
-  eng.o1.frequency.setTargetAtTime(f, t, 0.05); eng.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05);
+  eng.o1.frequency.setTargetAtTime(f, t, 0.05); eng.o2.frequency.setTargetAtTime(f * 0.5, t, 0.05); eng.o3.frequency.setTargetAtTime(f * 0.25, t, 0.05);
+  eng.lfo.frequency.setTargetAtTime(f * 0.25, t, 0.05); eng.lfoG.gain.setTargetAtTime(0.03 + 0.06 * Math.abs(b.throttle) * (1 - r * 0.5), t, 0.08);
+  const bst = b.boostT > 0; eng.bg.gain.setTargetAtTime(bst ? 0.16 : 0, t, bst ? 0.05 : 0.25); eng.bf.frequency.setTargetAtTime(bst ? 900 + r * 2600 : 700, t, 0.2);
   eng.lp.frequency.setTargetAtTime(260 + r * 1500, t, 0.05);
   eng.eg.gain.setTargetAtTime(0.07 + 0.12 * Math.abs(b.throttle), t, 0.08);
   eng.ng.gain.setTargetAtTime(Math.min(0.14, speed * 0.006) * b.wet, t, 0.1);
@@ -3144,11 +3199,102 @@ function beep(freq, len, type = 'triangle', vol = 0.25) {
   g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.001, t + len); o.connect(g); g.connect(eng ? eng.master : AC.destination); o.start(t); o.stop(t + len + 0.05);
 }
 
+// ================= music: a procedural soundtrack with its own mood on every map =================
+// Everything is synthesised live (no files to download). Layers build up from the menu to the race to the final stretch.
+const MUS = { next: 0, step: 0, bar: 0, mood: null, want: 'menu', int: 0, wantInt: 0, bus: null, dly: null, timer: 0, nb: null };
+const MAJ = [0, 2, 4, 5, 7, 9, 11], MIN = [0, 2, 3, 5, 7, 8, 10], DOR = [0, 2, 3, 5, 7, 9, 10], PHR = [0, 1, 3, 5, 7, 8, 10];
+const MOODS = {
+  menu:     { bpm: 98,  root: 50, mode: MAJ, prog: [0, 5, 3, 4], kick: 'x.......x.......', snare: '................', hat: '..x...x...x...x.', bass: 'x.....x...x.....', arp: 2, lead: 'triangle', cut: 1400, bassT: 'triangle', pad: 0.05 },
+  harbor:   { bpm: 118, root: 48, mode: MAJ, prog: [0, 4, 5, 3], kick: 'x...x...x...x...', snare: '....x.......x...', hat: '..x...x...x...x.', bass: 'x..x..x...x..x..', arp: 1, lead: 'square', cut: 1800, bassT: 'sawtooth', pad: 0.035 },
+  canyon:   { bpm: 128, root: 45, mode: DOR, prog: [0, 6, 5, 6], kick: 'x...x...x...x...', snare: '....x.......x..x', hat: 'x.x.x.x.x.x.x.x.', bass: 'x.xx..x.x.xx..x.', arp: 1, lead: 'sawtooth', cut: 1500, bassT: 'sawtooth', pad: 0.03 },
+  lagoon:   { bpm: 110, root: 53, mode: MAJ, prog: [0, 3, 4, 3], kick: 'x.....x...x.....', snare: '....x.......x...', hat: '..x..x..x..x..x.', bass: 'x..x....x..x....', arp: 1, lead: 'triangle', cut: 2600, bassT: 'triangle', pad: 0.03 },
+  storm:    { bpm: 136, root: 43, mode: MIN, prog: [0, 5, 2, 6], kick: 'x...x...x...x.x.', snare: '....x.......x...', hat: 'xxxxxxxxxxxxxxxx', bass: 'xxx.xxx.xxx.xx.x', arp: 1, lead: 'sawtooth', cut: 1300, bassT: 'sawtooth', pad: 0.04 },
+  breakers: { bpm: 124, root: 52, mode: MAJ, prog: [0, 3, 0, 4], kick: 'x...x...x...x...', snare: '....x.......x...', hat: '..x...x.x.x...x.', bass: 'x..x..x.x..x..x.', arp: 1, lead: 'square', cut: 2200, bassT: 'square', pad: 0.03 },
+  bayou:    { bpm: 92,  root: 40, mode: DOR, prog: [0, 3, 0, 4], kick: 'x.......x..x....', snare: '....x.......x...', hat: '..x...x...x...x.', bass: 'x..x.x....x..x..', arp: 2, lead: 'triangle', cut: 900, bassT: 'sawtooth', pad: 0.05 },
+  magma:    { bpm: 140, root: 40, mode: PHR, prog: [0, 1, 0, 6], kick: 'x..xx...x..xx...', snare: '....x.......x...', hat: 'x.xxx.xxx.xxx.xx', bass: 'xxxxxxxxxxxxxxxx', arp: 1, lead: 'sawtooth', cut: 1100, bassT: 'sawtooth', pad: 0.035 },
+};
+const mtof = m => 440 * Math.pow(2, (m - 69) / 12);
+function musicInit() {
+  if (MUS.bus || !AC) return;
+  MUS.bus = AC.createGain(); MUS.bus.gain.value = 0; MUS.bus.connect(AC.destination);
+  // a little stereo-less echo for space
+  MUS.dly = AC.createDelay(1); const fb = AC.createGain(), wet = AC.createGain(), lp = AC.createBiquadFilter(); fb.gain.value = 0.32; wet.gain.value = 0.32; lp.type = 'lowpass'; lp.frequency.value = 2400;
+  MUS.dly.connect(lp); lp.connect(fb); fb.connect(MUS.dly); lp.connect(wet); wet.connect(MUS.bus);
+  const n = AC.createBuffer(1, AC.sampleRate, AC.sampleRate), d = n.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1; MUS.nb = n;
+  MUS.next = AC.currentTime + 0.1;
+}
+function mEnv(t, peak, a, len) { const g = AC.createGain(); g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(peak, t + a); g.gain.exponentialRampToValueAtTime(0.0001, t + len); return g; }
+function mKick(t, v) { const o = AC.createOscillator(), g = mEnv(t, v, 0.004, 0.32); o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(42, t + 0.14); o.connect(g); g.connect(MUS.bus); o.start(t); o.stop(t + 0.35); }
+function mNoise(t, v, len, type, f, q) { const s = AC.createBufferSource(); s.buffer = MUS.nb; const fl = AC.createBiquadFilter(); fl.type = type; fl.frequency.value = f; fl.Q.value = q || 0.7; const g = mEnv(t, v, 0.002, len); s.connect(fl); fl.connect(g); g.connect(MUS.bus); s.start(t, Math.random() * 0.5); s.stop(t + len + 0.02); return g; }
+function mSnare(t, v) { mNoise(t, v, 0.18, 'bandpass', 1900, 0.8); const o = AC.createOscillator(), g = mEnv(t, v * 0.5, 0.002, 0.1); o.type = 'triangle'; o.frequency.value = 190; o.connect(g); g.connect(MUS.bus); o.start(t); o.stop(t + 0.12); }
+function mTone(t, note, v, len, type, cut, send) {
+  const o = AC.createOscillator(), f = AC.createBiquadFilter(), g = mEnv(t, v, 0.008, len); o.type = type; o.frequency.value = mtof(note);
+  f.type = 'lowpass'; f.frequency.setValueAtTime(cut * 2, t); f.frequency.exponentialRampToValueAtTime(Math.max(120, cut * 0.4), t + len); f.Q.value = 3;
+  o.connect(f); f.connect(g); g.connect(MUS.bus); if (send) g.connect(MUS.dly); o.start(t); o.stop(t + len + 0.05);
+}
+function mPad(t, notes, len, v, cut) {
+  for (const n of notes) for (const det of [-7, 7]) { const o = AC.createOscillator(), f = AC.createBiquadFilter(), g = AC.createGain(); o.type = 'sawtooth'; o.frequency.value = mtof(n); o.detune.value = det;
+    f.type = 'lowpass'; f.frequency.value = cut; g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(v, t + len * 0.3); g.gain.linearRampToValueAtTime(v * 0.8, t + len * 0.75); g.gain.linearRampToValueAtTime(0.0001, t + len + 0.3);
+    o.connect(f); f.connect(g); g.connect(MUS.bus); o.start(t); o.stop(t + len + 0.35); }
+}
+// one 16th-note step of the current mood
+function musicStep(t) {
+  const M = MOODS[MUS.mood] || MOODS.menu, st = MUS.step % 16, I = MUS.int, sec = 60 / M.bpm / 4;
+  const deg = M.prog[MUS.bar % M.prog.length], sc = i => M.root + M.mode[((i % 7) + 7) % 7] + 12 * Math.floor(i / 7), chord = [sc(deg), sc(deg + 2), sc(deg + 4)];
+  if (st === 0) mPad(t, chord.map(n => n + 12), sec * 16, M.pad * (I >= 2 ? 0.8 : 1), M.cut * 0.7);
+  if (I >= 2 && M.kick[st] === 'x') mKick(t, 0.5);
+  if (I === 0 && MUS.mood !== 'menu' && st % 8 === 0) mKick(t, 0.18);
+  if (I >= 2 && M.snare[st] === 'x') mSnare(t, 0.22);
+  if (I >= 1 && (M.hat[st] === 'x' || (I >= 3 && st % 2 === 1))) mNoise(t, I >= 2 ? 0.07 : 0.04, st % 4 === 2 ? 0.09 : 0.035, 'highpass', 7500);
+  if (I >= 1 && M.bass[st] === 'x') mTone(t, chord[0] - 12 + (I >= 3 && st % 8 === 6 ? 7 : 0), I >= 2 ? 0.2 : 0.12, sec * 1.6, M.bassT, M.cut * 0.5, false);
+  if (st % M.arp === 0) { const k = (st / M.arp) | 0, pat = [0, 1, 2, 1, 2, 0, 1, 2], n = chord[pat[k % 8]] + 12 + (I >= 3 && k % 4 === 3 ? 12 : 0); mTone(t, n, I >= 2 ? 0.06 : 0.045, sec * 2.2, M.lead, M.cut, true); }
+  if (I >= 3 && st === 14) mNoise(t, 0.1, 0.3, 'bandpass', 3000, 0.5); // little riser into each bar
+}
+function musicUpdate() {
+  if (!AC) return; musicInit(); if (!MUS.bus) return;
+  const t = AC.currentTime, vol = S.music ? VOL[S.music] * 0.8 : 0, duck = state === 'paused' ? 0.35 : 1;
+  MUS.bus.gain.setTargetAtTime(vol * duck, t, 0.3);
+  // what should be playing: the map's mood in a race, the menu mood elsewhere
+  const meta = MAPS[mapIdx], racingish = ['countdown', 'racing', 'paused', 'finished'].includes(state);
+  MUS.want = racingish ? (MOODS[meta && meta.id] ? meta.id : 'harbor') : 'menu';
+  MUS.wantInt = state === 'countdown' ? 1 : state === 'racing' || state === 'paused' ? (R && R.seq && R.idx >= R.seq.length - 2 ? 3 : 2) : state === 'finished' ? 1 : 0;
+  if (!vol) { MUS.next = t + 0.1; return; }
+  if (MUS.next < t - 0.3) MUS.next = t + 0.05; // tab was asleep: don't spray missed notes
+  if (!MUS.mood) MUS.mood = MUS.want;
+  while (MUS.next < t + 0.18) {
+    if (MUS.step % 16 === 0) { if (MUS.mood !== MUS.want) { MUS.mood = MUS.want; MUS.bar = 0; MUS.step = 0; } MUS.int = MUS.wantInt; }
+    else if (MUS.wantInt > MUS.int && MUS.step % 4 === 0) MUS.int = MUS.wantInt; // build up quickly, calm down on the bar
+    musicStep(MUS.next);
+    MUS.next += 60 / (MOODS[MUS.mood] || MOODS.menu).bpm / 4; MUS.step++; if (MUS.step % 16 === 0) MUS.bar++;
+  }
+}
+setInterval(() => { try { if (AC && document.visibilityState === 'visible') musicUpdate(); } catch (e) {} }, 50);
+
 // ================= input =================
 const keys = {};
 const KM = { ArrowUp: 'u', KeyW: 'u', ArrowDown: 'd', KeyS: 'd', ArrowLeft: 'l', KeyA: 'l', ArrowRight: 'r', KeyD: 'r', Space: 'b', ShiftLeft: 'b', ShiftRight: 'b' };
 const open = id => !$(id).classList.contains('hidden');
-const panelOpen = () => ['garage', 'settings', 'login', 'board', 'lobby', 'lres', 'editor', 'quests'].some(open);
+const panelOpen = () => ['garage', 'settings', 'login', 'board', 'lobby', 'lres', 'editor', 'quests', 'help'].some(open);
+// ---- gamepad: left stick / d-pad steer, RT or A throttle, LT or B brake, X / RB boost, Y reset, START pause ----
+const PAD = { prev: [], seen: false };
+function padRead() {
+  const gp = navigator.getGamepads ? [...navigator.getGamepads()].find(g => g && g.connected) : null; if (!gp) return null;
+  if (!PAD.seen) { PAD.seen = true; flash('🎮 CONTROLLER READY', 'var(--accent)', 1200); }
+  const B = i => gp.buttons[i] ? (gp.buttons[i].value || (gp.buttons[i].pressed ? 1 : 0)) : 0, hit = i => B(i) > 0.5 && !PAD.prev[i];
+  const ax = Math.abs(gp.axes[0] || 0) > 0.15 ? gp.axes[0] : 0, steer = clamp(ax + B(15) - B(14), -1, 1);
+  const out = { throttle: clamp(Math.max(B(7), B(0), B(12)) - Math.max(B(6), B(1), B(13)), -1, 1), steer, boost: B(2) > 0.5 || B(5) > 0.5, hit };
+  PAD.next = gp.buttons.map((b, i) => B(i) > 0.5); return out;
+}
+function padButtons(p) {
+  if (!p) return;
+  const vis = id => $(id) && !$(id).classList.contains('hidden');
+  if (p.hit(9)) { if (state === 'racing' || state === 'paused' || state === 'countdown') { if (!LOBBY.racing) togglePause(); } }
+  if (p.hit(3) && state === 'racing') resetToCheckpoint();
+  if (vis('help') && (p.hit(0) || p.hit(9))) $('helpDone').click();
+  else if (state === 'menu' && vis('menu') && !panelOpen()) { if (p.hit(0)) $('startBtn').click(); else if (p.hit(3)) $('rivalsBtn').click(); }
+  else if (state === 'finished' && vis('finish')) { if (p.hit(0)) $('againBtn').click(); else if (p.hit(1)) $('menuBtn').click(); }
+  PAD.prev = PAD.next || [];
+}
 addEventListener('keydown', e => {
   if (e.target && (e.target.id === 'chatIn' || e.target.id === 'chatMenuIn')) { if (e.code === 'Enter') { e.preventDefault(); chatSendFrom(e.target); } else if (e.code === 'Escape') closeChatInput(); return; }
   if (e.target && e.target.tagName === 'INPUT') { if (e.code === 'Enter') { if (open('login')) $('loginGo').click(); else if (open('lobby')) $('lbJoin').click(); else if (open('editor') && e.target.id === 'edCode') $('edLoad').click(); } return; }
@@ -3159,7 +3305,7 @@ addEventListener('keydown', e => {
   if (e.code === 'KeyC') camMode = (camMode + 1) % 3;
   if (e.code === 'KeyT' && state !== 'menu' && !LOBBY.racing) startRace();
   if (e.code === 'KeyQ' && state !== 'menu') quitToMenu();
-  if (e.code === 'KeyM') { S.volume = S.volume ? 0 : 2; save(); }
+  if (e.code === 'KeyM') { const on = S.volume || S.music; S.volume = on ? 0 : 2; S.music = on ? 0 : 2; save(); flash(on ? 'SOUND OFF' : 'SOUND ON', 'var(--accent)', 700); }
   if (e.code === 'KeyP' || e.code === 'Escape') { if (open('settings')) closeSettings(); else if (!LOBBY.racing) togglePause(); }
   if (e.code === 'Enter' && (state === 'racing' || state === 'countdown' || state === 'paused') && !panelOpen()) { e.preventDefault(); openChatInput(); return; }
   if (e.code === 'Enter' && ((state === 'menu' && !panelOpen()) || (state === 'finished' && open('finish')))) { e.preventDefault(); startRace(); }
@@ -3188,6 +3334,7 @@ let fromEditor = false;
 const H = 1 / 120;
 const physWorld = () => ({ obstacles: world.obstacles, channel: world.channel, chans: world.chans, limit: world.limit, cx: world.cx, cz: world.cz, ramps: world.ramps, vents: world.vents, boats: rivalBoats() });
 function rivalBoats() {
+  if (RIV.on) return state === 'racing' ? RIV.list.map(a => ({ x: a.b.pos.x, z: a.b.pos.z, q: a.b.q, vx: a.b.vel.x, vz: a.b.vel.z })) : null;
   if (!LOBBY.racing || !LOBBY.coll || LOBBY.out || LOBBY.fin != null || state !== 'racing') return null;
   const out = [];
   for (const pid in NET.peers) { const p = NET.peers[pid], d = p.d || {}; if (!p.mesh || !p.mesh.visible || d.o || d.f != null || d.rn !== LOBBY.round) continue;
@@ -3205,6 +3352,7 @@ function burned() {
 }
 function placeBoat(x, z, yaw) { boat = Core.makeBoat(x, z, yaw); boat.pos.y = waveH(x, z, simT); prevPos = { ...boat.pos }; camSnap = true; }
 function loadMap(i) {
+  wakesClear();
   mapIdx = i; buildWorld(i); P.length = 0;
   placeBoat(world.start.x, world.start.z, world.start.yaw);
   R = Core.makeRace(world, lapsFor(MAPS[i]));
@@ -3226,6 +3374,7 @@ function startRace() {
   const meta = MAPS[mapIdx];
   resetRun();
   placeBoat(world.start.x, world.start.z, world.start.yaw);
+  rivalsSpawn();
   cdT = 3.6;
   run = DATA.runs[runKey(meta)] || null;
   ghostData = null; setGhostTag(null);
@@ -3310,6 +3459,7 @@ function nextGoal() {
   return L < e.lvl ? `${Core.TIERS[nx].name} engine at mastery ${e.lvl}` : cash() >= e.cost ? `<b style="color:#7dffb0">${Core.TIERS[nx].name} engine affordable!</b>` : `${Core.TIERS[nx].name}: ${money(e.cost - cash())} to go`;
 }
 function finishRace() {
+  if (RIV.on) return finishRivals();
   state = 'finished';
   const meta = MAPS[mapIdx], key = runKey(meta), tg = targets(meta), t = total();
   const prev = DATA.runs[key], prevBest = prev && prev.best;
@@ -3358,8 +3508,8 @@ function finishRace() {
   $('frewards').innerHTML = rewardsHTML(pay, ups); animateBars($('frewards'));
   $('frec').textContent = fmt(meta.custom ? r.best : Math.min(tg.rec, r.best, wb0 ? wb0.t : Infinity)); $('fbest').textContent = fmt(r.best);
   const online = NET.on && (!meta.custom || meta.code) && !adminRun && !offline();
-  $('frank').textContent = !online ? '' : me() ? 'Posting to the online leaderboard…' : 'Sign in on the main menu to post your times online.';
-  if (online && me()) submitRun(key, t, rec.length < 6000 ? rec : null, isPB ? splits.slice() : null).then(rank => {
+  $('frank').textContent = BETA ? '🧪 Preview build: times stay on this device and aren\'t posted to the live leaderboard.' : !online ? '' : me() ? 'Posting to the online leaderboard…' : 'Sign in on the main menu to post your times online.';
+  if (online && me() && !BETA) submitRun(key, t, rec.length < 6000 ? rec : null, isPB ? splits.slice() : null).then(rank => {
     $('frank').textContent = rank == null ? "Couldn't reach the leaderboard. Your time is saved on this computer." : (rank.rank ? `🌐 World rank #${rank.rank}` : '🌐 Posted — not in the overall top 10 yet') + (rank.trank ? ` · #${rank.trank} on ${Core.TIERS[rank.eng].name} engines` : '');
     const wb = worldBest(key); if (!meta.custom) $('frec').textContent = fmt(Math.min(tg.rec, r.best, wb ? wb.t : Infinity));
     refreshLabels(); renderMaps();
@@ -3386,6 +3536,8 @@ function refreshLabels() {
   $('tbest').textContent = fmt(r && r.best);
   $('lapChip').style.visibility = isLoop(meta) ? 'visible' : 'hidden';
   $('lapChip').textContent = 'LAPS: ' + S.laps;
+  RIV.diff = RIV_DIFF[S.rivDiff] ? S.rivDiff : RIV.diff; $('rivChip').textContent = 'RIVALS: ' + RIV_DIFF[RIV.diff].label;
+  $('rivalsBtn').disabled = !rivalsOk(); $('rivalsBtn').title = rivalsOk() ? 'Race five AI rivals' : 'Rivals race on gate and sprint maps';
   $('unit').textContent = { mph: 'MPH', kmh: 'KM/H', kn: 'KNOTS' }[S.units];
   const lv = levelOf(totalXp()), di = dailyInfo();
   const top = `<span class="pill cash">${money(cash())}</span><span class="pill">MASTERY ${lv.L}<span class="xpbar"><i style="width:${lv.max ? 100 : lv.into / lv.need * 100}%"></i></span></span><span class="pill">⚙ ${Core.TIERS[E().engine].name}</span>`;
@@ -3411,7 +3563,7 @@ function renderMaps() {
       <div class="tm"><span style="color:var(--gold)">★</span> ${fmt(tg.g)} · <span style="color:var(--silver)">★</span> ${fmt(tg.s)} · <span style="color:var(--bronze)">★</span> ${fmt(tg.b)}</div>
       <div class="tm">Best <b>${fmt(r.best)}</b>${lapsFor(m) > 1 ? ` · ${lapsFor(m)} laps` : ''}</div>
       <div class="tm">Record <span class="tier" style="background:${hexc(ENG_COL[myTier()])}" title="your engine's leaderboard">T${myTier() + 1}</span> <b>${fmt(recordOf(m).t)}</b> · ${esc(recordOf(m).by)}</div>
-      <div class="rw ${got ? 'ok' : ''}">${got ? '✓' : '🔒'} Gold reward: ${skin.name}</div></div>`;
+      <div class="rw ${got ? 'ok' : ''}">${got ? '✓' : '🔒'} Gold reward: ${skin.name}</div>${m.mode !== 'COLLECT' ? `<div class="tm" style="margin-top:2px">🏆 Rivals: ${(['<span style="opacity:.6">not beaten yet</span>', 'beat EASY', 'beat NORMAL', '<b style="color:var(--gold)">beat HARD</b>'])[(DATA.rivWins || {})[m.id] || 0]}</div>` : ''}</div>`;
   }).join('') + (MAPS[mapIdx].custom ? `<div class="map sel" data-i="${mapIdx}"><span class="tag">CUSTOM</span><div class="nm">${esc(MAPS[mapIdx].name)}</div><div class="ds">Your map${MAPS[mapIdx].code ? ' · code ' + MAPS[mapIdx].code : ''}</div><div class="tm">Best <b>${fmt((DATA.runs[runKey(MAPS[mapIdx])] || {}).best)}</b></div></div>` : '')
     + `<div class="map add" id="mapAdd"><div class="nm">🛠 CUSTOM MAPS</div><div class="ds">Build your own course, or load a friend's by code</div></div>`;
   $('maps').querySelectorAll('.map[data-i]').forEach(el => el.onclick = () => { const i = +el.dataset.i; if (i !== mapIdx) { ghostPick = null; loadMap(i); renderMaps(); } });
@@ -3531,17 +3683,19 @@ const SET_SCHEMA = [
   { k: 'chat', label: 'Chat during races', opts: [[true, 'On'], [false, 'Off']] },
   { k: 'cam', label: 'Starting camera', opts: [[0, 'Chase'], [1, 'Far'], [2, 'Cockpit']] },
   { k: 'units', label: 'Speed units', opts: [['mph', 'MPH'], ['kmh', 'KM/H'], ['kn', 'Knots']] },
-  { k: 'volume', label: 'Sound', opts: [[0, 'Off'], [1, 'Low'], [2, 'Med'], [3, 'High']] },
+  { k: 'volume', label: 'Sound effects', opts: [[0, 'Off'], [1, 'Low'], [2, 'Med'], [3, 'High']] },
+  { k: 'music', label: 'Music', opts: [[0, 'Off'], [1, 'Low'], [2, 'Med'], [3, 'High']] },
   { k: 'quality', label: 'Graphics', opts: [[0, 'Low'], [1, 'Medium'], [2, 'High']] },
   { k: 'shadows', label: 'Shadows', opts: [[true, 'On'], [false, 'Off']] },
   { k: 'shake', label: 'Camera shake', opts: [[true, 'On'], [false, 'Off']] },
+  { k: 'speedfx', label: 'Speed effects', opts: [[true, 'On'], [false, 'Off']] },
 ];
 let settingsFrom = 'menu';
 function renderSettings() {
   $('setlist').innerHTML = SET_SCHEMA.map(r => `<div class="set"><span>${r.label}</span><div class="seg">${r.opts.map(([v, l], j) => `<button data-k="${r.k}" data-j="${j}" class="${S[r.k] === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>`).join('');
   $('setlist').querySelectorAll('button').forEach(b => b.onclick = () => {
     const r = SET_SCHEMA.find(x => x.k === b.dataset.k), v = r.opts[+b.dataset.j][0], old = S[r.k];
-    S[r.k] = v; save();
+    S[r.k] = v; if (r.k === 'quality') S.qManual = true; save();
     if ((r.k === 'quality' || r.k === 'shadows') && v !== old) applyQuality(r.k === 'quality');
     if (r.k === 'laps' && state !== 'paused') { R = Core.makeRace(world, lapsFor(MAPS[mapIdx])); }
     renderSettings(); refreshLabels(); renderMaps();
@@ -3559,6 +3713,8 @@ function dynRes(dt) {
   DYN.avg += (dt - DYN.avg) * 0.08; DYN.cool -= dt;
   if (DYN.avg > 1 / 45) { DYN.slowT += dt; DYN.fastT = 0; } else if (DYN.avg < 1 / 58) { DYN.fastT += dt; DYN.slowT = Math.max(0, DYN.slowT - dt); } else DYN.slowT = Math.max(0, DYN.slowT - dt * 0.5);
   if (DYN.cool > 0) return;
+  // still struggling at the lowest resolution: step the graphics quality down once (unless you picked it yourself)
+  if (DYN.slowT > 4 && DYN.scale <= 0.5 && S.quality > 0 && !S.qManual && state !== 'menu') { S.quality--; save(); DYN.slowT = 0; DYN.cool = 4; applyQuality(false); flash('GRAPHICS LOWERED FOR SMOOTHER PLAY', 'var(--accent)', 1600); return; }
   if (DYN.slowT > 1.2 && pixelRatio() > 0.6) { DYN.scale = Math.max(0.5, DYN.scale - 0.1); DYN.slowT = 0; DYN.cool = 1; renderer.setPixelRatio(pixelRatio()); resize(); }
   else if (DYN.fastT > 6 && DYN.scale < 1) { DYN.scale = Math.min(1, DYN.scale + 0.1); DYN.fastT = 0; DYN.cool = 2; renderer.setPixelRatio(pixelRatio()); resize(); }
 }
@@ -3573,7 +3729,9 @@ function applyQuality(rebuild) {
   resize();
   if (rebuild) { buildWorld(mapIdx); if (R && R.rings) W3.rings.forEach((g, k) => { if (R.rings[k]) g.m.visible = g.p.visible = false; }); }
 }
-$('startBtn').onclick = startRace; $('againBtn').onclick = startRace;
+$('startBtn').onclick = () => { RIV.want = false; startRace(); }; $('againBtn').onclick = startRace;
+$('rivalsBtn').onclick = () => { if (!rivalsOk()) return flash('NO RIVALS ON THIS MAP', 'var(--bad)', 1400); RIV.want = true; startRace(); };
+$('rivChip').onclick = () => { RIV.diff = { easy: 'normal', normal: 'hard', hard: 'easy' }[RIV.diff]; S.rivDiff = RIV.diff; save(); refreshLabels(); };
 $('menuBtn').onclick = quitToMenu;
 $('quitBtn').onclick = quitToMenu;
 function quitToMenu() {
@@ -3585,8 +3743,12 @@ function quitToMenu() {
 $('bPause').onclick = () => { if (!LOBBY.racing) togglePause(); };
 $('bRestart').onclick = () => { if (!LOBBY.racing) startRace(); };
 $('bMenu').onclick = quitToMenu;
-function toMenu() { pollAdmin(); clearMyLive(); state = 'menu'; ghostMesh.visible = false; setGhostTag(null); $('vsghost').textContent = ''; spec = null; placeBoat(world.start.x, world.start.z, world.start.yaw); W3.rings.forEach(g => { g.m.visible = g.p.visible = true; }); renderMaps(); refreshLabels(); $('menu').classList.remove('hidden'); refreshBoards(true); }
+function toMenu() { rivalsClear(); pollAdmin(); clearMyLive(); state = 'menu'; ghostMesh.visible = false; setGhostTag(null); $('vsghost').textContent = ''; spec = null; placeBoat(world.start.x, world.start.z, world.start.yaw); W3.rings.forEach(g => { g.m.visible = g.p.visible = true; }); renderMaps(); refreshLabels(); $('menu').classList.remove('hidden'); refreshBoards(true); }
 $('resumeBtn').onclick = togglePause; $('restartBtn').onclick = () => { if (!LOBBY.racing) startRace(); };
+$('helpBtn').onclick = () => { $('menu').classList.add('hidden'); $('help').classList.remove('hidden'); };
+$('helpDone').onclick = () => { $('help').classList.add('hidden'); if (state === 'menu') $('menu').classList.remove('hidden'); if (!S.seenHelp) { S.seenHelp = true; save(); } initAudio(); };
+// first time on the menu (after signing in): show how to play once
+const helpWait = setInterval(() => { try { if (S.seenHelp) return clearInterval(helpWait); if (state === 'menu' && !$('menu').classList.contains('hidden') && !panelOpen()) { clearInterval(helpWait); $('helpBtn').click(); } } catch (e) {} }, 1500);
 $('setBtn').onclick = () => openSettings('menu'); $('pSetBtn').onclick = () => openSettings('pause'); $('setDone').onclick = closeSettings;
 $('questBtn').onclick = () => { renderQuests(); $('menu').classList.add('hidden'); $('quests').classList.remove('hidden'); };
 $('qDone').onclick = () => { $('quests').classList.add('hidden'); $('menu').classList.remove('hidden'); };
@@ -3599,6 +3761,319 @@ $('wipe').onclick = () => {
   DATA = normData({ settings: S, skin: 'classic', unlocked: { classic: true }, runs: {}, sel: mapIdx, player: DATA.player, skipLogin: DATA.skipLogin, maps: DATA.maps }); save(); applyMyLook(); pushProfile(true);
   $('wipe').textContent = 'progress reset'; refreshLabels(); renderMaps();
 };
+
+// ================= foam wakes: a fading V of white water behind every boat =================
+const WAKE_N = 44, WAKES = new Map();
+const wakeMat = new THREE.ShaderMaterial({
+  uniforms: THREE.UniformsUtils.merge([THREE.UniformsLib.fog, { uT: { value: 0 } }]), fog: true, transparent: true, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -6, polygonOffsetUnits: -6,
+  vertexShader: `attribute float aA; varying float vA; varying vec2 vUv;
+    #include <fog_pars_vertex>
+    void main() { vA = aA; vUv = uv; vec4 mvPosition = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mvPosition;
+    #include <fog_vertex>
+    }`,
+  fragmentShader: `uniform float uT; varying float vA; varying vec2 vUv;
+    #include <fog_pars_fragment>
+    float h(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+    float n(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(h(i), h(i + vec2(1, 0)), f.x), mix(h(i + vec2(0, 1)), h(i + vec2(1, 1)), f.x), f.y); }
+    void main() {
+      float e = abs(vUv.x * 2.0 - 1.0), lip = smoothstep(0.8, 0.94, e) * (1.0 - smoothstep(0.94, 1.0, e)), core = 1.0 - smoothstep(0.0, 0.2, e);
+      float f1 = n(vec2(vUv.x * 23.0 + vUv.y * 3.0, vUv.y * 3.5 - uT * 0.3)), f2 = n(vec2(vUv.x * 47.0 - vUv.y * 5.0, vUv.y * 7.0));
+      float lace = smoothstep(0.3, 0.75, f1 * 0.65 + f2 * 0.35);
+      float a = vA * (lip * 0.9 + core * 0.45) * (0.3 + 0.7 * lace);
+      gl_FragColor = vec4(vec3(0.93, 0.97, 1.0), a * 0.4);
+      #include <fog_fragment>
+    }`,
+});
+function wakeTrail(key) {
+  let w = WAKES.get(key); if (w) return w;
+  const g = new THREE.BufferGeometry(), pos = new Float32Array(WAKE_N * 2 * 3), uv = new Float32Array(WAKE_N * 2 * 2), aA = new Float32Array(WAKE_N * 2), idx = [];
+  for (let i = 0; i < WAKE_N - 1; i++) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+  g.setIndex(idx); g.setAttribute('position', new THREE.BufferAttribute(pos, 3)); g.setAttribute('uv', new THREE.BufferAttribute(uv, 2)); g.setAttribute('aA', new THREE.BufferAttribute(aA, 1));
+  const m = new THREE.Mesh(g, wakeMat); m.frustumCulled = false; m.renderOrder = 2; scene.add(m);
+  w = { m, g, pts: [], seen: 0, dist: 0 }; WAKES.set(key, w); return w;
+}
+// x,z: stern position; fx,fz: heading; k: 0..1 how much white water this boat is throwing right now
+function wakeFeed(key, x, z, fx, fz, k) {
+  const w = wakeTrail(key), P = w.pts, last = P[0]; w.seen = simT;
+  // P[0] rides along with the stern; a new point is laid down every 1.6 m
+  if (!last) { P.unshift({ x, z, rx: -fz, rz: fx, k, t: simT, d: 0 }, { x, z, rx: -fz, rz: fx, k, t: simT, d: 0 }); return; }
+  const prev = P[1], dd = Math.hypot(x - prev.x, z - prev.z); if (dd > 30) { P.length = 0; return; } // teleported (reset / respawn)
+  Object.assign(last, { x, z, rx: -fz, rz: fx, k, t: simT, d: prev.d + dd });
+  if (dd > 1.6) { P.unshift({ ...last }); if (P.length > WAKE_N) P.pop(); }
+}
+function wakesUpdate() {
+  wakeMat.uniforms.uT.value = simT; const show = S.quality > 0 || true;
+  for (const [key, w] of WAKES) {
+    if (simT - w.seen > 1 || !show) { w.m.visible = false; if (simT - w.seen > 20) { scene.remove(w.m); w.g.dispose(); WAKES.delete(key); } continue; }
+    w.m.visible = true; const P = w.pts, pa = w.g.attributes.position.array, ua = w.g.attributes.uv.array, aa = w.g.attributes.aA.array;
+    for (let i = 0; i < WAKE_N; i++) {
+      const p = P[Math.min(i, P.length - 1)]; if (!p) break; const age = simT - p.t, wd = 0.9 + age * 2.6, life = Math.max(0, 1 - age / 3.2), y = waveH(p.x, p.z, simT) + 0.2;
+      const a = i >= P.length ? 0 : p.k * life * life * (i === 0 ? 0.3 : 1);
+      for (const sd of [0, 1]) { const o = (i * 2 + sd), sg = sd ? 1 : -1; pa[o * 3] = p.x + p.rx * wd * sg; pa[o * 3 + 1] = y; pa[o * 3 + 2] = p.z + p.rz * wd * sg; ua[o * 2] = sd; ua[o * 2 + 1] = p.d * 0.12; aa[o] = a; }
+    }
+    w.g.attributes.position.needsUpdate = w.g.attributes.uv.needsUpdate = w.g.attributes.aA.needsUpdate = true;
+  }
+}
+function wakesClear() { for (const [, w] of WAKES) { scene.remove(w.m); w.g.dispose(); } WAKES.clear(); }
+
+// ================= RACE RIVALS: five AI boats to race when your friends aren't online =================
+const RIV = { want: false, on: false, diff: 'normal', list: [], uiT: 0 };
+const RIV_DIFF = { easy: { mult: 0.86, gain: 2.2, boost: 0.25, label: 'EASY' }, normal: { mult: 0.96, gain: 2.6, boost: 0.6, label: 'NORMAL' }, hard: { mult: 1.06, gain: 3.0, boost: 1, label: 'HARD' } };
+const RIV_NAMES = ['Marlin', 'Vortex', 'Kai', 'Reef', 'Blaze', 'Nova', 'Orca', 'Tidal', 'Comet', 'Jetsam', 'Squall', 'Bolt'];
+const rivalsOk = () => world && world.type !== 'collect' && world.cps && world.cps.length > 0;
+function gridSlot(k) {
+  const st = world.start, fx = -Math.sin(st.yaw), fz = -Math.cos(st.yaw), rx = -fz, rz = fx, row = Math.floor(k / 2), lat = (k % 2 ? 1 : -1) * 3.4;
+  return { x: st.x - fx * row * 11 + rx * lat, z: st.z - fz * row * 11 + rz * lat, yaw: st.yaw };
+}
+function routePointsFor(ri) {
+  if (world.channel) return world.channel.pts.map(p => ({ x: p.x, z: p.z, hw: p.hw }));
+  if (!world.routes || !world.chanMap) return null;
+  const list = world.routes[ri], pts = [];
+  for (const n of list) { let P = world.chanMap[n].pts; if (pts.length) { const l = pts[pts.length - 1]; let k = 0, bd = 1e9; P.forEach((q, i) => { const d = Math.hypot(q.x - l.x, q.z - l.z); if (d < bd) { bd = d; k = i; } }); P = P.slice(k + 2); } pts.push(...P.map(p => ({ x: p.x, z: p.z, hw: p.hw }))); }
+  return pts;
+}
+// ---- racing lines: a smooth path that threads every gate, keeps off walls and swerves round obstacles early ----
+// Dynamic programming over (point along the course) × (sideways offset): cheapest smooth path wins.
+const LINES = {};
+function gatePath() { // gate maps: straight legs between gate centres (closed for circuits); the racing line rounds the corners
+  const c = world.cps, pts = [], L = world.type === 'circuit' ? c.length + 1 : c.length;
+  if (world.type !== 'circuit') pts.push({ x: world.start.x, z: world.start.z, hw: 10 });
+  for (let i = 0; i < L; i++) { const g = c[i % c.length]; pts.push({ x: g.x, z: g.z, hw: g.kind === 'gate' ? Math.max(4, g.hw) : 14 }); }
+  return pts;
+}
+function racingLine(raw, key) {
+  if (LINES[key]) return LINES[key];
+  // resample every 4 m
+  const P = []; for (let i = 0; i < raw.length - 1; i++) { const a = raw[i], b = raw[i + 1], L = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.round(L / 4)); for (let k = 0; k < n; k++) { const t = k / n; P.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, hw: (a.hw || 10) + ((b.hw || 10) - (a.hw || 10)) * t }); } }
+  P.push(raw[raw.length - 1]);
+  const N = P.length, K = 25, MID = 12; // offsets -12..12 m
+  P.forEach((p, i) => { const a = P[Math.max(0, i - 2)], b = P[Math.min(N - 1, i + 2)]; let tx = b.x - a.x, tz = b.z - a.z; const l = Math.hypot(tx, tz) || 1; p.tx = tx / l; p.tz = tz / l; });
+  const chanW = (x, z) => world.chans ? -Core.chansSD(world.chans, x, z).sd : world.channel ? (() => { const q = Core.chanQuery(world.channel, x, z); return q.hw - Math.abs(q.d); })() : 99;
+  // hard limits per point: gates must be threaded, flags passed on the right side, lava ramps hit square
+  const lim = P.map(p => [-Math.min(MID, p.hw - 2), Math.min(MID, p.hw - 2)]);
+  for (const c of world.cps) { let bi = 0, bd = 1e9; P.forEach((p, i) => { const d = Math.hypot(p.x - c.x, p.z - c.z); if (d < bd) { bd = d; bi = i; } }); if (bd > 8) continue;
+    for (let i = Math.max(0, bi - 1); i <= Math.min(N - 1, bi + 1); i++) { if (c.kind === 'gate') lim[i] = [Math.max(lim[i][0], -(c.hw - 2)), Math.min(lim[i][1], c.hw - 2)]; else lim[i] = c.side > 0 ? [4, 11] : [-11, -4]; } }
+  if (world.lava) for (const r of world.ramps || []) { const fx = -Math.sin(r.yaw), fz = -Math.cos(r.yaw);
+    P.forEach((p, i) => { const u = (p.x - r.x) * fx + (p.z - r.z) * fz; if (u < -55 || u > r.len / 2 + 2) return; const v0 = (p.x - r.x) * -fz + (p.z - r.z) * fx, nd = p.tz * fx * 0 + 1; // offset that lands on the ramp axis
+      const sideDot = (-p.tz) * (-fz) + p.tx * fx, c0 = -v0 / (sideDot || 1), w = r.w / 2 - 1.8; lim[i] = [Math.max(lim[i][0], c0 - w), Math.min(lim[i][1], c0 + w)]; }); }
+  const near = world.obstacles.filter(o => o.r < 30);
+  const node = (i, o) => {
+    const p = P[i], x = p.x - p.tz * o, z = p.z + p.tx * o;
+    if (o < lim[i][0] - 1e-6 || o > lim[i][1] + 1e-6) return 1e6;
+    if (chanW(x, z) < 2.4) return 5e4;
+    let c = o * o * 0.01;
+    for (const ob of near) { const d = Math.hypot(ob.x - x, ob.z - z), m = ob.r + 3.4; if (d < m) c += (m - d) * (m - d) * 40; }
+    return c;
+  };
+  const PX = P.map(p => Float64Array.from({ length: K }, (_, k) => p.x - p.tz * (k - MID))), PZ = P.map(p => Float64Array.from({ length: K }, (_, k) => p.z + p.tx * (k - MID)));
+  const NODE = P.map((_, i) => Float64Array.from({ length: K }, (_, k) => node(i, k - MID)));
+  const S5 = 5, idx = (k, d) => k * S5 + (d + 2); // state: offset k, step d = k - previous k (−2..2)
+  let cost = new Float64Array(K * S5).fill(1e12); const from = [];
+  for (let k = 0; k < K; k++) cost[idx(k, 0)] = NODE[0][k];
+  for (let i = 1; i < N; i++) {
+    const nc = new Float64Array(K * S5).fill(1e12), fr = new Int16Array(K * S5).fill(-1);
+    for (let k = 0; k < K; k++) { const nd = NODE[i][k]; if (nd >= 1e6) continue;
+      for (let d = -2; d <= 2; d++) { const k1 = k - d; if (k1 < 0 || k1 >= K) continue;
+        for (let d1 = -2; d1 <= 2; d1++) { const c0 = cost[idx(k1, d1)]; if (c0 >= 1e11) continue; const k2 = k1 - d1;
+          let curv = 0; if (k2 >= 0 && k2 < K && i >= 2) { const ax = PX[i][k] - 2 * PX[i - 1][k1] + PX[i - 2][k2], az = PZ[i][k] - 2 * PZ[i - 1][k1] + PZ[i - 2][k2]; curv = (ax * ax + az * az) * 40; }
+          const c = c0 + nd + curv + d * d * 0.5; const s2 = idx(k, d); if (c < nc[s2]) { nc[s2] = c; fr[s2] = idx(k1, d1); } } } }
+    from.push(fr); cost = nc;
+  }
+  let st = 0; for (let j = 1; j < K * S5; j++) if (cost[j] < cost[st]) st = j;
+  const off = new Array(N); off[N - 1] = Math.floor(st / S5) - MID;
+  for (let i = N - 1; i > 0; i--) { st = from[i - 1][st]; if (st < 0) st = 0; off[i - 1] = Math.floor(st / S5) - MID; }
+  const line = P.map((p, i) => ({ x: p.x - p.tz * off[i], z: p.z + p.tx * off[i], tx: p.tx, tz: p.tz, lo: lim[i][0] - off[i], hi: lim[i][1] - off[i] }));
+  // corner speed: how much the line turns over the next ~30 m
+  line.forEach((p, i) => { const q = line[Math.min(N - 1, i + 6)]; p.turn = Math.abs(Math.atan2(p.tx * q.tz - p.tz * q.tx, p.tx * q.tx + p.tz * q.tz)); });
+  line.cpIdx = world.cps.map(c => { let bi = 0, bd = 1e9; line.forEach((p, i) => { const d = Math.hypot(p.x - c.x, p.z - c.z); if (d < bd) { bd = d; bi = i; } }); return bi; });
+  return (LINES[key] = line);
+}
+function rivalsClear() {
+  for (const a of RIV.list) if (a.mesh) a.mesh.visible = false;
+  RIV.list = []; RIV.on = false; $('pos').classList.add('hidden');
+}
+// five rival boats, built once and reused (building new hull models is the slow part)
+function rivalPool() {
+  if (RIV.pool) return RIV.pool;
+  const names = RIV_NAMES.slice().sort(() => Math.random() - 0.5), paints = SKINS.filter(k => !k.excl && !k.unlock), pick = a => a[Math.floor(Math.random() * a.length)];
+  const hulls = ['speed', 'speed', 'patrol', 'yacht', 'airboat'].sort(() => Math.random() - 0.5);
+  RIV.pool = hulls.map((hull, n) => {
+    const look = { skin: pick(paints).id, helmet: pick(HELMETS.filter(h => !h.excl)).id, hc: pick(COLORS), visor: pick(VISORS.filter(v => !v.excl)).id, suit: pick(COLORS), tone: Math.floor(Math.random() * 6), flag: pick(FLAGS.filter(f => !f.excl && f.id !== 'none' && !f.unlock)).id, eng: 0, fx: 'none', hull };
+    const mesh = lookedClone(look); mesh.add(nameTag(names[n])); mesh.visible = false; scene.add(mesh);
+    return { name: names[n], look, mesh };
+  });
+  return RIV.pool;
+}
+setTimeout(() => { try { if (state === 'menu') rivalPool(); } catch (e) {} }, 4000);
+// The rivals drive the racing line with a speed plan (fast on straights, slower in tight corners, flying off ramps),
+// tuned so each difficulty races at a known pace: EASY ≈ bronze, NORMAL ≈ silver, HARD ≈ gold. You can bump them aside.
+const RIV_PACE = { easy: t => t.b, normal: t => t.s, hard: t => t.g };
+const RIV_SPREAD = [1.0, 1.025, 1.05, 1.08, 1.12]; // the leader runs the target pace, the rest a little slower
+function linePlan(line, key) {
+  if (line.plan) return line.plan;
+  const N = line.length, S = new Float64Array(N); for (let i = 1; i < N; i++) S[i] = S[i - 1] + Math.hypot(line[i].x - line[i - 1].x, line[i].z - line[i - 1].z);
+  const V = new Float64Array(N), VT = 28;
+  for (let i = 0; i < N; i++) { const r = 24 / Math.max(0.01, line[i].turn || 0); V[i] = Math.min(VT, Math.max(7, r / 2.2)); }
+  const ramp = new Uint8Array(N); if (world.lava) for (const r of world.ramps || []) line.forEach((p, i) => { const d = Math.hypot(p.x - r.x, p.z - r.z); if (d < 60) ramp[i] = 1; });
+  for (let i = N - 2; i >= 0; i--) V[i] = Math.min(V[i], Math.sqrt(V[i + 1] * V[i + 1] + 2 * 10 * (S[i + 1] - S[i]))); // brake in time
+  return (line.plan = { S, V, ramp, L: S[N - 1], k: {} });
+}
+// where a distance s along the line is (s may run past either end of a sprint line, or wrap on a circuit)
+function linePos(a, s) {
+  const P = a.pts, pl = a.plan, N = P.length;
+  if (a.loop) s = ((s % pl.L) + pl.L) % pl.L;
+  else if (s <= 0) return { x: P[0].x + P[0].tx * s, z: P[0].z + P[0].tz * s, tx: P[0].tx, tz: P[0].tz, lo: P[0].lo, hi: P[0].hi, v: pl.V[0], ramp: pl.ramp[0], i: 0 };
+  else if (s >= pl.L) { const q = P[N - 1], e = s - pl.L; return { x: q.x + q.tx * e, z: q.z + q.tz * e, tx: q.tx, tz: q.tz, lo: -3, hi: 3, v: pl.V[N - 1], ramp: 0, i: N - 1 }; }
+  let lo = 0, hi = N - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (pl.S[m] <= s) lo = m; else hi = m; }
+  const p = P[lo], q = P[hi], t = (s - pl.S[lo]) / Math.max(1e-6, pl.S[hi] - pl.S[lo]), tx = p.tx + (q.tx - p.tx) * t, tz = p.tz + (q.tz - p.tz) * t, tl = Math.hypot(tx, tz) || 1;
+  return { x: p.x + (q.x - p.x) * t, z: p.z + (q.z - p.z) * t, tx: tx / tl, tz: tz / tl, lo: Math.max(p.lo, q.lo), hi: Math.min(p.hi, q.hi), v: pl.V[lo] + (pl.V[hi] - pl.V[lo]) * t, ramp: pl.ramp[lo] || pl.ramp[hi], i: lo };
+}
+function rivalNew(name, look, mesh, pts, g, pace) {
+  const plan = linePlan(pts), a = { name, look, mesh, pts, plan, loop: world.type === 'circuit', R: Core.makeRace(world, R.laps), fin: null, g, pace, v: 0, lat: 0, latV: 0, lane: 0, slow: 1, y: 0, vy: 0, yaw: g.yaw, roll: 0, k: 1, i: 0 };
+  // start from the grid slot: distance along the line and sideways offset of that spot
+  let bi = 0, bd = 1e18; pts.forEach((q, i) => { const d = (q.x - g.x) ** 2 + (q.z - g.z) ** 2; if (d < bd) { bd = d; bi = i; } });
+  const q = pts[bi], along = (g.x - q.x) * q.tx + (g.z - q.z) * q.tz; a.s = plan.S[bi] + along; if (a.loop && a.s > plan.L * 0.5 && bi > pts.length / 2) a.s -= plan.L;
+  a.lat = (g.x - q.x) * -q.tz + (g.z - q.z) * q.tx;
+  const p0 = linePos(a, a.s), sx = p0.x - p0.tz * a.lat, sz = p0.z + p0.tx * a.lat; // exactly where its first step will put it
+  a.b = { pos: { x: sx, y: waveH(sx, sz, simT), z: sz }, vel: { x: 0, y: 0, z: 0 }, q: Core.qFromYaw(g.yaw), rpm: 0, steer: 0, charge: 0 };
+  a.prev = { ...a.b.pos };
+  return a;
+}
+// one dry run of the race along the line to learn how long it takes at a given speed scale
+function rivalDryRun(a0, k) {
+  const a = { ...a0, R: Core.makeRace(world, R.laps), v: 0, s: a0.s, fin: null }; let prev = linePos(a, a.s), t = 0;
+  for (; t < 900 && a.fin == null; t += 1 / 30) { rivalAdvance(a, 1 / 30, k); const p = linePos(a, a.s); for (const e of Core.raceUpdate(a.R, world, prev, p)) if (e.type === 'finish') a.fin = t; prev = p; }
+  return a.fin == null ? 900 : a.fin;
+}
+function rivalAdvance(a, dt, k) {
+  const p = linePos(a, a.s); let vt = p.v * k * a.slow * (a.band || 1);
+  if (p.ramp) vt = Math.max(vt, 27); // never chicken out on a lava jump
+  const acc = 4.2 * k * k; a.v = a.v < vt ? Math.min(vt, a.v + acc * dt) : Math.max(vt, a.v - 14 * dt);
+  a.s += a.v * dt; return p;
+}
+function rivalScale(a, target) {
+  const pl = a.plan, key = R.laps + ':' + target.toFixed(2) + ':' + a.s.toFixed(0); if (pl.k[key]) return pl.k[key];
+  let k = 1; for (let n = 0; n < 4; n++) { const T = rivalDryRun(a, k); k = clamp(k * T / target, 0.25, 1.6); }
+  return (pl.k[key] = k);
+}
+function rivalsSpawn() {
+  rivalsClear(); if (!RIV.want || LOBBY.code || !rivalsOk()) return;
+  RIV.on = true; const meta = MAPS[mapIdx], me0 = 3, pool = rivalPool();
+  const T = TIMES[meta.id] ? targets(meta) : null, spread = RIV_SPREAD.slice().sort(() => Math.random() - 0.5), lanes = [-2.4, -1.2, 0, 1.2, 2.4].sort(() => Math.random() - 0.5);
+  for (let k = 0, n = 0; n < 5; k++) {
+    if (k === me0) continue;
+    const g = gridSlot(k), { name, look, mesh } = pool[n]; mesh.visible = true;
+    const ri = world.routes ? n % world.routes.length : 0, raw = world.channel || world.routes ? routePointsFor(ri) : gatePath();
+    const line = racingLine(raw, meta.id + ':' + (world.channel ? 'c' : world.routes ? 'r' + ri : 'g') + ':' + (meta.custom ? meta.code || meta.name || 'x' : ''));
+    const a = rivalNew(name, look, mesh, line, g, spread[n]); a.lane = lanes[n];
+    // pace: the map's medal time for this difficulty (custom maps: a fixed share of the line's flat-out time)
+    const target = (T ? RIV_PACE[RIV.diff](T) : rivalDryRun(a, 1) * { easy: 1.45, normal: 1.25, hard: 1.1 }[RIV.diff]) * a.pace;
+    a.k = rivalScale(a, target);
+    RIV.list.push(a); n++;
+  }
+  const g = gridSlot(me0); placeBoat(g.x, g.z, g.yaw);
+}
+const rivProg = (r, pos) => { if (r.done) return 1e9; const c = world.cps[r.seq[Math.min(r.idx, r.seq.length - 1)]]; return r.idx * 10000 - Math.hypot(c.x - pos.x, c.z - pos.z); };
+function rivalsThink() {
+  if (!RIV.on) return;
+  const myP = rivProg(R, boat.pos);
+  for (const a of RIV.list) { // gentle rubber band: a leader far ahead of you eases off a little, a straggler pushes a little
+    const gap = (rivProg(a.R, a.b.pos) - myP) / 10000; a.band = window.__noBand ? 1 : clamp(1 - gap * 0.08, 0.95, 1.05);
+  }
+}
+function rivalsStep(H) {
+  if (!RIV.on) return;
+  const racing = state === 'racing', run = racing || state === 'finished', all = RIV.list; // they keep racing to the line after you finish
+  for (const a of all) {
+    const b = a.b;
+    if (!run) continue;
+    if (a.fin == null) a.t = (a.t || 0) + H;
+    if (a.fin != null) { a.v = Math.max(0, a.v - 6 * H); a.s += a.v * H; } else rivalAdvance(a, H, a.k);
+    a.slow = Math.min(1, a.slow + H * 0.35);
+    // sideways: settle into its lane, keep clear of the others, never leave the safe part of the course
+    const p = linePos(a, a.s); a.i = p.i;
+    let want = clamp(a.lane, p.lo + 0.6, p.hi - 0.6); if (p.lo + 0.6 > p.hi - 0.6) want = (p.lo + p.hi) / 2;
+    for (const o of all) { if (o === a) continue; const ds = o.s - a.s, dl = a.lat - o.lat; if (Math.abs(ds) < 7 && Math.abs(dl) < 3.2) want += (dl >= 0 ? 1 : -1) * (3.2 - Math.abs(dl)) * 1.2; }
+    if (racing) { // give you room: steer round you, and don't run into the back of you
+      const rx = boat.pos.x - p.x, rz = boat.pos.z - p.z, ds = rx * p.tx + rz * p.tz, dl = a.lat - (rx * -p.tz + rz * p.tx);
+      if (ds > -6 && ds < 10 && Math.abs(dl) < 3.6) { want += (dl >= 0 ? 1 : -1) * (3.6 - Math.abs(dl)) * 1.4;
+        const yv = boat.vel.x * p.tx + boat.vel.z * p.tz, floor = Math.max(yv * 0.95, 9); if (ds > 3 && ds < 9 && Math.abs(dl) < 2.6 && a.v > floor) a.v = Math.max(floor, a.v - 12 * H); } }
+    a.latV += ((want - a.lat) * 2.2 - a.latV * 2.4) * H; a.latV = clamp(a.latV, -6, 6); a.lat += a.latV * H;
+    const inside = a.lat >= p.lo - 0.5 && a.lat <= p.hi + 0.5; if (inside) a.settled = true; // off the grid it eases in; after that it keeps inside the safe band
+    if (a.settled) { if (a.lat < p.lo - 0.5) { a.lat = Math.min(p.lo - 0.5, a.lat + 6 * H); a.latV = Math.max(0, a.latV); } if (a.lat > p.hi + 0.5) { a.lat = Math.max(p.hi + 0.5, a.lat - 6 * H); a.latV = Math.min(0, a.latV); } }
+    const nx = p.x - p.tz * a.lat, nz = p.z + p.tx * a.lat, ox = b.pos.x, oz = b.pos.z;
+    b.vel.x = p.tx * a.v - p.tz * a.latV; b.vel.z = p.tz * a.v + p.tx * a.latV; b.pos.x = nx; b.pos.z = nz; // (velocity from the plan, not the step: a teleport-sized step must not fling you)
+    // height: ride the waves, climb ramps and fly off them
+    let gy = waveH(nx, nz, simT); for (const r of world.ramps || []) { const h = Core.rampAt(r, nx, nz); if (h && h.h > gy) gy = h.h; }
+    if (b.pos.y <= gy + 0.05) { const vy = (gy - b.pos.y) / H; a.vy = a.vy * 0.5 + vy * 0.5; b.pos.y = gy; if (a.vy < 0) a.vy = 0; }
+    else { a.vy -= 18 * H; b.pos.y += a.vy * H; if (b.pos.y < gy) { b.pos.y = gy; a.vy = 0; } }
+    // heading follows travel; lean into turns; nose follows the wave slope
+    const sp = Math.hypot(b.vel.x, b.vel.z), mx = nx - ox, mz = nz - oz; if (sp > 0.5 && mx * mx + mz * mz > 1e-6) { const yw = Math.atan2(-mx, -mz); let d = yw - a.yaw; d = Math.atan2(Math.sin(d), Math.cos(d)); a.yaw += d * Math.min(1, H * 8); b.steer = clamp(d * 3, -1, 1); }
+    const fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw), air = b.pos.y > gy + 0.3;
+    const pitch = air ? clamp(a.vy * 0.03, -0.35, 0.35) : Math.atan2(waveH(nx + fx * 2, nz + fz * 2, simT) - waveH(nx - fx * 2, nz - fz * 2, simT), 4) + Math.min(0.08, sp * 0.004);
+    a.roll += (clamp(-b.steer * 0.25, -0.3, 0.3) - a.roll) * Math.min(1, H * 4);
+    const qq = new THREE.Quaternion().setFromEuler(new THREE.Euler(pitch, a.yaw, a.roll, 'YXZ')); b.q = { x: qq.x, y: qq.y, z: qq.z, w: qq.w };
+    b.rpm = clamp(a.v / 28, 0, 1);
+    if (a.fin != null) continue;
+    for (const e of Core.raceUpdate(a.R, world, a.prev, b.pos)) if (e.type === 'finish') a.fin = a.t;
+    a.prev = { ...b.pos };
+    // safety net: if it slid past its next gate without counting it (pushed wide), count it through the middle
+    const c = world.cps[a.R.seq[Math.min(a.R.idx, a.R.seq.length - 1)]], cd = Math.hypot(c.x - b.pos.x, c.z - b.pos.z);
+    if (a.cpI !== a.R.idx) { a.cpI = a.R.idx; a.cpMin = cd; } else a.cpMin = Math.min(a.cpMin, cd);
+    if (a.cpMin < 24 && cd > a.cpMin + 8 && a.fin == null) { const tx = c.tx || 0, tz = c.tz || 0;
+      for (const e of Core.raceUpdate(a.R, world, { x: c.x - tx * 3, y: 0, z: c.z - tz * 3 }, { x: c.x + tx * 3, y: 0, z: c.z + tz * 3 })) if (e.type === 'finish') a.fin = a.t;
+      a.missed = (a.missed || 0) + 1; }
+  }
+  // you bumped them: shove sideways and lose a little speed
+  if (racing) for (const a of all) {
+    const dx = a.b.pos.x - boat.pos.x, dz = a.b.pos.z - boat.pos.z, d = Math.hypot(dx, dz); if (d > 4.4 || d < 0.01) continue;
+    const p = linePos(a, a.s), side = (dx * -p.tz + dz * p.tx) >= 0 ? 1 : -1, rel = Math.hypot(boat.vel.x - a.b.vel.x, boat.vel.z - a.b.vel.z);
+    a.latV += side * Math.min(8, 1.5 + rel * 0.5); a.lat += side * (4.4 - d) * 0.5;
+    if ((dx * boat.vel.x + dz * boat.vel.z) > 0) { a.slow = Math.min(a.slow, clamp(1 - rel * 0.03, 0.6, 0.95)); a.s += (4.4 - d) * 0.3; }
+  }
+}
+function rivalsRender(dt) {
+  if (!RIV.on) return;
+  for (const a of RIV.list) {
+    const b = a.b, m = a.mesh;
+    m.position.set(b.pos.x, b.pos.y, b.pos.z); m.quaternion.set(b.q.x, b.q.y, b.q.z, b.q.w); m.userData.speed = a.v;
+    if (m.userData.prop) m.userData.prop.rotation.z += dt * (8 + b.rpm * 50);
+    if (m.userData.motor) m.userData.motor.rotation.y = b.steer * 0.55;
+    const fx = -Math.sin(a.yaw), fz = -Math.cos(a.yaw), wet = b.pos.y - waveH(b.pos.x, b.pos.z, simT) < 0.5;
+    wakeFeed(a.mesh.uuid, b.pos.x - fx * 2.6, b.pos.z - fz * 2.6, fx, fz, wet ? clamp((a.v - 2) / 16, 0, 1) : 0);
+    // a little bow spray so they feel as fast as you
+    if (wet && a.v > 8 && Math.random() < a.v * 0.02) { const s = Math.random() < 0.5 ? -1 : 1; spawn(b.pos.x + fx * 1.2 - fz * s * 0.9, b.pos.y, b.pos.z + fz * 1.2 + fx * s * 0.9, -fz * s * (2 + a.v * 0.12) + b.vel.x * 0.5, 1.2 + Math.random() * 1.5, fx * s * (2 + a.v * 0.12) + b.vel.z * 0.5, 2.2, 0.6, 1); }
+  }
+  RIV.uiT -= dt; if (RIV.uiT > 0) return; RIV.uiT = 0.25;
+  const rows = [{ n: me() ? me().name : 'You', me: true, p: state === 'finished' ? 1e9 + 1e6 - total() : rivProg(R, boat.pos), c: (SKINS.find(k => k.id === DATA.skin) || SKINS[0]).hull },
+    ...RIV.list.map(a => ({ n: a.name, p: a.fin != null ? 1e9 + 1e6 - a.fin : rivProg(a.R, a.b.pos), c: (SKINS.find(k => k.id === a.look.skin) || SKINS[0]).hull }))].sort((x, y) => y.p - x.p);
+  const k = rows.findIndex(r => r.me);
+  uiH('posn', `${k + 1}<small>/${rows.length}</small>`);
+  uiH('standings', rows.map((r, i) => `<div class="${r.me ? 'me' : ''}"><span>${i + 1}. ${esc(r.n)}</span><span class="dot" style="background:${hexc(r.c)}"></span></div>`).join(''));
+}
+function rivalsPlace() { const t = total(); return 1 + RIV.list.filter(a => a.fin != null && a.fin < t).length; }
+function finishRivals() {
+  state = 'finished';
+  const meta = MAPS[mapIdx], t = total(), place = rivalsPlace(), field = RIV.list.length + 1;
+  const pay = payout(meta, t, { place, field, placeMul: { easy: 0.5, normal: 1, hard: 1.6 }[RIV.diff], placeTag: ` · ${RIV_DIFF[RIV.diff].label} rivals` }), ups = award(pay);
+  if (!boosted() && !meta.custom) DATA.stats.fin = (DATA.stats.fin || 0) + 1;
+  if (place === 1 && !meta.custom) { const lv = { easy: 1, normal: 2, hard: 3 }[RIV.diff]; DATA.rivWins = DATA.rivWins || {}; if (lv > (DATA.rivWins[meta.id] || 0)) { DATA.rivWins[meta.id] = lv; RIV.newWin = true; pushProfile(); } }
+  qEvent('rival', { custom: meta.custom, finished: true, place, field, map: meta.id, diff: RIV.diff, stock: TUNE === Core.TIERS[0] && E().engine === 0 });
+  save();
+  const ord = ['1st', '2nd', '3rd', '4th', '5th', '6th'];
+  $('fmap').textContent = `${meta.name.toUpperCase()} · RIVALS (${RIV_DIFF[RIV.diff].label})`;
+  $('ftime').textContent = fmt(t); $('fpen').textContent = R.penalty ? `includes +${R.penalty}s penalty` : '';
+  $('fstars').textContent = place === 1 ? '🏆' : place <= 3 ? ['', '', '🥈', '🥉'][place] : '';
+  $('fmedal').textContent = `${ord[place - 1] || place + 'th'} of ${field}`; $('fmedal').style.color = place === 1 ? 'var(--gold)' : place <= 3 ? 'var(--accent)' : 'var(--ink)';
+  const fin = [{ n: 'You', t }, ...RIV.list.filter(a => a.fin != null).map(a => ({ n: a.name, t: a.fin }))].sort((x, y) => x.t - y.t);
+  $('fnote').innerHTML = fin.map((r, i) => `${i + 1}. ${esc(r.n)} — ${fmt(r.t)}`).join(' · ') + (fin.length < field ? ' · others still racing' : '') + (place === 1 ? (RIV.newWin ? `<br><b style="color:var(--gold)">New: you beat ${RIV_DIFF[RIV.diff].label} rivals on this map!</b>` : '') + (RIV.diff !== 'hard' ? '<br>Try harder rivals next — tap RIVALS on the menu.' : '') : '');
+  RIV.newWin = false;
+  $('funlock').innerHTML = ''; $('frank').textContent = 'Rival races pay by finishing place. They don\'t count as time-trial records.';
+  $('frewards').innerHTML = rewardsHTML(pay, ups); animateBars($('frewards'));
+  setTimeout(() => { if (state === 'finished') $('finish').classList.remove('hidden'); }, 1400);
+  flash(place === 1 ? 'YOU WIN!' : `P${place}`, place === 1 ? 'var(--gold)' : 'var(--accent)', 1300); beep(1320, 0.4);
+  refreshLabels(); renderMaps();
+}
 
 // ================= minimap =================
 const mini = $('mini'), mc = mini.getContext('2d');
@@ -3709,7 +4184,7 @@ function updateCamera(dt, speed) {
     const wy = waveH(camera.position.x, camera.position.z, simT) + 0.9; if (camera.position.y < wy) camera.position.y = wy;
   }
   if (shake > 0) { if (S.shake) { camera.position.x += (Math.random() - 0.5) * shake; camera.position.y += (Math.random() - 0.5) * shake; } shake *= Math.exp(-6 * dt); if (shake < 0.01) shake = 0; }
-  const fov = 60 + Math.min(14, speed * 0.55); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
+  const fov = 60 + Math.min(14, speed * 0.55) + (boat.boostT > 0 && state === 'racing' ? 7 : 0); if (Math.abs(camera.fov - fov) > 0.05) { camera.fov += (fov - camera.fov) * Math.min(1, dt * 3); camera.updateProjectionMatrix(); }
   camSnap = false;
 }
 
@@ -3756,7 +4231,9 @@ async function authToken() {
     .finally(() => { AUTH.busy = null; });
   return AUTH.busy;
 }
+const BETA_BLOCK = /^(players\/[^/]+$|players\/[^/]+\/(?!on$)|lb\/|lbt\/|wr\/|gh\/|ght\/|maps\/)/;
 async function api(path, method = 'GET', body, query = '') {
+  if (BETA && method !== 'GET' && BETA_BLOCK.test(path)) return null; // preview: read-only for the live game's data
   const opt = { method }; if (body !== undefined) opt.body = JSON.stringify(body); if (method === 'DELETE') opt.keepalive = true;
   if (method !== 'GET') { const tk = await authToken(); if (tk) query += (query ? '&' : '?') + 'auth=' + tk; }
   let r;
@@ -3841,6 +4318,7 @@ function mergeProfile(p) {
     if (remoteAhead) { if (owns('eng', pe.engine | 0)) e.engine = pe.engine | 0; if (p.look) Object.assign(DATA.look, p.look); if (p.skin && DATA.unlocked[p.skin]) DATA.skin = p.skin; }
   } else if (p.skin && DATA.unlocked[p.skin] && DATA.skin === 'classic') DATA.skin = p.skin;
   DATA.rsSeen = Math.max(DATA.rsSeen || 0, +p.rs || 0);
+  if (p.rw && typeof p.rw === 'object') { DATA.rivWins = DATA.rivWins || {}; for (const k in p.rw) if (MAPS.some(m => m.id === k)) DATA.rivWins[k] = Math.max(DATA.rivWins[k] || 0, Math.min(3, +p.rw[k] || 0)); }
   if (p.quests && typeof p.quests === 'object') { const Q = ensureQuests(), P = p.quests;
     if (P.day === Q.day && Array.isArray(P.list)) Q.list.forEach((q, i) => { const o = P.list[i]; if (o && o.t === q.t) { q.prog = Math.max(q.prog, +o.prog || 0); q.done = q.done || !!o.done; } });
     if (P.week === Q.week && P.weekly && P.weekly.t === Q.weekly.t) { Q.weekly.prog = Math.max(Q.weekly.prog, +P.weekly.prog || 0); Q.weekly.done = Q.weekly.done || !!P.weekly.done; Q.weekly.seen = [...new Set([...(Q.weekly.seen || []), ...(P.weekly.seen || [])])]; } }
@@ -3852,7 +4330,7 @@ async function pushProfile() {
   if (!NET.on || !me()) return;
   const runs = {}; for (const k in DATA.runs) { const r = DATA.runs[k]; if (r.best || r.medal) runs[k] = { best: r.best || 0, medal: r.medal || 0 }; }
   if (BANNED) return;
-  try { await api('players/' + me().id, 'PUT', { name: me().name, runs, unlocked: DATA.unlocked, skin: DATA.skin, econ: E(), look: DATA.look, stats: DATA.stats, quests: DATA.quests || null, rs: DATA.rsSeen || 0, seen: Date.now() }); } catch (e) {}
+  try { await api('players/' + me().id, 'PUT', { name: me().name, runs, unlocked: DATA.unlocked, skin: DATA.skin, econ: E(), look: DATA.look, stats: DATA.stats, quests: DATA.quests || null, rs: DATA.rsSeen || 0, rw: DATA.rivWins || null, seen: Date.now() }); } catch (e) {}
 }
 // ---- admin panel hooks: gifts, speed boost, resets, bans and event settings (polled every few seconds) ----
 function ownedNow(cat, id) {
@@ -4933,7 +5411,7 @@ const UNIT = { mph: 2.237, kmh: 3.6, kn: 1.944 };
 
 function frame(now) {
   requestAnimationFrame(frame);
-  let dt = Math.min(0.05, (now - last) / 1000); last = now;
+  let dt = Math.max(0, Math.min(0.05, (now - last) / 1000)); last = Math.max(last, now); // never step backwards (a late timestamp would fling the camera)
   if (open('editor')) { edDraw(); return; }
   if (state === 'paused') { renderer.render(scene, camera); return; }
   if (state === 'countdown') {
@@ -4943,12 +5421,15 @@ function frame(now) {
     if (cdT <= 0.6) { state = 'racing'; flash('GO!', 'var(--accent)', 800); beep(1040, 0.3); }
   }
   let inp = { throttle: (keys.u ? 1 : 0) - (keys.d ? 1 : 0), steer: (keys.r ? 1 : 0) - (keys.l ? 1 : 0), boost: !!keys.b };
+  const pad = padRead(); if (pad) { inp.throttle = clamp(inp.throttle + pad.throttle, -1, 1); inp.steer = clamp(inp.steer + pad.steer, -1, 1); inp.boost = inp.boost || pad.boost; padButtons(pad); }
   if (state === 'menu' || state === 'finished' || (LOBBY.racing && LOBBY.out)) inp = { throttle: 0, steer: 0 };
   acc += dt; let impact = 0, slam = 0, landed = null;
   const pw = physWorld();
   if (LOBBY.racing) lobbyDraft(dt); else boat.draft = 0;
+  rivalsThink();
   while (acc >= H) {
     Core.step(boat, inp, H, simT, pw, state === 'racing', TUNE);
+    rivalsStep(H);
     simT += H; acc -= H;
     impact = Math.max(impact, boat.impact); slam = Math.max(slam, boat.slam);
     if (boat.landed) landed = boat.landed;
@@ -4981,6 +5462,14 @@ function frame(now) {
   // keep the shadow camera centred on the action
   const fc = spec && NET.peers[spec] ? NET.peers[spec].pos : b.pos;
   sunL.target.position.set(fc.x, 0, fc.z); sunL.position.set(fc.x + SUN.x * 150, SUN.y * 150, fc.z + SUN.z * 150);
+  // foam wakes + speed / boost screen effects
+  if (boatMesh.visible) { const st = Core.qrot(b.q, { x: 0, y: 0, z: 2.6 }), f0 = Core.qrot(b.q, { x: 0, y: 0, z: -1 }), fl = Math.hypot(f0.x, f0.z) || 1; wakeFeed('me', b.pos.x + st.x, b.pos.z + st.z, f0.x / fl, f0.z / fl, b.wet > 0.2 ? clamp((speed - 2) / 16, 0, 1) : 0); }
+  for (const pid in NET.peers) { const pr = NET.peers[pid]; if (!pr.mesh || !pr.mesh.visible || !pr.q) continue; const st = Core.qrot(pr.q, { x: 0, y: 0, z: 2.6 }), f0 = Core.qrot(pr.q, { x: 0, y: 0, z: -1 }), fl = Math.hypot(f0.x, f0.z) || 1, v = pr.v || [];
+    wakeFeed('p' + pid, pr.pos.x + st.x, pr.pos.z + st.z, f0.x / fl, f0.z / fl, pr.pos.y - waveH(pr.pos.x, pr.pos.z, simT) < 0.6 ? clamp((Math.hypot(+v[0] || 0, +v[1] || 0) - 2) / 16, 0, 1) : 0); }
+  wakesUpdate();
+  { const live = state === 'racing' && S.speedfx !== false, bo = live && b.boostT > 0, sv = live ? clamp((speed - 22) / 14, 0, 1) * 0.45 : 0, so = bo ? 0.85 : sv;
+    uiS('speedfx', 'opacity', so.toFixed(2)); if (so > 0) uiS('speedfx', 'transform', `rotate(${(Math.random() * 6).toFixed(1)}deg) scale(${(1 + Math.random() * 0.04).toFixed(3)})`);
+    uiS('boostfx', 'opacity', bo ? '1' : '0'); }
   // spray & wake
   spawnAcc += dt * Math.min(90, speed * 4.5);
   const qv = (x, y, z) => { const r = Core.qrot(b.q, { x, y, z }); return { x: r.x + b.pos.x, y: r.y + b.pos.y, z: r.z + b.pos.z }; };
@@ -5011,7 +5500,7 @@ function frame(now) {
   for (const im of W3.inst) im.instanceMatrix.needsUpdate = true;
   for (const g of W3.rings) { g.m.position.set(g.r.x, waveH(g.r.x, g.r.z, simT) + 2.6, g.r.z); g.m.rotation.y = g.r.yaw + simT * 0.6; }
   for (const bm of W3.beacons) bm.rotation.y = simT * 0.8;
-  updateSwamp(dt); updateMagma(dt);
+  updateSwamp(dt); updateMagma(dt); rivalsRender(dt);
   if (W3.rain) {
     const rn = W3.rain, cp = camera.position;
     for (let k = 0; k < rn.drops.length; k++) {
@@ -5059,7 +5548,7 @@ function frame(now) {
   uiS('vsghost', 'visibility', showHud ? 'visible' : 'hidden');
   updatePeers(dt);
   if (LOBBY.code) lobbyTick(dt); else sendLive(dt);
-  $('pos').classList.toggle('hidden', !(LOBBY.racing && showHud));
+  $('pos').classList.toggle('hidden', !((LOBBY.racing || RIV.on) && showHud));
   uiS('netchip', 'visibility', NET.on && showHud ? 'visible' : 'hidden');
   if (NET.on) uiH('netchip', NET.status === 'online' ? `<b>●</b> ONLINE${LOBBY.code ? ' · LOBBY ' + LOBBY.code : NET.count ? ` · ${NET.count} other${NET.count > 1 ? 's' : ''} on this map` : ''}${me() ? '' : ' · not signed in'}` : '● OFFLINE');
   if (racing && tgt) {
