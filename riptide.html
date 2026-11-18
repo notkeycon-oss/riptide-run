@@ -296,7 +296,7 @@ input.tx:focus{border-color:var(--accent)}
       <div><b>⚡ Boost</b><span>SPACE when the bar says BOOST READY. Big jumps, clean landings and drafting behind other boats charge it faster.</span></div>
       <div><b>🏁 Gates</b><span>Go through every gate in order (follow the arrow). Flags in Storm Point must be passed on the marked side or you get +3 s.</span></div>
       <div><b>🥇 Medals</b><span>Beat the bronze, silver and gold times on each map to earn medals, money and mastery. Spend them in the GARAGE.</span></div>
-      <div><b>🏆 Race Rivals</b><span>Five AI boats to beat when your friends aren't on. EASY races at bronze pace, NORMAL at silver, HARD at gold. Bump them out of the way!</span></div>
+      <div><b>🏆 Race Rivals</b><span>Five AI boats to beat when your friends aren't on. EASY races at bronze pace, NORMAL at silver, HARD at gold. They can't crash into you — just outrace them!</span></div>
       <div><b>🎮 Controller</b><span>Plug in a gamepad: left stick steers, RT / A throttle, LT / B brake, X or RB boost, Y resets, START pauses.</span></div>
       <div><b>📱 Touch</b><span>On a tablet use the on-screen pedals and arrows. R puts you back on the last gate.</span></div>
       <div><b>⌨ Keys</b><span>R reset to last gate · C change camera · M sound on/off · ESC pause.</span></div>
@@ -3334,7 +3334,7 @@ let fromEditor = false;
 const H = 1 / 120;
 const physWorld = () => ({ obstacles: world.obstacles, channel: world.channel, chans: world.chans, limit: world.limit, cx: world.cx, cz: world.cz, ramps: world.ramps, vents: world.vents, boats: rivalBoats() });
 function rivalBoats() {
-  if (RIV.on) return state === 'racing' ? RIV.list.map(a => ({ x: a.b.pos.x, z: a.b.pos.z, q: a.b.q, vx: a.b.vel.x, vz: a.b.vel.z })) : null;
+  if (RIV.on) return null; // rival boats are ghosts to you: no collisions, they can't knock you off course
   if (!LOBBY.racing || !LOBBY.coll || LOBBY.out || LOBBY.fin != null || state !== 'racing') return null;
   const out = [];
   for (const pid in NET.peers) { const p = NET.peers[pid], d = p.d || {}; if (!p.mesh || !p.mesh.visible || d.o || d.f != null || d.rn !== LOBBY.round) continue;
@@ -3906,7 +3906,7 @@ function rivalPool() {
 }
 setTimeout(() => { try { if (state === 'menu') rivalPool(); } catch (e) {} }, 4000);
 // The rivals drive the racing line with a speed plan (fast on straights, slower in tight corners, flying off ramps),
-// tuned so each difficulty races at a known pace: EASY ≈ bronze, NORMAL ≈ silver, HARD ≈ gold. You can bump them aside.
+// tuned so each difficulty races at a known pace: EASY ≈ bronze, NORMAL ≈ silver, HARD ≈ gold. They don't collide with you.
 const RIV_PACE = { easy: t => t.b, normal: t => t.s, hard: t => t.g };
 const RIV_SPREAD = [1.0, 1.025, 1.05, 1.08, 1.12]; // the leader runs the target pace, the rest a little slower
 function linePlan(line, key) {
@@ -3994,10 +3994,9 @@ function rivalsStep(H) {
     const p = linePos(a, a.s); a.i = p.i;
     let want = clamp(a.lane, p.lo + 0.6, p.hi - 0.6); if (p.lo + 0.6 > p.hi - 0.6) want = (p.lo + p.hi) / 2;
     for (const o of all) { if (o === a) continue; const ds = o.s - a.s, dl = a.lat - o.lat; if (Math.abs(ds) < 7 && Math.abs(dl) < 3.2) want += (dl >= 0 ? 1 : -1) * (3.2 - Math.abs(dl)) * 1.2; }
-    if (racing) { // give you room: steer round you, and don't run into the back of you
+    if (racing) { // no collisions, but they still steer round you so they don't drive through your boat
       const rx = boat.pos.x - p.x, rz = boat.pos.z - p.z, ds = rx * p.tx + rz * p.tz, dl = a.lat - (rx * -p.tz + rz * p.tx);
-      if (ds > -6 && ds < 10 && Math.abs(dl) < 3.6) { want += (dl >= 0 ? 1 : -1) * (3.6 - Math.abs(dl)) * 1.4;
-        const yv = boat.vel.x * p.tx + boat.vel.z * p.tz, floor = Math.max(yv * 0.95, 9); if (ds > 3 && ds < 9 && Math.abs(dl) < 2.6 && a.v > floor) a.v = Math.max(floor, a.v - 12 * H); } }
+      if (ds > -6 && ds < 10 && Math.abs(dl) < 3.6) want += (dl >= 0 ? 1 : -1) * (3.6 - Math.abs(dl)) * 1.4; }
     a.latV += ((want - a.lat) * 2.2 - a.latV * 2.4) * H; a.latV = clamp(a.latV, -6, 6); a.lat += a.latV * H;
     const inside = a.lat >= p.lo - 0.5 && a.lat <= p.hi + 0.5; if (inside) a.settled = true; // off the grid it eases in; after that it keeps inside the safe band
     if (a.settled) { if (a.lat < p.lo - 0.5) { a.lat = Math.min(p.lo - 0.5, a.lat + 6 * H); a.latV = Math.max(0, a.latV); } if (a.lat > p.hi + 0.5) { a.lat = Math.max(p.hi + 0.5, a.lat - 6 * H); a.latV = Math.min(0, a.latV); } }
@@ -4023,13 +4022,6 @@ function rivalsStep(H) {
     if (a.cpMin < 24 && cd > a.cpMin + 8 && a.fin == null) { const tx = c.tx || 0, tz = c.tz || 0;
       for (const e of Core.raceUpdate(a.R, world, { x: c.x - tx * 3, y: 0, z: c.z - tz * 3 }, { x: c.x + tx * 3, y: 0, z: c.z + tz * 3 })) if (e.type === 'finish') a.fin = a.t;
       a.missed = (a.missed || 0) + 1; }
-  }
-  // you bumped them: shove sideways and lose a little speed
-  if (racing) for (const a of all) {
-    const dx = a.b.pos.x - boat.pos.x, dz = a.b.pos.z - boat.pos.z, d = Math.hypot(dx, dz); if (d > 4.4 || d < 0.01) continue;
-    const p = linePos(a, a.s), side = (dx * -p.tz + dz * p.tx) >= 0 ? 1 : -1, rel = Math.hypot(boat.vel.x - a.b.vel.x, boat.vel.z - a.b.vel.z);
-    a.latV += side * Math.min(8, 1.5 + rel * 0.5); a.lat += side * (4.4 - d) * 0.5;
-    if ((dx * boat.vel.x + dz * boat.vel.z) > 0) { a.slow = Math.min(a.slow, clamp(1 - rel * 0.03, 0.6, 0.95)); a.s += (4.4 - d) * 0.3; }
   }
 }
 function rivalsRender(dt) {

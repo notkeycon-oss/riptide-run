@@ -44,7 +44,7 @@ The preview was hosted at `/next/`.
 - **Three difficulties, tied to the medal times:** EASY races at bronze pace, NORMAL at silver, HARD at gold. The leading rival hits that time almost exactly on every map; the rest of the pack is 2–12 % slower.
 - Each rival follows a racing line worked out per map. The line threads every gate, takes flags on the correct side, lines up with the lava ramps on Magma Rift and swerves early around rocks, trees and gators. On Gator Bayou, rivals spread across the different routes.
 - Rivals brake for tight corners, launch off ramps, ride the waves, lean into turns and throw spray and wake.
-- **You can bump them.** Hit a rival and it gets shoved aside and loses speed. They steer round you rather than ramming you.
+- **No collisions with rivals.** They pass through you (and steer round you), so they can never knock you off course. (Collisions were removed after players found them too frustrating.)
 - A gentle catch-up rule (±5 %) keeps races close without feeling like cheating.
 - Pays out by finishing place. Each map card shows the hardest difficulty you've beaten there. Rival races never touch the leaderboards.
 - Starts instantly: the rival boats are built in the background while you're on the menu.
