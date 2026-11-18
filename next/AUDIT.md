@@ -1,7 +1,17 @@
-# Riptide Run — full audit and the NEXT preview
+# Riptide Run — full audit and the NEXT update
 
-The preview lives at **https://notkeycon-oss.github.io/riptide-run/next/**.
-The live game (`riptide.html`), the admin panel and the vice panel are unchanged.
+> **Update: NEXT is now the main game.** Everything below is live in `riptide.html`. The old `/next/` link now forwards to the main game.
+> What changed when it went live:
+> - Times post to the leaderboards again.
+> - Everyone keeps their normal save and server profile. Anything earned only inside the preview stayed in the preview.
+> - **Rival races have their own quests** and no longer count as "online race with friends":
+>   - Daily: top 3 in Race Rivals.
+>   - Daily: win on NORMAL or HARD.
+>   - Weekly: beat HARD rivals 3 times.
+> - **Rival placing pay scales with difficulty:** EASY ×0.5, NORMAL ×1, HARD ×1.6. Easy rivals can't be farmed for money.
+> - **The 🏆 Rivals badge on each map card is saved to your profile,** so it follows you to any computer. Admin progress resets clear it.
+
+The preview was hosted at `/next/`.
 
 ## How the preview is kept separate
 
@@ -81,12 +91,8 @@ The live game (`riptide.html`), the admin panel and the vice panel are unchanged
 - **Music:** every mood and every intensity was rendered offline. No errors and no clipping.
 - **Screenshots** checked: menu, How to Play, settings, wakes on 4 maps, and the results screen.
 
-## Making it the live game later
-When you're happy with NEXT, it can replace `riptide.html`. Two things change when it does:
-- `BETA` gets set to `false`, so times post to the leaderboards again.
-- The `rrnext:` save prefix is dropped.
-
-Ask Claude to "promote NEXT to live" and it will do both and keep everyone's saves.
+## Making a preview again later
+`riptide.html` still has the preview switch built in. Copy it to `next/index.html` and set `const BETA = true;` to get a sandboxed preview: its own save, and read-only leaderboards and profiles.
 
 ## Ideas for the next round
 - Rival "personalities" (an aggressive blocker, a boost-happy one) and a mini championship across 3 maps.
