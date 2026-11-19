@@ -296,7 +296,7 @@ input.tx:focus{border-color:var(--accent)}
       <div><b>⚡ Boost</b><span>SPACE when the bar says BOOST READY. Big jumps, clean landings and drafting behind other boats charge it faster.</span></div>
       <div><b>🏁 Gates</b><span>Go through every gate in order (follow the arrow). Flags in Storm Point must be passed on the marked side or you get +3 s.</span></div>
       <div><b>🥇 Medals</b><span>Beat the bronze, silver and gold times on each map to earn medals, money and mastery. Spend them in the GARAGE.</span></div>
-      <div><b>🏆 Race Rivals</b><span>Five AI boats to beat when your friends aren't on. EASY races at bronze pace, NORMAL at silver, HARD at gold. They can't crash into you — just outrace them!</span></div>
+      <div><b>🏆 Race Rivals</b><span>Five AI boats to beat when your friends aren't on. EASY races at bronze pace, NORMAL at silver, HARD at gold. Each one drives its own line, and they upgrade with you: they always run the same engine you do. They can't crash into you — just outrace them!</span></div>
       <div><b>🎮 Controller</b><span>Plug in a gamepad: left stick steers, RT / A throttle, LT / B brake, X or RB boost, Y resets, START pauses.</span></div>
       <div><b>📱 Touch</b><span>On a tablet use the on-screen pedals and arrows. R puts you back on the last gate.</span></div>
       <div><b>⌨ Keys</b><span>R reset to last gate · C change camera · M sound on/off · ESC pause.</span></div>
@@ -3352,7 +3352,7 @@ function burned() {
 }
 function placeBoat(x, z, yaw) { boat = Core.makeBoat(x, z, yaw); boat.pos.y = waveH(x, z, simT); prevPos = { ...boat.pos }; camSnap = true; }
 function loadMap(i) {
-  wakesClear();
+  wakesClear(); setTimeout(rivalPrebuild, 0);
   mapIdx = i; buildWorld(i); P.length = 0;
   placeBoat(world.start.x, world.start.z, world.start.yaw);
   R = Core.makeRace(world, lapsFor(MAPS[i]));
@@ -3536,7 +3536,7 @@ function refreshLabels() {
   $('tbest').textContent = fmt(r && r.best);
   $('lapChip').style.visibility = isLoop(meta) ? 'visible' : 'hidden';
   $('lapChip').textContent = 'LAPS: ' + S.laps;
-  RIV.diff = RIV_DIFF[S.rivDiff] ? S.rivDiff : RIV.diff; $('rivChip').textContent = 'RIVALS: ' + RIV_DIFF[RIV.diff].label;
+  RIV.diff = RIV_DIFF[S.rivDiff] ? S.rivDiff : RIV.diff; $('rivChip').textContent = 'RIVALS: ' + RIV_DIFF[RIV.diff].label + ' · T' + (rivTier() + 1);
   $('rivalsBtn').disabled = !rivalsOk(); $('rivalsBtn').title = rivalsOk() ? 'Race five AI rivals' : 'Rivals race on gate and sprint maps';
   $('unit').textContent = { mph: 'MPH', kmh: 'KM/H', kn: 'KNOTS' }[S.units];
   const lv = levelOf(totalXp()), di = dailyInfo();
@@ -3821,9 +3821,16 @@ const RIV = { want: false, on: false, diff: 'normal', list: [], uiT: 0 };
 const RIV_DIFF = { easy: { mult: 0.86, gain: 2.2, boost: 0.25, label: 'EASY' }, normal: { mult: 0.96, gain: 2.6, boost: 0.6, label: 'NORMAL' }, hard: { mult: 1.06, gain: 3.0, boost: 1, label: 'HARD' } };
 const RIV_NAMES = ['Marlin', 'Vortex', 'Kai', 'Reef', 'Blaze', 'Nova', 'Orca', 'Tidal', 'Comet', 'Jetsam', 'Squall', 'Bolt'];
 const rivalsOk = () => world && world.type !== 'collect' && world.cps && world.cps.length > 0;
+// starting grid: rows of three (left / middle / right), squeezed in on narrow channels
+function gridHalfW() {
+  const st = world.start; let hw = 99;
+  if (world.channel) { const q = Core.chanQuery(world.channel, st.x, st.z); hw = q.hw - Math.abs(q.d); }
+  else if (world.chans) hw = -Core.chansSD(world.chans, st.x, st.z).sd;
+  return clamp(hw - 2.6, 1.6, 4.6);
+}
 function gridSlot(k) {
-  const st = world.start, fx = -Math.sin(st.yaw), fz = -Math.cos(st.yaw), rx = -fz, rz = fx, row = Math.floor(k / 2), lat = (k % 2 ? 1 : -1) * 3.4;
-  return { x: st.x - fx * row * 11 + rx * lat, z: st.z - fz * row * 11 + rz * lat, yaw: st.yaw };
+  const st = world.start, fx = -Math.sin(st.yaw), fz = -Math.cos(st.yaw), rx = -fz, rz = fx, row = Math.floor(k / 3), lat = (k % 3 - 1) * gridHalfW();
+  return { x: st.x - fx * row * 10 + rx * lat, z: st.z - fz * row * 10 + rz * lat, yaw: st.yaw, col: k % 3 - 1 };
 }
 function routePointsFor(ri) {
   if (world.channel) return world.channel.pts.map(p => ({ x: p.x, z: p.z, hw: p.hw }));
@@ -3841,7 +3848,7 @@ function gatePath() { // gate maps: straight legs between gate centres (closed f
   for (let i = 0; i < L; i++) { const g = c[i % c.length]; pts.push({ x: g.x, z: g.z, hw: g.kind === 'gate' ? Math.max(4, g.hw) : 14 }); }
   return pts;
 }
-function racingLine(raw, key) {
+function racingLine(raw, key, bias = 0) { // bias: the lane (metres left/right of centre) this line prefers to hold
   if (LINES[key]) return LINES[key];
   // resample every 4 m
   const P = []; for (let i = 0; i < raw.length - 1; i++) { const a = raw[i], b = raw[i + 1], L = Math.hypot(b.x - a.x, b.z - a.z), n = Math.max(1, Math.round(L / 4)); for (let k = 0; k < n; k++) { const t = k / n; P.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t, hw: (a.hw || 10) + ((b.hw || 10) - (a.hw || 10)) * t }); } }
@@ -3861,7 +3868,7 @@ function racingLine(raw, key) {
     const p = P[i], x = p.x - p.tz * o, z = p.z + p.tx * o;
     if (o < lim[i][0] - 1e-6 || o > lim[i][1] + 1e-6) return 1e6;
     if (chanW(x, z) < 2.4) return 5e4;
-    let c = o * o * 0.01;
+    let c = o * o * 0.01 + (bias ? (o - bias) * (o - bias) * 0.6 : 0);
     for (const ob of near) { const d = Math.hypot(ob.x - x, ob.z - z), m = ob.r + 3.4; if (d < m) c += (m - d) * (m - d) * 40; }
     return c;
   };
@@ -3905,10 +3912,22 @@ function rivalPool() {
   return RIV.pool;
 }
 setTimeout(() => { try { if (state === 'menu') rivalPool(); } catch (e) {} }, 4000);
+// work out this map's rival lines in the background while you're on the menu, so RACE RIVALS starts instantly
+let rivPre = 0; function rivalPrebuild() { clearTimeout(rivPre); rivPre = setTimeout(() => { try { if (state === 'menu' && rivalsOk()) rivalLines(); } catch (e) {} }, 1200); }
 // The rivals drive the racing line with a speed plan (fast on straights, slower in tight corners, flying off ramps),
 // tuned so each difficulty races at a known pace: EASY ≈ bronze, NORMAL ≈ silver, HARD ≈ gold. They don't collide with you.
 const RIV_PACE = { easy: t => t.b, normal: t => t.s, hard: t => t.g };
 const RIV_SPREAD = [1.0, 1.025, 1.05, 1.08, 1.12]; // the leader runs the target pace, the rest a little slower
+// rivals run the same engine as you: lap-time multiplier per engine tier, measured from the boat physics (T1..T5)
+const RIV_ENG = [1, 0.965, 0.935, 0.905, 0.875];
+const rivTier = () => clamp(E().engine | 0, 0, 4);
+// each rival's lane: [grid column, preferred lane on its line]. Front row left / middle / right, second row either side of you.
+const RIV_SLOTS = [[0, -6], [1, 0], [2, 6], [3, -3], [5, 3]], RIV_ME = 4;
+const rivLineKey = (meta, ri, bias) => meta.id + ':' + (world.channel ? 'c' : world.routes ? 'r' + ri : 'g') + ':' + bias + ':' + (meta.custom ? meta.code || meta.name || 'x' : '');
+function rivalLines() { // every rival's own line for the current map (cached; built in the background on the menu)
+  const meta = MAPS[mapIdx];
+  return RIV_SLOTS.map(([, bias], n) => { const ri = world.routes ? n % world.routes.length : 0, raw = world.channel || world.routes ? routePointsFor(ri) : gatePath(); return racingLine(raw, rivLineKey(meta, ri, bias), bias); });
+}
 function linePlan(line, key) {
   if (line.plan) return line.plan;
   const N = line.length, S = new Float64Array(N); for (let i = 1; i < N; i++) S[i] = S[i - 1] + Math.hypot(line[i].x - line[i - 1].x, line[i].z - line[i - 1].z);
@@ -3958,20 +3977,19 @@ function rivalScale(a, target) {
 }
 function rivalsSpawn() {
   rivalsClear(); if (!RIV.want || LOBBY.code || !rivalsOk()) return;
-  RIV.on = true; const meta = MAPS[mapIdx], me0 = 3, pool = rivalPool();
-  const T = TIMES[meta.id] ? targets(meta) : null, spread = RIV_SPREAD.slice().sort(() => Math.random() - 0.5), lanes = [-2.4, -1.2, 0, 1.2, 2.4].sort(() => Math.random() - 0.5);
-  for (let k = 0, n = 0; n < 5; k++) {
-    if (k === me0) continue;
-    const g = gridSlot(k), { name, look, mesh } = pool[n]; mesh.visible = true;
-    const ri = world.routes ? n % world.routes.length : 0, raw = world.channel || world.routes ? routePointsFor(ri) : gatePath();
-    const line = racingLine(raw, meta.id + ':' + (world.channel ? 'c' : world.routes ? 'r' + ri : 'g') + ':' + (meta.custom ? meta.code || meta.name || 'x' : ''));
-    const a = rivalNew(name, look, mesh, line, g, spread[n]); a.lane = lanes[n];
-    // pace: the map's medal time for this difficulty (custom maps: a fixed share of the line's flat-out time)
-    const target = (T ? RIV_PACE[RIV.diff](T) : rivalDryRun(a, 1) * { easy: 1.45, normal: 1.25, hard: 1.1 }[RIV.diff]) * a.pace;
+  RIV.on = true; const meta = MAPS[mapIdx], pool = rivalPool(), tier = rivTier(), lines = rivalLines();
+  const T = TIMES[meta.id] ? targets(meta) : null, spread = RIV_SPREAD.slice().sort(() => Math.random() - 0.5);
+  RIV_SLOTS.forEach(([slot], n) => {
+    const g = gridSlot(slot), { name, look, mesh } = pool[n]; mesh.visible = true;
+    // same engine as you: bigger, brighter motor and the matching pace
+    look.eng = tier; if (mesh.userData.mats) applyLookTo(mesh.userData.mats, look); if (mesh.userData.motor) mesh.userData.motor.scale.setScalar(1 + 0.05 * tier);
+    const a = rivalNew(name, look, mesh, lines[n], g, spread[n]); a.lane = (Math.random() - 0.5) * 0.8; // its own line is its lane
+    // pace: the map's medal time for this difficulty (custom maps: a fixed share of the line's flat-out time), sped up for your engine
+    const target = (T ? RIV_PACE[RIV.diff](T) : rivalDryRun(a, 1) * { easy: 1.45, normal: 1.25, hard: 1.1 }[RIV.diff]) * a.pace * RIV_ENG[tier];
     a.k = rivalScale(a, target);
-    RIV.list.push(a); n++;
-  }
-  const g = gridSlot(me0); placeBoat(g.x, g.z, g.yaw);
+    RIV.list.push(a);
+  });
+  const g = gridSlot(RIV_ME); placeBoat(g.x, g.z, g.yaw);
 }
 const rivProg = (r, pos) => { if (r.done) return 1e9; const c = world.cps[r.seq[Math.min(r.idx, r.seq.length - 1)]]; return r.idx * 10000 - Math.hypot(c.x - pos.x, c.z - pos.z); };
 function rivalsThink() {
@@ -3993,7 +4011,7 @@ function rivalsStep(H) {
     // sideways: settle into its lane, keep clear of the others, never leave the safe part of the course
     const p = linePos(a, a.s); a.i = p.i;
     let want = clamp(a.lane, p.lo + 0.6, p.hi - 0.6); if (p.lo + 0.6 > p.hi - 0.6) want = (p.lo + p.hi) / 2;
-    for (const o of all) { if (o === a) continue; const ds = o.s - a.s, dl = a.lat - o.lat; if (Math.abs(ds) < 7 && Math.abs(dl) < 3.2) want += (dl >= 0 ? 1 : -1) * (3.2 - Math.abs(dl)) * 1.2; }
+    for (const o of all) { if (o === a) continue; const ds = o.s - a.s, dl = a.lat - o.lat; if (Math.abs(ds) < 7 && Math.abs(dl) < 2.6) want += (dl >= 0 ? 1 : -1) * (2.6 - Math.abs(dl)) * 1.2; }
     if (racing) { // no collisions, but they still steer round you so they don't drive through your boat
       const rx = boat.pos.x - p.x, rz = boat.pos.z - p.z, ds = rx * p.tx + rz * p.tz, dl = a.lat - (rx * -p.tz + rz * p.tx);
       if (ds > -6 && ds < 10 && Math.abs(dl) < 3.6) want += (dl >= 0 ? 1 : -1) * (3.6 - Math.abs(dl)) * 1.4; }
