@@ -2,7 +2,7 @@
   "rules": {
     ".read": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
     ".write": "auth != null && auth.uid === 'YOUR_ADMIN_UID'",
-    "rv12": {
+    "rv13": {
       ".read": true
     },
     "names": {
@@ -218,6 +218,39 @@
       "$uid": {
         ".write": "auth != null && auth.uid === $uid && (!newData.exists() || !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)))",
         ".validate": "newData.hasChildren(['n', 'm', 's', 't']) && newData.child('n').isString() && newData.child('n').val().length <= 14 && newData.child('m').isString() && newData.child('m').val().length <= 24 && newData.child('s').isString() && newData.child('s').val().length <= 12 && newData.child('t').val() === now && (!newData.child('l').exists() || newData.child('l').val().matches(/^[A-Z]{4}$/))"
+      }
+    },
+    "gfr": {
+      "lb": {
+        ".read": true,
+        "$stage": {
+          ".indexOn": [
+            "t"
+          ],
+          "$uid": {
+            ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $uid || (auth != null && auth.uid === 'YOUR_ADMIN_UID')",
+            ".validate": "!newData.exists() || (newData.hasChildren(['n','t']) && newData.child('t').isNumber() && newData.child('t').val() > 20 && newData.child('n').isString() && newData.child('n').val().length <= 16)"
+          }
+        }
+      },
+      "gh": {
+        ".read": true,
+        "$stage": {
+          "$uid": {
+            ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $uid || (auth != null && auth.uid === 'YOUR_ADMIN_UID')"
+          }
+        }
+      },
+      "p": {
+        "$uid": {
+          ".read": true,
+          ".write": "auth != null && !(root.child('bans').child(auth.uid).exists() && (!root.child('bans').child(auth.uid).child('until').exists() || root.child('bans').child(auth.uid).child('until').val() === 0 || root.child('bans').child(auth.uid).child('until').val() > now)) && auth.uid === $uid || (auth != null && auth.uid === 'YOUR_ADMIN_UID')"
+        }
+      },
+      "adm": {
+        "$uid": {
+          ".read": "auth != null && auth.uid === $uid"
+        }
       }
     }
   }

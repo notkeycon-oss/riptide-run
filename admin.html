@@ -144,6 +144,22 @@ tr.sus td{background:rgba(255,90,95,.1)}
       <div class="card"><div class="row"><button id="reloadLog">RELOAD</button><span class="msg">Every admin action you take is recorded here.</span></div><table class="log"><tbody id="logBody"></tbody></table></div>
     </section>
 
+    <section data-tab="rally" class="hidden">
+      <div class="stats" id="gStats"></div>
+      <div class="card">
+        <p class="msg" style="margin-top:0">Go Fast Rally lives at <span class="uid">rally/</span> on this site and uses the same racer accounts. Bans, kicks and messages from the Players tab apply to both games.</p>
+        <div class="row"><input id="gSearch" placeholder="Search rally racers…" style="flex:1;min-width:180px"><button id="gReload">RELOAD</button></div>
+        <table><thead><tr><th>RACER</th><th>CREDITS</th><th>CARS</th><th>UPGRADES</th><th>STAGES</th><th>KM</th><th>ADMIN GIFTS</th></tr></thead><tbody id="gBody"></tbody></table>
+      </div>
+      <div class="card hidden" id="gCard"></div>
+      <h2>RALLY LEADERBOARDS</h2>
+      <div class="card">
+        <div class="row"><select id="gStage" style="min-width:240px"></select><button id="gStageReload">RELOAD</button></div>
+        <table><thead><tr><th>#</th><th>RACER</th><th>TIME</th><th>CAR</th><th>PI</th><th>RESETS</th><th>POSTED</th><th></th></tr></thead><tbody id="gLbBody"></tbody></table>
+        <p class="msg">Deleting a time also deletes that racer's ghost for the stage.</p>
+      </div>
+    </section>
+
     <section data-tab="rules" class="hidden">
       <div class="card">
         <div id="rulesStatus"></div>
@@ -158,7 +174,7 @@ tr.sus td{background:rgba(255,90,95,.1)}
 // Same database and key as riptide.html
 const DB = "https://riptide-run-default-rtdb.firebaseio.com";
 const FIREBASE_API_KEY = "AIzaSyDik3EHoih0_3wJphZOBVzaNi86YJrD-Ec";
-const RULES_MARK = 'rv12'; // bump together with database.rules.json
+const RULES_MARK = 'rv13'; // bump together with database.rules.json
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -251,11 +267,12 @@ const xpNeed = L => 250 + 100 * L, MAXXP = Array.from({ length: 29 }, (_, i) => 
 function levelOf(xp) { let L = 1; while (L < 30 && xp >= xpNeed(L)) { xp -= xpNeed(L); L++; } return L; }
 const money = n => '$' + Math.round(n || 0).toLocaleString('en-US');
 function say(t, ok = true) { $('flashMsg').textContent = t; $('flashMsg').className = 'msg ' + (ok ? 'ok' : 'bad'); }
-const TABS = [['players', 'PLAYERS'], ['events', 'EVENTS'], ['boards', 'LEADERBOARDS'], ['world', 'MAPS & LOBBIES'], ['vice', 'VICE ADMINS'], ['log', 'ACTIVITY LOG'], ['rules', 'RULES']];
+const TABS = [['players', 'PLAYERS'], ['rally', '🏁 GO FAST RALLY'], ['events', 'EVENTS'], ['boards', 'LEADERBOARDS'], ['world', 'MAPS & LOBBIES'], ['vice', 'VICE ADMINS'], ['log', 'ACTIVITY LOG'], ['rules', 'RULES']];
 function tab(t) {
   $('tabs').innerHTML = TABS.map(([k, l]) => `<button data-t="${k}" class="${k === t ? 'on' : ''}">${l}</button>`).join('');
   $('tabs').querySelectorAll('button').forEach(b => b.onclick = () => tab(b.dataset.t));
   document.querySelectorAll('section[data-tab]').forEach(s => s.classList.toggle('hidden', s.dataset.tab !== t));
+  if (t === 'rally') gLoad();
   if (t === 'boards') loadRuns(); if (t === 'world') loadWorld(); if (t === 'events') loadCfg(); if (t === 'log') loadLog(); if (t === 'vice') loadVice();
 }
 let P = {}, ADMD = {}, BANS = {}, sel = null, TAKE = {}, VICE = {}, MUTE = {}, VROWS = [];
@@ -725,6 +742,98 @@ $('dedupe').onclick = async () => {
 // keep the racer list and "online now" fresh without wiping anything you're typing
 setInterval(() => { if (!$('panel').classList.contains('hidden') && $('tabs').querySelector('[data-t="players"].on')) loadAll(true); }, 30000);
 try { const s = JSON.parse(sessionStorage.getItem('rr_admin') || 'null'); if (s && s.rt) { Object.assign(A, s); token().then(start).catch(() => {}); } } catch (e) {}
+
+// ================= GO FAST RALLY (data under gfr/) =================
+const GFR_CARS = { sprite: 'Sprite R2', vortex: 'Vortex R5', mistral: 'Mistral 77', atlas: 'Atlas Raid', havoc: 'Havoc B' };
+const GFR_STAGES = [['forest_1201_2_flowing', 'Lakeside Sprint'], ['forest_7731_4_technical', 'Kallio Jumps'], ['canyon_4410_3_flowing', 'Red Mesa Run'], ['canyon_9182_4_brutal', "Devil's Staircase"], ['alpine_3307_3_technical', 'Frostbite Pass'], ['alpine_6644_4_technical', 'Midnight Glacier'], ['coast_2025_3_technical', 'Corniche Coast'], ['coast_8128_5_brutal', 'Cliffhanger Col'], ['forest_5150_6_brutal', 'Fogbound Forest']];
+const gStageName = k => { const f = GFR_STAGES.find(x => x[0] === k); if (f) return f[1]; const m = /^([a-z]+)_(\d+)_(\d+)_([a-z]+)$/.exec(k); return m ? `${m[1][0].toUpperCase() + m[1].slice(1)} #${m[2]} · ${m[3]} km · ${m[4]}` : k; };
+let GP = {}, GADM = {}, GKEYS = [], gsel = null;
+const gCredits = id => { const p = GP[id] || {}, a = GADM[id] || {}; return (p.earned || 0) - (p.spent || 0) + (+a.cr || 0); };
+const gUpCount = p => { let n = 0; for (const c in (p.ups || {})) for (const k in p.ups[c]) n += p.ups[c][k] | 0; return n; };
+const gGiftTxt = a => !a ? '—' : [a.cr ? (+a.cr).toLocaleString() + ' CR' : '', a.cars ? 'ALL CARS' : '', a.ups ? 'MAX UPGRADES' : '', a.reset ? 'reset ' + new Date(a.reset).toLocaleDateString() : ''].filter(Boolean).join(' · ') || '—';
+async function gLoad() {
+  const [p, a, keys, onl] = await Promise.all([db('gfr/p').catch(() => null), db('gfr/adm').catch(() => null), db('gfr/lb', 'GET', undefined, '&shallow=true').catch(() => null), db('online').catch(() => null)]);
+  GP = p || {}; GADM = a || {}; GKEYS = Object.keys(keys || {});
+  const now = Date.now(), rallyOn = Object.values(onl || {}).filter(v => v && v.m === 'rally' && now - (+v.t || 0) < 75000).length;
+  const week = now - 7 * 864e5;
+  $('gStats').innerHTML = [['DRIVING NOW', rallyOn], ['RALLY RACERS', Object.keys(GP).length], ['ACTIVE THIS WEEK', Object.values(GP).filter(x => x && x.at > week).length], ['STAGES WITH TIMES', GKEYS.length], ['KM DRIVEN', Math.round(Object.values(GP).reduce((n, x) => n + (+x.km || 0), 0)).toLocaleString()]]
+    .map(([l, v]) => `<div class="stat"><small>${l}</small><b>${v}</b></div>`).join('');
+  gRender();
+  if (gsel) gCard();
+  const prev = $('gStage').value;
+  const keysSorted = GFR_STAGES.map(x => x[0]).concat(GKEYS.filter(k => !GFR_STAGES.some(x => x[0] === k)).sort());
+  $('gStage').innerHTML = keysSorted.map(k => `<option value="${esc(k)}">${esc(gStageName(k))}${GKEYS.includes(k) ? '' : ' (no times)'}</option>`).join('');
+  if (prev && keysSorted.includes(prev)) $('gStage').value = prev;
+  gLoadBoard();
+}
+function gRender() {
+  const q = $('gSearch').value.trim().toLowerCase();
+  const ids = Object.keys(GP).filter(id => !q || String(GP[id].n || '').toLowerCase().includes(q)).sort((a, b) => (GP[b].at || 0) - (GP[a].at || 0));
+  $('gBody').innerHTML = ids.map(id => { const p = GP[id]; return `<tr data-id="${esc(id)}" class="${id === gsel ? 'sel' : ''}"><td>${esc(p.n || pname(id))}</td><td>${gCredits(id).toLocaleString()}</td><td>${Object.keys(p.owned || {}).filter(k => p.owned[k]).length}</td><td>${gUpCount(p)}</td><td>${p.st || 0}</td><td>${(+p.km || 0).toFixed(1)}</td><td>${esc(gGiftTxt(GADM[id]))}</td></tr>`; }).join('') || '<tr><td colspan="7" class="msg">Nobody has played Go Fast Rally online yet.</td></tr>';
+  document.querySelectorAll('#gBody tr[data-id]').forEach(r => r.onclick = () => { gsel = r.dataset.id; gRender(); gCard(); });
+}
+$('gSearch').oninput = gRender; $('gReload').onclick = gLoad; $('gStage').onchange = () => gLoadBoard(); $('gStageReload').onclick = () => gLoadBoard();
+function gCard() {
+  const p = GP[gsel]; if (!p) { $('gCard').classList.add('hidden'); return; }
+  const a = GADM[gsel] || {};
+  const cars = Object.keys(p.owned || {}).filter(k => p.owned[k]).map(k => GFR_CARS[k] || k).join(', ') || '—';
+  const ups = Object.entries(p.ups || {}).map(([c, o]) => `${GFR_CARS[c] || c}: ${Object.values(o).reduce((n, v) => n + (v | 0), 0)}/27`).join(' · ') || 'none';
+  const bests = Object.entries(p.bests || {}).map(([k, b]) => `${esc(gStageName(k))} <b>${fmt(b.t)}</b>${['', ' 🥉', ' 🥈', ' 🥇'][b.m | 0]}`).join('<br>') || '—';
+  $('gCard').classList.remove('hidden');
+  $('gCard').innerHTML = `<div class="row" style="justify-content:space-between"><h2 style="margin:0">🏁 ${esc(p.n || pname(gsel))}</h2><span class="uid">${esc(gsel)}</span></div>
+    ${banOn(BANS[gsel]) ? '<div class="warnbar">⛔ Banned (from the Players tab) — they can\'t post rally times either.</div>' : ''}
+    <p class="msg">Credits <b>${gCredits(gsel).toLocaleString()} CR</b> (earned ${(p.earned || 0).toLocaleString()}, spent ${(p.spent || 0).toLocaleString()}, given ${(+a.cr || 0).toLocaleString()}) · Cars: ${esc(cars)}<br>Upgrades: ${esc(ups)} · ${p.st || 0} stages · ${(+p.km || 0).toFixed(1)} km</p>
+    <details><summary class="msg">Best times</summary><p class="msg">${bests}</p></details>
+    <div class="grid">
+      <div class="box"><b>💰 GIVE CREDITS</b><div class="row"><input type="number" id="gCr" placeholder="amount" style="width:110px"><button data-g="cr">GIVE</button></div><div class="row" style="margin-top:6px">${[1000, 5000, 25000].map(v => `<button data-g="cr" data-v="${v}">+${v.toLocaleString()}</button>`).join('')}</div></div>
+      <div class="box"><b>🚗 ALL CARS</b><div class="row"><button data-g="cars" data-v="1">UNLOCK ALL</button><button data-g="cars" data-v="0">TAKE BACK</button></div><p class="msg">${a.cars ? 'Given ✓' : 'Not given'}</p></div>
+      <div class="box"><b>⚙ MAX UPGRADES</b><div class="row"><button data-g="ups" data-v="1">MAX EVERY CAR</button><button data-g="ups" data-v="0">TAKE BACK</button></div><p class="msg">${a.ups ? 'Given ✓' : 'Not given'}</p></div>
+      <div class="box"><b>🧹 REMOVE ADMIN GIFTS</b><button data-g="ungift">REMOVE ALL RALLY GIFTS</button><p class="msg">Takes back given credits, cars and upgrades.</p></div>
+      <div class="box danger"><b>🗑 DELETE THEIR TIMES</b><button class="del" data-g="times">DELETE ALL RALLY TIMES</button><p class="msg">Removes every rally leaderboard time and ghost they posted.</p></div>
+      <div class="box danger"><b>☠ RESET RALLY PROGRESS</b><button class="del" data-g="reset">RESET</button><p class="msg">Credits, upgrades, cars, medals and times go back to the start next time they open the game. Riptide Run progress is not touched.</p></div>
+    </div>`;
+  $('gCard').querySelectorAll('[data-g]').forEach(b => b.onclick = () => gAct(b.dataset.g, b.dataset.v));
+}
+async function gDelTimes(id) {
+  const keys = Object.keys((await db('gfr/lb', 'GET', undefined, '&shallow=true')) || {});
+  for (const k of keys) { await db(`gfr/lb/${k}/${id}`, 'DELETE').catch(() => {}); await db(`gfr/gh/${k}/${id}`, 'DELETE').catch(() => {}); }
+}
+async function gAct(what, v) {
+  const id = gsel, nm = (GP[id] && GP[id].n) || pname(id);
+  try {
+    if (what === 'cr') {
+      const n = Math.round(+(v || $('gCr').value) || 0); if (!n) return say('Type an amount first.', false);
+      const cur = (await db(`gfr/adm/${id}/cr`)) || 0; await db(`gfr/adm/${id}/cr`, 'PUT', Math.max(0, cur + n));
+      log(`Rally: gave ${n} CR to ${nm}`); say(`Gave ${n.toLocaleString()} CR to ${nm}.`);
+    } else if (what === 'cars' || what === 'ups') {
+      await db(`gfr/adm/${id}/${what}`, v === '1' ? 'PUT' : 'DELETE', v === '1' ? true : undefined);
+      log(`Rally: ${v === '1' ? 'gave' : 'took back'} ${what === 'cars' ? 'all cars' : 'max upgrades'} ${v === '1' ? 'to' : 'from'} ${nm}`); say('Done.');
+    } else if (what === 'ungift') {
+      const cur = (await db(`gfr/adm/${id}`)) || {}; await db(`gfr/adm/${id}`, 'PUT', cur.reset ? { reset: cur.reset } : null);
+      log(`Rally: removed admin gifts from ${nm}`); say('Rally gifts removed.');
+    } else if (what === 'times') {
+      if (!confirm(`Delete every Go Fast Rally time ${nm} has posted?`)) return;
+      await gDelTimes(id); log(`Rally: deleted all times of ${nm}`); say('Times deleted.');
+    } else if (what === 'reset') {
+      if (!confirm(`Reset ${nm}'s Go Fast Rally progress? Riptide Run is not affected.`)) return;
+      await db(`gfr/adm/${id}`, 'PUT', { reset: SV }); await db(`gfr/p/${id}`, 'DELETE'); await gDelTimes(id);
+      log(`Rally: reset progress of ${nm}`); say(`${nm}'s rally progress will reset next time they play.`);
+    }
+  } catch (e) { say('Failed: ' + e.message, false); }
+  gLoad();
+}
+async function gLoadBoard() {
+  const k = $('gStage').value; if (!k) { $('gLbBody').innerHTML = ''; return; }
+  const d = (await db('gfr/lb/' + k).catch(() => null)) || {};
+  const rows = Object.entries(d).map(([id, e]) => Object.assign({ id }, e)).filter(e => typeof e.t === 'number').sort((a, b) => a.t - b.t);
+  $('gLbBody').innerHTML = rows.map((e, i) => `<tr><td>${i + 1}</td><td>${esc(e.n)}</td><td>${fmt(e.t)}</td><td>${esc(GFR_CARS[e.c] || e.c || '')}</td><td>${e.pi || ''}</td><td>${e.r || 0}</td><td>${e.at ? new Date(e.at).toLocaleString() : ''}</td><td><button class="del" data-gdel="${esc(e.id)}">DELETE</button></td></tr>`).join('') || '<tr><td colspan="8" class="msg">No times on this stage yet.</td></tr>';
+  $('gLbBody').querySelectorAll('[data-gdel]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.gdel, row = rows.find(r => r.id === id);
+    if (!confirm(`Delete ${row ? row.n : id}'s time on ${gStageName(k)}?`)) return;
+    try { await db(`gfr/lb/${k}/${id}`, 'DELETE'); await db(`gfr/gh/${k}/${id}`, 'DELETE').catch(() => {}); log(`Rally: deleted ${row ? row.n : id}'s time on ${gStageName(k)}`); say('Time deleted.'); } catch (e) { say('Failed: ' + e.message, false); }
+    gLoadBoard();
+  });
+}
 </script>
 </body>
 </html>

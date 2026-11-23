@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Go Fast Rally</title>
+<meta name="description" content="A browser rally game with realistic handling, procedural mountain stages, pace notes and dust trails.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;0,800;1,700;1,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="gl"></canvas>
+
+<!-- ================= HUD ================= -->
+<div id="hud" class="hidden">
+  <div id="hudTL" class="hud">
+    <div class="lbl" id="stageName">STAGE</div>
+    <div class="big" id="timer">0:00.00</div>
+    <div class="row" id="deltaRow"><span id="delta"></span><span id="pen"></span></div>
+    <div class="row dim" id="bestRow"></div>
+  </div>
+  <div id="prog" class="hud"><div id="progBar"><div id="progFill"></div><div id="progGhost"></div></div><div id="progTxt"></div></div>
+  <div id="notes" class="hud"></div>
+  <div id="speedo" class="hud">
+    <div id="rpmBar"><div id="rpmFill"></div></div>
+    <div class="spdRow"><div id="gear">1</div><div><div class="big" id="speed">0</div><div class="unit" id="unit">KM/H</div></div></div>
+    <div id="boostBar"><div id="boostFill"></div></div>
+  </div>
+  <canvas id="mini" class="hud" width="180" height="180"></canvas>
+  <div id="dmg" class="hud"></div>
+  <div id="msg" class="hud"></div>
+  <div id="sub" class="hud"></div>
+  <div id="toast" class="hud"></div>
+  <div id="wrong" class="hud">WRONG WAY</div>
+  <div id="fps" class="hud hidden"></div>
+  <div id="hudBtns">
+    <button id="bPause" title="Pause (Esc)">II</button>
+    <button id="bCam" title="Camera (C)">◉</button>
+    <button id="bMute" title="Mute (M)">♪</button>
+  </div>
+  <div id="replayBar" class="hidden">
+    <span class="rtag">● REPLAY</span>
+    <button class="sec" id="rCam">CAMERA</button>
+    <button class="sec" id="rSlow">SLOW-MO</button>
+    <button class="sec" id="rExit">EXIT REPLAY</button>
+  </div>
+</div>
+
+<div id="touch">
+  <div class="tb" id="tl" data-t="left">◀</div>
+  <div class="tb" id="tr" data-t="right">▶</div>
+  <div class="tb" id="tu" data-t="up">▲</div>
+  <div class="tb" id="td" data-t="down">▼</div>
+  <div class="tb" id="th" data-t="hand">HB</div>
+  <div class="tb" id="trst" data-t="act:reset">R</div>
+</div>
+
+<!-- ================= LOADING ================= -->
+<div id="loading" class="panel">
+  <div class="card loadcard">
+    <h1>GO FAST <span>RALLY</span></h1>
+    <div class="sub" id="loadTxt">Building the stage…</div>
+    <div class="bar"><div id="loadFill"></div></div>
+    <div class="tip" id="loadTip"></div>
+  </div>
+</div>
+
+<!-- ================= MAIN MENU ================= -->
+<div id="menu" class="panel side hidden">
+  <div class="card menucard">
+    <h1 class="logo">GO FAST<br><span>RALLY</span></h1>
+    <div class="sub">Realistic handling. Procedural mountain stages. Your co-driver calls every turn.</div>
+    <div class="profile" id="profile"></div>
+    <div class="acct" id="acct"></div>
+    <div class="mbtns">
+      <button class="mb main" data-go="stages"><b>FEATURED STAGES</b><small>Nine hand-picked stages · earn stars</small></button>
+      <button class="mb" data-go="custom"><b>QUICK STAGE</b><small>Build your own stage from a seed</small></button>
+      <button class="mb" data-go="event"><b>RALLY EVENT</b><small>Three stages · damage carries over</small></button>
+      <button class="mb" data-go="daily"><b>DAILY STAGE</b><small id="dailySub">Same stage for everyone today</small></button>
+      <button class="mb" data-go="endless"><b>ENDLESS RUN</b><small>Beat the clock to each checkpoint</small></button>
+    </div>
+    <div class="row">
+      <button class="sec" data-go="garage">GARAGE</button>
+      <button class="sec" data-go="boards">LEADERBOARDS</button>
+      <button class="sec" data-go="settings">SETTINGS</button>
+      <button class="sec" data-go="help">HOW TO PLAY</button>
+      <button class="sec" id="toRiptide" style="border-color:#7ff5ff">🌊 RIPTIDE RUN</button>
+    </div>
+    <div class="foot">W A S D drive · SPACE handbrake · C camera · R reset</div>
+  </div>
+</div>
+
+<!-- ================= FEATURED STAGES ================= -->
+<div id="stages" class="panel hidden">
+  <div class="card wide">
+    <h2>FEATURED STAGES</h2>
+    <div class="sub">Beat the medal times for stars. Stars unlock new cars.</div>
+    <div id="stageGrid" class="grid"></div>
+    <div class="carline" id="carline1"></div>
+    <div class="row">
+      <button class="sec" data-go="menu">BACK</button>
+      <button class="go" id="stageGo">START STAGE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= QUICK STAGE ================= -->
+<div id="custom" class="panel hidden">
+  <div class="card wide">
+    <h2>QUICK STAGE</h2>
+    <div class="sub">Every seed makes a different stage. Share the stage code with friends.</div>
+    <div class="setlist" id="customOpts"></div>
+    <div class="set"><span>Seed</span><div class="row"><input id="seedIn" type="number" min="1" max="99999"><button class="sec" id="seedRnd">🎲 RANDOM</button></div></div>
+    <div class="set"><span>Stage code</span><div class="row"><input id="codeIn" type="text" spellcheck="false"><button class="sec" id="codeLoad">LOAD CODE</button></div></div>
+    <div class="carline" id="carline2"></div>
+    <div class="row">
+      <button class="sec" data-go="menu">BACK</button>
+      <button class="go" id="customGo">START STAGE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= RALLY EVENT ================= -->
+<div id="event" class="panel hidden">
+  <div class="card wide">
+    <h2 id="evTitle">RALLY EVENT</h2>
+    <div class="sub" id="evSub">Three stages back to back. Your damage carries over, so drive smart. Beat the field overall to win.</div>
+    <div id="evSetup">
+      <div class="setlist" id="eventOpts"></div>
+      <div class="carline" id="carline3"></div>
+    </div>
+    <div id="evStand" class="hidden"></div>
+    <div class="row">
+      <button class="sec" id="evBack">BACK</button>
+      <button class="sec hidden" id="evRepair">REPAIR</button>
+      <button class="go" id="evGo">START EVENT</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= SIGN IN ================= -->
+<div id="login" class="panel hidden">
+  <div class="card">
+    <h2>SIGN IN</h2>
+    <div class="sub">Pick a racer name and a 4-digit PIN. Use the same name and PIN on any device to get your credits, upgrades and times back. Your Riptide Run name and PIN work here too.</div>
+    <div class="col">
+      <input id="lname" maxlength="14" placeholder="Racer name" autocomplete="off" spellcheck="false">
+      <input id="lpin" maxlength="4" inputmode="numeric" placeholder="4-digit PIN" autocomplete="off" type="password">
+      <div id="lerr" class="err"></div>
+      <button class="go" id="lGo">SIGN IN</button>
+      <button class="sec" data-go="menu">PLAY OFFLINE</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= LEADERBOARDS ================= -->
+<div id="boards" class="panel hidden">
+  <div class="card wide">
+    <h2>LEADERBOARDS</h2>
+    <div class="sub" id="bSub">World times from every signed-in racer. Press 👻 to race someone's ghost.</div>
+    <div class="bgrid">
+      <div class="blist" id="bList"></div>
+      <div class="btable" id="bTable"></div>
+    </div>
+    <div class="row"><button class="sec" data-go="menu">BACK</button><button class="go" id="bPlay">DRIVE THIS STAGE</button></div>
+  </div>
+</div>
+
+<!-- ================= GARAGE ================= -->
+<div id="garage" class="panel hidden">
+  <div class="card gcard">
+    <div class="ghd"><h2>GARAGE</h2><span class="pill cr" id="gCred"></span></div>
+    <div class="seg gtabs" id="gTabs"><button data-tab="cars" class="on">CARS</button><button data-tab="ups">UPGRADES</button><button data-tab="livery">LIVERY</button></div>
+    <div id="tabCars"><div id="carList" class="carlist"></div><div id="carInfo"></div></div>
+    <div id="tabUps" class="hidden"><div id="upInfo" class="sub"></div><div id="upList" class="uplist"></div></div>
+    <div id="tabLivery" class="hidden"><div id="livery"></div></div>
+    <div class="gfoot"><button class="go" data-go="menu">DONE</button></div>
+  </div>
+</div>
+
+<!-- ================= SETTINGS ================= -->
+<div id="settings" class="panel hidden">
+  <div class="card wide">
+    <h2>SETTINGS</h2>
+    <div class="setlist" id="setList"></div>
+    <div class="row"><button class="go" id="setDone">DONE</button></div>
+  </div>
+</div>
+
+<!-- ================= HELP ================= -->
+<div id="help" class="panel hidden">
+  <div class="card wide helpc">
+    <h2>HOW TO PLAY</h2>
+    <div class="hgrid">
+      <div><b>DRIVE</b><span>W / ↑ throttle · S / ↓ brake (hold when stopped to reverse) · A D / ← → steer</span></div>
+      <div><b>HANDBRAKE</b><span>SPACE locks the rear wheels. Tap it to swing the car round hairpins.</span></div>
+      <div><b>GEARS</b><span>Automatic by default. With manual set in Settings, use E to shift up and Q to shift down.</span></div>
+      <div><b>CAMERA &amp; RESET</b><span>C changes camera: chase, far, cockpit (first person), bonnet, bumper and helicopter. R puts you back on the road (+5 s).</span></div>
+      <div><b>UPGRADES</b><span>Finish stages to earn credits (CR). Spend them in the Garage on engine, turbo, gearbox, brakes, suspension, weight and tyres for each surface.</span></div>
+      <div><b>PACE NOTES</b><span>Your co-driver calls each turn by grade: <b class="inl">6</b> is nearly flat out, <b class="inl">1</b> is the slowest, then the hairpin. "Tightens" means brake again mid-turn.</span></div>
+      <div><b>DON'T CUT</b><span>A rock sits on the inside of that corner. Keep wide or you'll damage the car.</span></div>
+      <div><b>CRESTS &amp; JUMPS</b><span>Lift off before big jumps and land straight. Landing sideways hurts.</span></div>
+      <div><b>SURFACES</b><span>Gravel slides, tarmac grips, snow and ice barely hold. Rain cuts grip a lot on tarmac.</span></div>
+      <div><b>GAMEPAD</b><span>RT throttle · LT brake · A handbrake · Y reset · X camera · LB / RB gears · START pause</span></div>
+      <div><b>DRIVING TIP</b><span>Brake in a straight line, turn in, then feed the throttle. Weight moves with you: lift to turn in harder.</span></div>
+    </div>
+    <div class="row"><button class="go" data-go="back">GOT IT</button></div>
+  </div>
+</div>
+
+<!-- ================= PAUSE ================= -->
+<div id="pause" class="panel hidden">
+  <div class="card">
+    <h2>PAUSED</h2>
+    <div class="sub" id="pauseInfo"></div>
+    <div class="col">
+      <button class="go" id="pResume">RESUME</button>
+      <button class="sec" id="pRestart">RESTART STAGE</button>
+      <button class="sec" id="pSettings">SETTINGS</button>
+      <button class="sec" id="pHelp">HOW TO PLAY</button>
+      <button class="sec" id="pQuit">QUIT TO MENU</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= RESULTS ================= -->
+<div id="results" class="panel hidden">
+  <div class="card wide">
+    <div class="resgrid">
+      <div class="resL">
+        <div class="lbl" id="resStage"></div>
+        <div class="restime" id="resTime"></div>
+        <div id="resMedal"></div>
+        <div id="resBadges"></div>
+        <div id="resSplits"></div>
+        <div id="resStats" class="stats"></div>
+      </div>
+      <div class="resR">
+        <div class="ghd"><div class="ghead" id="resBoardTitle">STAGE RESULTS</div><div class="seg" id="resTabs"><button data-b="world" class="on">WORLD</button><button data-b="field">RALLY FIELD</button></div></div>
+        <div id="resBoard"></div>
+      </div>
+    </div>
+    <div class="row">
+      <button class="sec" id="resMenu">MENU</button>
+      <button class="sec" id="resReplay">WATCH REPLAY</button>
+      <button class="sec" id="resRetry">RETRY</button>
+      <button class="go" id="resNext">NEXT</button>
+    </div>
+  </div>
+</div>
+
+<script src="lib/three.min.js"></script>
+<script src="js/util.js"></script>
+<script src="js/data.js"></script>
+<script src="js/track.js"></script>
+<script src="js/geo.js"></script>
+<script src="js/world.js"></script>
+<script src="js/physics.js"></script>
+<script src="js/carmodel.js"></script>
+<script src="js/fx.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/input.js"></script>
+<script src="js/camera.js"></script>
+<script src="js/ai.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/net.js"></script>
+<script src="js/session.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>
