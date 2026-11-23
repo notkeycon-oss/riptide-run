@@ -106,3 +106,15 @@ A racer's card also lists things bought with gift money and can take back items 
 
 In lobby races, boats now collide. Each player's game resolves its own boat with half the overlap and half the impulse, so a bump is shared between both boats. The host can turn **Bumping** ON or OFF in the lobby (it's on by default). Knocked-out and finished racers can't be hit.
 
+## Go Fast Rally (rally/)
+
+The site also hosts **Go Fast Rally**, a rally game, at `rally/`. A **🏁 GO FAST RALLY** banner at the top of the Riptide Run menu opens it.
+
+- **One account for both games.** It's the same racer name and PIN. If you're signed in to Riptide Run, Go Fast Rally signs you in automatically.
+- **Online list.** People driving Go Fast Rally show up in Riptide Run's **Online now** list with a **PLAY RALLY** button.
+- **Admin panel.** The **🏁 GO FAST RALLY** tab shows rally racers and rally leaderboards. From there you can:
+  - give credits, unlock every car, or max every upgrade
+  - remove gifts, delete times and ghosts, or reset a racer's rally progress
+  Bans, kicks and messages from the Players tab apply to both games.
+- **Database.** Go Fast Rally keeps its data under `gfr/` in the same database. `database.rules.json` now includes the `gfr` rules (rules version `rv13`). Publish them from the admin panel's **Rules** tab, or rally leaderboards and cloud saves can't be written.
+- **Updating the rally game.** The rally files come from the GoFastRally repo. Run `tools/deploy-to-riptide.sh /path/to/riptide-run` there to copy a new version into `rally/`.

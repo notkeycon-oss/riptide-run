@@ -203,6 +203,11 @@ input.tx:focus{border-color:var(--accent)}
 @media (max-width:860px){#maps{grid-template-columns:repeat(2,1fr)}#skins{grid-template-columns:repeat(2,1fr)}#edside{width:240px}}
 @media (max-width:1150px){#hint{display:none}}
 @media (max-width:700px){h1{font-size:46px}#speedo .big{font-size:56px}#timer .big{font-size:34px}#msg{font-size:66px}#hint{display:none}.stat{min-width:96px}.card{padding:18px 14px}.map .nm{font-size:20px}#mini{width:110px!important;height:110px!important}}
+.rallyBanner{display:flex;flex-direction:column;align-items:flex-start;gap:1px;width:100%;margin:10px 0 2px;padding:10px 16px;border-radius:14px;border:2px solid rgba(255,194,26,.7);background:linear-gradient(90deg,rgba(255,194,26,.22),rgba(255,90,31,.16));color:var(--ink);text-align:left;cursor:pointer;position:relative;transition:transform .15s,background .15s}
+.rallyBanner:hover{transform:translateY(-2px);background:linear-gradient(90deg,rgba(255,194,26,.32),rgba(255,90,31,.22))}
+.rallyBanner b{font-size:26px;font-weight:800;font-style:italic;letter-spacing:2px}
+.rallyBanner small{font-size:15px;color:var(--dim)}
+.rallyBanner .rbTag{position:absolute;right:12px;top:10px;font-size:12px;font-weight:800;letter-spacing:2px;background:#ffc21a;color:#16120a;border-radius:4px;padding:1px 6px}
 </style>
 </head>
 <body>
@@ -246,6 +251,7 @@ input.tx:focus{border-color:var(--accent)}
     <h1>RIPTIDE <span>RUN</span></h1>
     <div class="topbar" id="topbar"></div>
     <div class="sub" style="margin:2px 0 0" id="dailyTxt"></div>
+    <button id="rallyBtn" class="rallyBanner"><span class="rbTag">NEW GAME</span><b>🏁 GO FAST RALLY</b><small>Rally cars on mountain stages · same name &amp; PIN as Riptide Run</small></button>
     <div id="maps"></div>
     <div class="row" style="margin-top:8px">
       <button class="chip" id="lapChip">LAPS: 1</button>
@@ -4524,6 +4530,9 @@ setInterval(async () => {
 function goOffline() { if (NET.on && me() && !isLegacyId(me().id)) api('online/' + me().id, 'DELETE').catch(() => {}); ONL.sig = ''; }
 addEventListener('pagehide', goOffline);
 document.addEventListener('visibilitychange', () => { if (document.hidden) goOffline(); });
+// Go Fast Rally lives in the rally/ folder of this site and signs in with the same racer
+function goRally() { try { goOffline(); } catch (e) {} location.href = 'rally/'; }
+if ($('rallyBtn')) $('rallyBtn').onclick = goRally;
 async function pollOnline() {
   if (!NET.on || ONL.busy || document.hidden || state !== 'menu' || !open('menu')) return;
   ONL.busy = true;
@@ -4539,11 +4548,13 @@ function renderOnline() {
   const list = ONL.list.slice().sort((a, b) => (b.s === 'lobby') - (a.s === 'lobby') || (b.m === here) - (a.m === here) || String(a.n).localeCompare(b.n));
   $('onCount').textContent = list.length ? '· ' + list.length : '';
   $('onList').innerHTML = list.map(v => {
+    if (v.m === 'rally') return `<div class="orow"><span class="odot" style="background:#ffc21a;box-shadow:0 0 6px #ffc21a"></span><div class="who"><b style="color:${chatColor(v.n)}">${esc(v.n)}</b><small>🏁 ${v.s === 'racing' ? 'driving a stage' : 'in the garage'} · Go Fast Rally</small></div><button data-rally="1">PLAY RALLY</button></div>`;
     const what = v.s === 'lobby' ? `in lobby ${esc(v.l || '')} · ${esc(mapName(v.m))}` : `${v.s === 'racing' ? 'racing' : 'in the menu'} · ${esc(mapName(v.m))}`;
     const btn = v.s === 'lobby' && v.l ? `<button data-join="${esc(v.l)}">JOIN LOBBY</button>` : v.m !== here && v.m !== 'custom' ? `<button data-go="${esc(v.m)}">GO TO MAP</button>` : v.m === here ? '<small style="color:var(--dim)">same map</small>' : '';
     return `<div class="orow"><span class="odot"></span><div class="who"><b style="color:${chatColor(v.n)}">${esc(v.n)}</b><small>${what}</small></div>${btn}</div>`;
   }).join('') || `<div class="snote">${NET.on ? 'Nobody else is online right now.' : 'Offline — connect to see who\'s playing.'}</div>`;
   $('onList').querySelectorAll('[data-go]').forEach(b => b.onclick = () => { const i = MAPS.findIndex(m => m.id === b.dataset.go && !m.custom); if (i >= 0 && i !== mapIdx) { ghostPick = null; loadMap(i); renderMaps(); renderOnline(); pollChat(true); } });
+  $('onList').querySelectorAll('[data-rally]').forEach(b => b.onclick = goRally);
   $('onList').querySelectorAll('[data-join]').forEach(b => b.onclick = () => { if (!me() || isLegacyId(me().id)) { openLogin(); return; } openLobbyPanel(); $('lbCode').value = b.dataset.join; $('lbJoin').click(); });
 }
 setTimeout(() => { pollOnline(); pollChat(true); renderChat(); renderOnline(); }, 1500);
