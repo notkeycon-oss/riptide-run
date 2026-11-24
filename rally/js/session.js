@@ -264,6 +264,13 @@
           app.rig.reset();
           hud.toast(G.CAM_NAMES[app.rig.mode] + ' CAM');
         }
+        if (inp.take('ghost')) {
+          const order = ['on', 'faint', 'off'];
+          const S2 = this.settings;
+          S2.ghost = order[(order.indexOf(S2.ghost || 'on') + 1) % 3];
+          G.save.write();
+          hud.toast('GHOST: ' + { on: 'SHOW', faint: 'FAINT', off: 'HIDDEN' }[S2.ghost]);
+        }
         if (inp.take('shiftUp')) ph.shift(1);
         if (inp.take('shiftDown')) ph.shift(-1);
         if (this.state === 'run' && inp.take('reset') && this.resetCool <= 0) this.resetCar('RESET');
@@ -666,7 +673,13 @@
         gp = this._ghostAt(this.t, this._gs || (this._gs = { pos: new V3(), q: new THREE.Quaternion(), s: 0 }));
         const gm = this.ghost.model;
         if (gp) {
-          gm.group.visible = gp.pos.distanceTo(ph.pos) > 2.5;
+          // fade the ghost out as it gets close so it never blocks your view
+          const mode = this.settings.ghost || 'on';
+          const d = gp.pos.distanceTo(ph.pos);
+          const base = mode === 'faint' ? 0.13 : 0.32;
+          const fade = G.smoothstep(3, 14, d);
+          gm.group.visible = mode !== 'off' && fade > 0.02;
+          gm.setOpacity(base * fade);
           gm.setState(gp.pos, gp.q, 0, this.t * 30, null, false);
         } else gm.group.visible = false;
       }

@@ -168,6 +168,7 @@
       damage: 'normal',
       voice: true,
       callTiming: 'normal',
+      ghost: 'on',
       paceHud: true,
       master: 0.8,
       engineVol: 0.8,

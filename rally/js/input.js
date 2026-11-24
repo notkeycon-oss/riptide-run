@@ -6,7 +6,7 @@
     KeyW: 'up', ArrowUp: 'up', KeyS: 'down', ArrowDown: 'down', KeyA: 'left', ArrowLeft: 'left', KeyD: 'right', ArrowRight: 'right',
     Space: 'hand', ShiftLeft: 'hand', ShiftRight: 'hand',
   };
-  const ACTIONS = { KeyC: 'camera', KeyR: 'reset', Escape: 'pause', KeyP: 'pause', KeyE: 'shiftUp', KeyQ: 'shiftDown', KeyT: 'restart', KeyM: 'mute', KeyH: 'help', KeyV: 'look', Enter: 'confirm', KeyF: 'fps' };
+  const ACTIONS = { KeyC: 'camera', KeyR: 'reset', Escape: 'pause', KeyP: 'pause', KeyE: 'shiftUp', KeyQ: 'shiftDown', KeyT: 'restart', KeyM: 'mute', KeyH: 'help', KeyV: 'look', Enter: 'confirm', KeyF: 'fps', KeyG: 'ghost' };
 
   class Input {
     constructor() {
