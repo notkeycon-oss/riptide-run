@@ -38,7 +38,6 @@
       this._planT = 0;
       this.instDirty = true;
       this.peopleDirty = true;
-      this.waterZones = [];
       this.focus = new THREE.Vector3();
       this.elapsed = 0;
       this.initMaterials();
@@ -402,17 +401,6 @@
       }
       out.water = !!(this.theme.sea && out.y < 0.2);
       return out;
-    }
-
-    // water surface height at x,z, or null when not over a splash pool
-    waterAt(x, z) {
-      for (const w of this.waterZones) {
-        const dx = x - w.x, dz = z - w.z;
-        const along = dx * Math.cos(w.h) + dz * Math.sin(w.h);
-        const across = -dx * Math.sin(w.h) + dz * Math.cos(w.h);
-        if (Math.abs(along) < w.halfL && Math.abs(across) < w.halfW) return w.y;
-      }
-      return null;
     }
 
     heightAt(x, z) {
@@ -909,26 +897,6 @@
         sec.cols.push(cc);
         this._addCol(cc);
       }
-      // water splashes: a shallow pool sitting in the dip
-      for (const F of tr.features) {
-        if (!F.water || F.s < s0 || F.s >= s1) continue;
-        const i = Math.floor(F.s / tr.DS);
-        const c = at(F.s, 0);
-        const y = tr.y[i] + 0.32;
-        const halfL = F.L * 0.6, halfW = tr.hw[i] * 1.24 + 0.6;
-        const wg = new THREE.PlaneGeometry(halfW * 2, halfL * 2, 1, 1);
-        wg.rotateX(-Math.PI / 2);
-        if (!this.waterMat) this.waterMat = new THREE.MeshPhongMaterial({ color: this.night ? 0x1d3346 : 0x4f7f96, shininess: 110, specular: 0x9fc4d6, transparent: true, opacity: 0.62, depthWrite: false });
-        const wm = new THREE.Mesh(wg, this.waterMat);
-        wm.position.set(c.x, y, c.z);
-        wm.rotation.y = yawOf(c.h);
-        wm.renderOrder = 2;
-        this.root.add(wm);
-        sec.extra.push(wm);
-        const zone = { x: c.x, z: c.z, h: c.h, halfL, halfW, y };
-        sec.water = (sec.water || []).concat(zone);
-        this.waterZones.push(zone);
-      }
       // gantries
       const gantries = [];
       if (tr.START >= s0 && tr.START < s1) gantries.push({ s: tr.START, text: 'START', bg: '#d81e2a', start: true });
@@ -1104,7 +1072,6 @@
       }
       if (s.people.length) this.peopleDirty = true;
       if (s.grass) this.grassDirty = true;
-      if (s.water) this.waterZones = this.waterZones.filter((z) => !s.water.includes(z));
       this._removeCols(s.cols);
       this.sections.delete(k);
     }

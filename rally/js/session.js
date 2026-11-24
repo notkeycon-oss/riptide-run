@@ -354,7 +354,7 @@
       ph.events.length = 0;
     }
 
-    // dirt build-up, water splashes and parts that fell off
+    // dirt build-up and parts that fell off
     _extras(dt) {
       const ph = this.ph, tr = this.track, fx = this.fx;
       // dirt: loose surfaces cake the car, tarmac only a little
@@ -367,23 +367,6 @@
       let loose = 0, on = 0;
       for (const w of ph.wheels) if (w.contact) { on++; const sf = G.SURF[w.surf] || G.SURF.gravel; loose += sf.dust; }
       if (on) this.dirt = Math.min(0.92, this.dirt + dt * Math.min(1, ph.speed / 22) * (loose / on) * 0.0075);
-      // water splashes
-      const wy = this.world.waterAt(ph.pos.x, ph.pos.z);
-      const depth = wy == null ? -1 : wy - (ph.pos.y - this.spec.cgH);
-      if (depth > -0.05) {
-        const hv = Math.hypot(ph.vel.x, ph.vel.z);
-        // water drag: a splash costs you roughly a fifth of your speed
-        const k = Math.min(0.2, dt * (0.25 + Math.max(0, depth) * 0.5));
-        ph.vel.x *= 1 - k;
-        ph.vel.z *= 1 - k;
-        if (!this.inWater) {
-          this.inWater = true;
-          G.audio.splash(hv);
-          fx.splash(ph.pos, ph.vel, Math.min(160, 30 + hv * 5));
-          this.app.rig.bump(0.4);
-        } else if (hv > 3) fx.splash(ph.pos, ph.vel, Math.min(12, hv * 0.4));
-        this.dirt = Math.max(0, this.dirt - dt * 0.6);
-      } else this.inWater = false;
       this.model.setDirt(this.dirt, this.mud);
       // broken-off bumpers and wings tumble onto the road and stay there
       const m = this.model;
