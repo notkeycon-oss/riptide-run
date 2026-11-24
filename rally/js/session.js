@@ -94,7 +94,12 @@
       this.fx.setEnv(this.world, app.camera, app.renderer);
       this.ai = new G.AIDriver(this.track, this.demo ? 0.72 : 0.7);
       this.ai.reset(p.i);
-      if (cfg.damage) Object.assign(this.ph.damage, JSON.parse(JSON.stringify(cfg.damage)));
+      if (cfg.damage) {
+        Object.assign(this.ph.damage, JSON.parse(JSON.stringify(cfg.damage)));
+        // rally events: the dents you carried over are still on the car
+        const b = cfg.damage.body || 0;
+        if (b > 0.05) for (let k = 0; k < 3; k++) this.model.deform(new V3((Math.random() - 0.5) * 1.8, 0.1, (Math.random() - 0.5) * 3.6), Math.min(1, b * 0.9));
+      }
       if (!this.track.endless) this.medals = G.medalTimes(this.track);
       // ghost of your best run
       this.best = G.save.data.bests[this.key] || null;
@@ -279,6 +284,7 @@
       this._events();
       this.resetCool -= dt;
       const q = this._progress();
+      this._extras(dt);
       // clocks
       if (this.state === 'run') {
         this.t += dt;
@@ -339,6 +345,76 @@
       }
       this.maxAir = Math.max(this.maxAir, ph.maxAir);
       ph.events.length = 0;
+    }
+
+    // dirt build-up, water splashes and parts that fell off
+    _extras(dt) {
+      const ph = this.ph, tr = this.track, fx = this.fx;
+      // dirt: loose surfaces cake the car, tarmac only a little
+      if (this.dirt == null) {
+        this.dirt = 0;
+        const C = { forest: [0.33, 0.26, 0.17], canyon: [0.64, 0.37, 0.21], alpine: [0.9, 0.93, 0.97], coast: [0.52, 0.5, 0.45] }[tr.themeKey] || [0.4, 0.32, 0.22];
+        const wet = this.world.wet && tr.themeKey !== 'alpine' ? 0.72 : 1;
+        this.mud = new THREE.Color(C[0] * wet, C[1] * wet, C[2] * wet);
+      }
+      let loose = 0, on = 0;
+      for (const w of ph.wheels) if (w.contact) { on++; const sf = G.SURF[w.surf] || G.SURF.gravel; loose += sf.dust; }
+      if (on) this.dirt = Math.min(0.92, this.dirt + dt * Math.min(1, ph.speed / 22) * (loose / on) * 0.0075);
+      // water splashes
+      const wy = this.world.waterAt(ph.pos.x, ph.pos.z);
+      const depth = wy == null ? -1 : wy - (ph.pos.y - this.spec.cgH);
+      if (depth > -0.05) {
+        const hv = Math.hypot(ph.vel.x, ph.vel.z);
+        // water drag: a splash costs you roughly a fifth of your speed
+        const k = Math.min(0.2, dt * (0.25 + Math.max(0, depth) * 0.5));
+        ph.vel.x *= 1 - k;
+        ph.vel.z *= 1 - k;
+        if (!this.inWater) {
+          this.inWater = true;
+          G.audio.splash(hv);
+          fx.splash(ph.pos, ph.vel, Math.min(160, 30 + hv * 5));
+          this.app.rig.bump(0.4);
+        } else if (hv > 3) fx.splash(ph.pos, ph.vel, Math.min(12, hv * 0.4));
+        this.dirt = Math.max(0, this.dirt - dt * 0.6);
+      } else this.inWater = false;
+      this.model.setDirt(this.dirt, this.mud);
+      // broken-off bumpers and wings tumble onto the road and stay there
+      const m = this.model;
+      if (m.debris && m.debris.length) {
+        for (const obj of m.debris) {
+          this.app.scene.add(obj);
+          (this.debris = this.debris || []).push({ obj, v: new V3(ph.vel.x * 0.7 + (Math.random() - 0.5) * 3, 2 + Math.random() * 2, ph.vel.z * 0.7 + (Math.random() - 0.5) * 3), w: new V3((Math.random() - 0.5) * 9, (Math.random() - 0.5) * 6, (Math.random() - 0.5) * 9), rest: false });
+          G.audio.debris();
+          if (!this.demo) this.app.hud.toast('YOU LOST A PART!', 1.4);
+        }
+        m.debris.length = 0;
+      }
+      if (this.debris) {
+        const e = this._de || (this._de = new THREE.Euler());
+        const qd = this._dq || (this._dq = new THREE.Quaternion());
+        for (const d of this.debris) {
+          if (d.rest) continue;
+          d.v.y -= 9.81 * dt;
+          d.obj.position.addScaledVector(d.v, dt);
+          e.set(d.w.x * dt, d.w.y * dt, d.w.z * dt);
+          d.obj.quaternion.multiply(qd.setFromEuler(e));
+          const gy = this.world.heightAt(d.obj.position.x, d.obj.position.z) + 0.06;
+          if (d.obj.position.y < gy) {
+            d.obj.position.y = gy;
+            d.v.y = Math.abs(d.v.y) * 0.25;
+            d.v.x *= 0.55;
+            d.v.z *= 0.55;
+            d.w.multiplyScalar(0.5);
+            if (d.v.lengthSq() < 0.6) {
+              // settle flat on the road, keeping its heading
+              d.rest = true;
+              const eu = new THREE.Euler().setFromQuaternion(d.obj.quaternion, 'YXZ');
+              d.obj.quaternion.setFromEuler(new THREE.Euler(0, eu.y, 0, 'YXZ'));
+              d.obj.position.y = gy + 0.04;
+            }
+          }
+        }
+      }
     }
 
     _autoReset(dt, q) {
@@ -436,6 +512,9 @@
           this._saveGhost();
         } else if (prev && r.medal > (prev.medal || 0)) prev.medal = r.medal;
         r.field = G.rivalField(tr, this.key);
+        const fp = tr.pointAt(tr.finishS + 25, {});
+        this.fx.fireworks(new V3(fp.x, fp.y, fp.z));
+        r.dents = Math.round(this.ph.damage.body * 100);
         this.app.hud.flash('FINISH', 2, '#ffc21a');
         this.app.hud.flashSub(G.fmtTime(total) + (r.newBest ? ' · <span style="color:#3ddc84">NEW BEST</span>' : ''), 3);
       }
@@ -716,6 +795,7 @@
     }
 
     dispose() {
+      if (this.debris) for (const d of this.debris) { this.app.scene.remove(d.obj); d.obj.traverse((o) => o.geometry && o.geometry.dispose()); }
       G.audio.stopEngine();
       G.audio.hush();
       this.model.dispose();

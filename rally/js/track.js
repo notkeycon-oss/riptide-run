@@ -420,6 +420,16 @@
             this.features.push({ s, L: 14, amp: -0.9, kind: 'dip' });
             this.notes.push({ s: s - 18, kind: 'dip', mods: [], dist: 0 });
           }
+          // water splashes on green stages: a dip in the road holding a shallow pool
+          // (own random stream, so adding splashes never changes the road itself)
+          const wr = this.wrand || (this.wrand = G.rng((this.seed * 7919 + 13) >>> 0));
+          if ((this.themeKey === 'forest' || this.themeKey === 'coast') && plan.len >= 70 && wr() < 0.4) {
+            const s = s0 + plan.len * wr.range(0.25, 0.4);
+            if (!this.features.some((F) => Math.abs(F.s - s) < 40)) {
+              this.features.push({ s, L: 12, amp: -1.0, kind: 'dip', water: true });
+              this.notes.push({ s: s - 18, kind: 'water', mods: [], dist: 0 });
+            }
+          }
         }
       }
       for (let q = nNotes; q < this.notes.length; q++) this.notes[q].gid = gid;
@@ -656,6 +666,7 @@
       if (n.kind === 'jump') return n.big ? 'big jump' : 'jump';
       if (n.kind === 'crest') return 'over crest';
       if (n.kind === 'dip') return 'dip';
+      if (n.kind === 'water') return 'water splash';
       if (n.kind === 'narrows') return 'narrows';
       if (n.kind === 'finish') return 'flat out to finish';
       return '';

@@ -301,6 +301,17 @@
       this._burst(0.22, 'lowpass', 300, 0.7, 0.4 * a);
       this._tone(60, 0.25, 'sine', 0.45 * a, 32);
     }
+    splash(v) {
+      if (!this.ready) return;
+      const a = G.clamp(v / 20, 0.3, 1);
+      this._burst(0.7, 'lowpass', 900, 0.6, 0.45 * a);
+      this._burst(0.5, 'bandpass', 2400, 0.6, 0.18 * a);
+    }
+    debris() {
+      if (!this.ready) return;
+      this._burst(0.35, 'bandpass', 1800, 2, 0.25);
+      this._tone(240, 0.2, 'triangle', 0.12, 120);
+    }
     puncture() {
       if (!this.ready) return;
       this._burst(0.8, 'highpass', 2200, 0.5, 0.18);
