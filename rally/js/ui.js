@@ -674,6 +674,7 @@
       box.appendChild(this.seg('ABS', 'abs', S, [[true, 'ON'], [false, 'OFF']], live));
       box.appendChild(this.seg('Traction control', 'tc', S, [[true, 'ON'], [false, 'OFF']], live));
       box.appendChild(this.seg('Damage', 'damage', S, [['off', 'OFF'], ['normal', 'NORMAL'], ['realistic', 'REALISTIC']], live));
+      box.appendChild(this.seg('Ghost car', 'ghost', S, [['on', 'SHOW'], ['faint', 'FAINT'], ['off', 'HIDE']], live, 'Press G in a stage to switch'));
       grp('CO-DRIVER');
       box.appendChild(this.seg('Voice', 'voice', S, [[true, 'ON'], [false, 'OFF']], live));
       box.appendChild(this.seg('Call timing', 'callTiming', S, [['early', 'EARLY'], ['normal', 'NORMAL'], ['late', 'LATE']], live));

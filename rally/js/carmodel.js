@@ -908,6 +908,13 @@
       return -S.cgH + S.wheelR + S.rest - load / S.spring;
     }
 
+    // ghost see-through amount
+    setOpacity(o) {
+      if (this._op === o) return;
+      this._op = o;
+      for (const m of this.mats) if (m.transparent) m.opacity = o;
+    }
+
     setBrake(on) {
       if (on === this.brakeOn) return;
       this.brakeOn = on;
