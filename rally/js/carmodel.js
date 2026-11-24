@@ -120,6 +120,51 @@
     m.castShadow = true;
     if (shadow) m.receiveShadow = false;
     group.add(m);
+    return m;
+  }
+
+  // crack pattern for a smashed windscreen
+  function crackTexture() {
+    const cv = document.createElement('canvas');
+    cv.width = cv.height = 256;
+    const x = cv.getContext('2d');
+    const r = G.rng(42);
+    x.strokeStyle = 'rgba(235,245,255,0.85)';
+    for (const [cx, cy] of [[90, 120], [180, 150]]) {
+      for (let k = 0; k < 11; k++) {
+        let a = r() * Math.PI * 2, px = cx, py = cy;
+        x.lineWidth = 1 + r() * 1.5;
+        x.beginPath();
+        x.moveTo(px, py);
+        for (let q = 0; q < 6; q++) {
+          a += (r() - 0.5) * 0.7;
+          px += Math.cos(a) * (10 + r() * 22);
+          py += Math.sin(a) * (10 + r() * 22);
+          x.lineTo(px, py);
+        }
+        x.stroke();
+      }
+      for (let ring = 1; ring <= 3; ring++) {
+        x.lineWidth = 0.8;
+        x.beginPath();
+        x.arc(cx, cy, ring * 14 + r() * 6, 0, Math.PI * 2);
+        x.stroke();
+      }
+    }
+    return new THREE.CanvasTexture(cv);
+  }
+
+  // Dirt: a shader patch that mixes mud/dust/snow into a material, heavier lower down.
+  function addDirt(mat, dirtU, mudU) {
+    mat.onBeforeCompile = (sh) => {
+      sh.uniforms.uDirt = dirtU;
+      sh.uniforms.uMud = mudU;
+      sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\nvarying float vDirtY;').replace('#include <begin_vertex>', '#include <begin_vertex>\nvDirtY = position.y;');
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nvarying float vDirtY; uniform float uDirt; uniform vec3 uMud;')
+        .replace('#include <color_fragment>', '#include <color_fragment>\nfloat dk = uDirt * clamp(1.25 - vDirtY * 0.85, 0.15, 1.0);\ndiffuseColor.rgb = mix(diffuseColor.rgb, uMud, clamp(dk, 0.0, 0.88));');
+    };
+    mat.customProgramCacheKey = () => 'dirt';
   }
 
   // Remove the top faces of the lower body between the windscreen base (a) and the
@@ -312,8 +357,9 @@
       };
       // bumpers & skid plate
       const by = S.body === 'raid' ? 0.52 : 0.26;
-      box(W * 0.98, 0.16, 0.2, dark, 0, by + 0.1, -(x1 + 0.03));
-      box(W * 0.98, 0.16, 0.2, dark, 0, by + 0.1, -(x0 - 0.03));
+      this.parts = {};
+      this.parts.bumperF = box(W * 0.98, 0.16, 0.2, dark, 0, by + 0.1, -(x1 + 0.03));
+      this.parts.bumperR = box(W * 0.98, 0.16, 0.2, dark, 0, by + 0.1, -(x0 - 0.03));
       box(W * 0.6, 0.05, 1.0, dark, 0, by - 0.02, -(x1 - 0.6));
       // mirrors
       for (const sx of [-1, 1]) box(0.16, 0.1, 0.12, accentMat, sx * (W / 2 + 0.06), ws[0][1] + 0.05, -(ws[0][0] - 0.1));
@@ -322,8 +368,17 @@
         const big = S.id === 'havoc';
         const wy = S.body === 'hatch' ? 1.42 : 1.2;
         const wz = S.body === 'hatch' ? -(x0 + 0.25) : -(x0 + 0.18);
-        box(W * (big ? 0.98 : 0.92), 0.05, big ? 0.42 : 0.32, accentMat, 0, wy + (big ? 0.16 : 0.06), wz);
-        for (const sx of [-1, 1]) box(0.04, big ? 0.24 : 0.14, 0.28, accentMat, sx * W * 0.45, wy + (big ? 0.07 : 0.02), wz);
+        const wing = new THREE.Group();
+        const wb = (w, h, d, x, y, z) => {
+          const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), accentMat);
+          m.position.set(x, y, z);
+          m.castShadow = !this.ghost;
+          wing.add(m);
+        };
+        wb(W * (big ? 0.98 : 0.92), 0.05, big ? 0.42 : 0.32, 0, wy + (big ? 0.16 : 0.06), wz);
+        for (const sx of [-1, 1]) wb(0.04, big ? 0.24 : 0.14, 0.28, sx * W * 0.45, wy + (big ? 0.07 : 0.02), wz);
+        this.body.add(wing);
+        this.parts.wing = wing;
       }
       if (S.body === 'raid') {
         // roof rack, spare wheel, light bar
@@ -379,18 +434,19 @@
       this.exhaustLocal = new THREE.Vector3(W * 0.3, by + 0.06 - S.cgH, -(x0 - 0.22));
       // lights
       this.headMat = mk(new THREE.MeshBasicMaterial({ color: 0xfff6d8 }));
+      this.headSide = [mk(new THREE.MeshBasicMaterial({ color: 0xfff6d8 })), mk(new THREE.MeshBasicMaterial({ color: 0xfff6d8 }))];
       this.tailMat = mk(new THREE.MeshBasicMaterial({ color: 0x8a1414 }));
       const hy = S.body === 'raid' ? 0.92 : S.body === 'wedge' ? 0.5 : S.body === 'sedan' ? 0.68 : 0.64;
       for (const sx of [-1, 1]) {
         box(0.38, 0.17, 0.04, dark, sx * W * 0.32 * this.taper(hy, -(x1 + 0.02)), hy, -(x1 + 0.01));
         if (S.body === 'sedan') {
           for (const o of [-0.08, 0.08]) {
-            const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.04, 12), this.headMat);
+            const hl = new THREE.Mesh(new THREE.CylinderGeometry(0.065, 0.065, 0.04, 12), this.headSide[sx < 0 ? 0 : 1]);
             hl.rotation.x = Math.PI / 2;
             hl.position.set(sx * W * 0.32 + o, hy, -(x1 + 0.04));
             this.body.add(hl);
           }
-        } else box(0.3, 0.11, 0.05, this.headMat, sx * W * 0.32 * this.taper(hy, -(x1 + 0.02)), hy, -(x1 + 0.03));
+        } else box(0.3, 0.11, 0.05, this.headSide[sx < 0 ? 0 : 1], sx * W * 0.32 * this.taper(hy, -(x1 + 0.02)), hy, -(x1 + 0.03));
         const ty = S.body === 'raid' ? 1.0 : S.body === 'sedan' ? 0.72 : 0.8;
         box(0.42, 0.18, 0.04, dark, sx * W * 0.33 * this.taper(ty, -(x0 - 0.02)), ty, -(x0 - 0.03));
         box(0.36, 0.13, 0.05, this.tailMat, sx * W * 0.33 * this.taper(ty, -(x0 - 0.02)), ty, -(x0 - 0.045));
@@ -504,9 +560,26 @@
       // fewer draw calls: merge the static exterior detail and each wheel into single meshes
       if (!this.ghost) {
         const keep = new Set([this.bodyMesh, ...this.glass]);
-        mergeInto(this.body, (o) => !keep.has(o) && !o.material.transparent, mk(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 60, specular: 0x444444 })));
+        const parts = new Set(Object.values(this.parts));
+        const detailMat = mk(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 60, specular: 0x444444 }));
+        this.detailMesh = mergeInto(this.body, (o) => !keep.has(o) && !parts.has(o) && !o.material.transparent, detailMat);
+        if (this.detailMesh) this.detailOrig = Float32Array.from(this.detailMesh.geometry.attributes.position.array);
+        // dirt builds up as you drive (see setDirt)
+        this.dirtU = { value: 0 };
+        this.mudU = { value: new THREE.Color(0.4, 0.3, 0.2) };
+        const wheelMat = mk(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 50, side: THREE.DoubleSide }));
+        for (const m of [capMat, paintMat, detailMat, wheelMat, dark]) addDirt(m, this.dirtU, this.mudU);
+        // cracked windscreen overlay
+        this.crack = new THREE.Mesh(this.glass[0].geometry, mk(new THREE.MeshBasicMaterial({ map: crackTexture(), transparent: true, depthWrite: false })));
+        this.crack.renderOrder = 6;
+        this.crack.visible = false;
+        this.body.add(this.crack);
+        this.partHome = {};
+        for (const k in this.parts) this.partHome[k] = { p: this.parts[k].position.clone(), r: this.parts[k].rotation.clone() };
+        this.hits = { bumperF: 0, bumperR: 0, wing: 0, glass: 0, light0: 0, light1: 0 };
+        this.debris = [];
         for (const w of this.wheels) {
-          mergeInto(w.spin, () => true, mk(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 50, side: THREE.DoubleSide })), true);
+          mergeInto(w.spin, () => true, wheelMat, true);
           mergeInto(w.outer, (o) => o !== w.spin, mk(new THREE.MeshPhongMaterial({ vertexColors: true, shininess: 70 })));
         }
       }
@@ -798,6 +871,8 @@
         const w = ph.wheels[i], v = this.wheels[i];
         v.outer.position.set(w.mount.x, w.mount.y - w.len, w.mount.z);
         v.outer.rotation.y = -w.delta;
+        // bent suspension shows as wheel camber
+        v.outer.rotation.z = (i % 2 === 0 ? 1 : -1) * ph.damage.susp[i] * 0.24;
         v.spin.rotation.x = -w.rot;
         if (ph.damage.punct[i]) v.outer.scale.set(1, 0.9, 1);
         else v.outer.scale.set(1, 1, 1);
@@ -839,38 +914,98 @@
       this.tailMat.color.setHex(on ? 0xff2a1a : 0x8a1414);
     }
 
-    deform(p, amt) {
-      const g = this.bodyMesh.geometry;
-      const pa = g.attributes.position;
+    _dent(geo, orig, px, py, pz, amt) {
+      const pa = geo.attributes.position;
       const a = pa.array;
-      const o = this.origPos;
-      // impact point in body-mesh space
-      const px = p.x, py = p.y + this.spec.cgH, pz = p.z;
-      const R = 0.55 + amt * 0.6;
-      const push = 0.07 + amt * 0.22;
+      const R = 0.6 + amt * 0.7;
+      const push = 0.09 + amt * 0.3;
+      let touched = false;
       for (let i = 0; i < pa.count; i++) {
         const x = a[i * 3], y = a[i * 3 + 1], z = a[i * 3 + 2];
         const dx = x - px, dy = y - py, dz = z - pz;
         const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
         if (d > R) continue;
+        touched = true;
         const f = (1 - d / R) * (1 - d / R) * push;
-        // push toward the body centre
-        let cx = -x, cy = 0.7 - y, cz = -z * 0.35;
+        // push in, toward the middle of the car
+        const cx = -x, cy = 0.7 - y, cz = -z * 0.35;
         const l = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1;
-        let nx = x + (cx / l) * f, ny = y + (cy / l) * f * 0.5, nz = z + (cz / l) * f;
-        // never more than 0.28 m from the original
-        const ox = o[i * 3], oy = o[i * 3 + 1], oz = o[i * 3 + 2];
+        // a little crumple noise so dents look rough
+        const n = 0.75 + 0.5 * Math.sin(x * 23.1 + z * 17.3 + y * 11.7);
+        let nx = x + (cx / l) * f * n, ny = y + (cy / l) * f * 0.5 * n, nz = z + (cz / l) * f * n;
+        // never more than 0.34 m from the original
+        const ox = orig[i * 3], oy = orig[i * 3 + 1], oz = orig[i * 3 + 2];
         const ddx = nx - ox, ddy = ny - oy, ddz = nz - oz;
         const dl = Math.sqrt(ddx * ddx + ddy * ddy + ddz * ddz);
-        if (dl > 0.28) {
-          nx = ox + (ddx / dl) * 0.28;
-          ny = oy + (ddy / dl) * 0.28;
-          nz = oz + (ddz / dl) * 0.28;
+        if (dl > 0.34) {
+          nx = ox + (ddx / dl) * 0.34;
+          ny = oy + (ddy / dl) * 0.34;
+          nz = oz + (ddz / dl) * 0.34;
         }
         a[i * 3] = nx; a[i * 3 + 1] = ny; a[i * 3 + 2] = nz;
       }
-      pa.needsUpdate = true;
-      g.computeVertexNormals();
+      if (touched) {
+        pa.needsUpdate = true;
+        geo.computeVertexNormals();
+      }
+    }
+
+    // a hit at local point p (car frame) with strength amt 0..1
+    deform(p, amt) {
+      const px = p.x, py = p.y + this.spec.cgH, pz = p.z;
+      this._dent(this.bodyMesh.geometry, this.origPos, px, py, pz, amt);
+      if (this.detailMesh) this._dent(this.detailMesh.geometry, this.detailOrig, px, py, pz, amt * 0.8);
+      if (!this.hits) return;
+      // which parts took it
+      const L = this.spec.dims[0], H = this.hits;
+      if (pz < -L * 0.28) {
+        H.bumperF += amt;
+        H.glass += amt * 0.55;
+        if (amt > 0.25) H[px < 0 ? 'light0' : 'light1'] += amt;
+      }
+      if (pz > L * 0.28) {
+        H.bumperR += amt;
+        H.wing += amt * 0.5;
+      }
+      if (py > 1.0) {
+        // roof / rollover
+        H.glass += amt * 0.9;
+        H.wing += amt * 0.9;
+      }
+      for (const k of ['bumperF', 'bumperR']) {
+        const part = this.parts[k];
+        if (!part || part.userData.gone) continue;
+        if (H[k] > 1.05) this._detach(k);
+        else if (H[k] > 0.45 && !part.userData.droop) {
+          // hanging off on one side
+          part.userData.droop = true;
+          part.rotation.z = (Math.random() < 0.5 ? -1 : 1) * 0.22;
+          part.position.y -= 0.07;
+        }
+      }
+      if (H.wing > 0.9) this._detach('wing');
+      if (H.glass > 0.5) this.crack.visible = true;
+      for (let s = 0; s < 2; s++) if (H['light' + s] > 0.5) this.headSide[s].color.setHex(0x2b2b27);
+    }
+
+    _detach(name) {
+      const obj = this.parts[name];
+      if (!obj || obj.userData.gone) return;
+      obj.userData.gone = true;
+      obj.updateMatrixWorld(true);
+      const pos = new THREE.Vector3(), q = new THREE.Quaternion(), sc = new THREE.Vector3();
+      obj.matrixWorld.decompose(pos, q, sc);
+      this.body.remove(obj);
+      obj.position.copy(pos);
+      obj.quaternion.copy(q);
+      this.debris.push(obj);
+    }
+
+    // 0..1 dirt, colour of the mud/dust/snow
+    setDirt(v, color) {
+      if (!this.dirtU) return;
+      this.dirtU.value = v;
+      if (color) this.mudU.value.copy(color);
     }
 
     resetDamage() {
@@ -878,6 +1013,23 @@
       g.attributes.position.array.set(this.origPos);
       g.attributes.position.needsUpdate = true;
       g.computeVertexNormals();
+      if (this.detailMesh) {
+        this.detailMesh.geometry.attributes.position.array.set(this.detailOrig);
+        this.detailMesh.geometry.attributes.position.needsUpdate = true;
+        this.detailMesh.geometry.computeVertexNormals();
+      }
+      if (this.hits) {
+        for (const k in this.hits) this.hits[k] = 0;
+        for (const k in this.parts) {
+          const part = this.parts[k];
+          if (part.userData.gone) continue;
+          part.userData.droop = false;
+          part.position.copy(this.partHome[k].p);
+          part.rotation.copy(this.partHome[k].r);
+        }
+        this.crack.visible = false;
+        for (const m of this.headSide) m.color.setHex(0xfff6d8);
+      }
     }
 
     exhaustWorld(out) {

@@ -35,6 +35,7 @@
     }
     if (n.kind === 'jump') return `<svg viewBox="0 0 60 64"><path d="M6 50 L26 50 L40 30" ${W}/><path d="M44 22 Q50 18 56 24" ${W} stroke-dasharray="3 6"/><path d="M8 58 L52 58" ${W} stroke-width="3"/></svg>`;
     if (n.kind === 'crest') return `<svg viewBox="0 0 60 64"><path d="M4 50 Q30 14 56 50" ${W}/></svg>`;
+    if (n.kind === 'water') return `<svg viewBox="0 0 60 64"><path d="M4 30 Q12 22 20 30 T36 30 T52 30" ${W}/><path d="M4 44 Q12 36 20 44 T36 44 T52 44" ${W}/></svg>`;
     if (n.kind === 'dip') return `<svg viewBox="0 0 60 64"><path d="M4 22 Q30 60 56 22" ${W}/></svg>`;
     if (n.kind === 'narrows') return `<svg viewBox="0 0 60 64"><path d="M14 58 L24 10 M46 58 L36 10" ${W}/></svg>`;
     if (n.kind === 'finish') return `<svg viewBox="0 0 60 64"><path d="M16 58 L16 8" ${W}/><path d="M16 10 L46 10 L46 30 L16 30" stroke="#fff" stroke-width="3" fill="#fff"/></svg>`;
@@ -153,7 +154,7 @@
           big = n.sev === 'hp' ? 'HP' : n.sev;
         } else {
           cls += ' sx';
-          big = n.kind === 'jump' ? (n.big ? 'BIG' : 'JUMP') : n.kind === 'crest' ? 'CREST' : n.kind === 'dip' ? 'DIP' : n.kind === 'narrows' ? 'NARROW' : n.kind === 'finish' ? 'FINISH' : '';
+          big = n.kind === 'jump' ? (n.big ? 'BIG' : 'JUMP') : n.kind === 'crest' ? 'CREST' : n.kind === 'dip' ? 'DIP' : n.kind === 'water' ? 'SPLASH' : n.kind === 'narrows' ? 'NARROW' : n.kind === 'finish' ? 'FINISH' : '';
         }
         if (i === 0) cls += ' first';
         if (n.caution) cls += ' caution';

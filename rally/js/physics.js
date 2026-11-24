@@ -115,7 +115,7 @@
 
     damageMult() {
       const d = this.settings.damage;
-      return d === 'off' ? 0 : d === 'realistic' ? 1 : 0.5;
+      return d === 'off' ? 0 : d === 'realistic' ? 0.8 : 0.35;
     }
 
     place(x, z, heading, y) {
@@ -524,7 +524,7 @@
           Fb.addScaledVector(vt, -ff / vtl);
         }
         this.addForceAt(Fb, p);
-        if (vn < -5.5) this._impact(-vn, this.bodyPts[i], 'ground');
+        if (vn < -7) this._impact(-vn, this.bodyPts[i], 'ground');
         if (gq.water) this.inWater = true;
       }
 
@@ -646,9 +646,11 @@
       this._lastImpV = speed;
       this.events.push({ type: 'impact', v: speed, kind });
       const dm = this.damageMult();
-      const amt = G.clamp((speed - 4) / 20, 0, 1);
+      // dents show from moderate hits; mechanical damage needs a proper whack
+      const vis = G.clamp((speed - 5) / 22, 0, 1);
+      if (vis > 0) this.impacts.push({ p: local.clone(), amt: vis, kind });
+      const amt = G.clamp((speed - 7) / 24, 0, 1);
       if (amt <= 0) return;
-      this.impacts.push({ p: local.clone(), amt });
       if (dm <= 0) return;
       const D = this.damage;
       const a = amt * dm;
@@ -668,7 +670,8 @@
       if (bd < 1.6) {
         D.susp[best] = Math.min(1, D.susp[best] + a * 0.7);
         if (this.wheels[best].front) D.steer = Math.min(1, D.steer + a * 0.3);
-        if ((kind === 'rock' || kind === 'ground') && Math.random() < a * 0.7 && !D.punct[best]) {
+        // punctures: only a hard hit on a rock does it
+        if (kind === 'rock' && speed > 11 && Math.random() < a * 0.35 && !D.punct[best]) {
           D.punct[best] = true;
           this.wheels[best].r = this.wheels[best].r0 - 0.035;
           this.events.push({ type: 'puncture', wheel: best });

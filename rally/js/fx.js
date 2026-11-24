@@ -329,6 +329,15 @@
           } else this.skids.lift(i);
         }
       }
+      // radiator steam
+      if (ph.damage.radiator > 0.3) {
+        this.steamAcc = (this.steamAcc || 0) + (ph.damage.radiator - 0.25) * 14 * dt;
+        while (this.steamAcc >= 1) {
+          this.steamAcc -= 1;
+          const p = this.tmp.set((this.r() - 0.5) * 0.6, 0.1, -ph.L * 0.5).applyQuaternion(ph.q).add(ph.pos);
+          this.dust.spawn(p.x, p.y, p.z, vel.x * 0.7, 1.6, vel.z * 0.7, 1.1, 0.3, 1.8, 0.95, 0.96, 0.98, 0.28, 1.5, -0.4);
+        }
+      }
       // engine damage smoke
       const dmg = ph.damage.engine + ph.damage.radiator * 0.5;
       if (dmg > 0.45) {
@@ -357,6 +366,37 @@
         this.glow.spawn(pos.x, pos.y, pos.z, vel.x * 0.4 + (r() - 0.5) * 8, r() * 5, vel.z * 0.4 + (r() - 0.5) * 8, 0.3 + r() * 0.4, 0.12, 0.04, 1, 0.8, 0.35, 1, 0.8, 9);
       }
     }
+    // water splash: a sheet of spray thrown up and out from the car
+    splash(pos, vel, n) {
+      const r = this.r;
+      for (let i = 0; i < n; i++) {
+        const a = r() * 6.28, s = 2 + r() * 5;
+        this.dust.spawn(pos.x + (r() - 0.5) * 1.6, pos.y + 0.2, pos.z + (r() - 0.5) * 2.4,
+          vel.x * 0.45 + Math.cos(a) * s, 3 + r() * 6, vel.z * 0.45 + Math.sin(a) * s,
+          0.9 + r() * 0.8, 0.5, 2.2 + r() * 1.5, 0.86, 0.92, 0.98, 0.55, 0.8, 9.8);
+      }
+    }
+    // finish-line fireworks and confetti
+    fireworks(pos) {
+      const r = this.r;
+      const cols = [[1, 0.25, 0.2], [1, 0.8, 0.15], [0.3, 0.7, 1], [0.4, 1, 0.5], [1, 0.4, 0.9], [1, 1, 1]];
+      this.pending = this.pending || [];
+      for (let b = 0; b < 7; b++) {
+        this.pending.push({ t: b * 0.32 + r() * 0.15, fn: () => {
+          const c = cols[Math.floor(r() * cols.length)];
+          const cx = pos.x + (r() - 0.5) * 14, cy = pos.y + 9 + r() * 8, cz = pos.z + (r() - 0.5) * 14;
+          for (let i = 0; i < 130; i++) {
+            const u = r() * 2 - 1, th = r() * 6.28, rr = Math.sqrt(1 - u * u), sp = 7 + r() * 6;
+            this.glow.spawn(cx, cy, cz, Math.cos(th) * rr * sp, u * sp, Math.sin(th) * rr * sp, 1.2 + r() * 0.9, 1.3, 0.35, c[0], c[1], c[2], 1, 1.4, 3.5);
+          }
+          if (G.audio) G.audio.pop();
+        } });
+      }
+      for (let i = 0; i < 160; i++) {
+        const c = cols[Math.floor(r() * cols.length)];
+        this.dust.spawn(pos.x + (r() - 0.5) * 10, pos.y + 6 + r() * 3, pos.z + (r() - 0.5) * 10, (r() - 0.5) * 4, 2 + r() * 3, (r() - 0.5) * 4, 3 + r() * 2, 0.3, 0.3, c[0], c[1], c[2], 0.95, 1.4, 1.2);
+      }
+    }
     burst(pos, n, color, size) {
       const r = this.r;
       const c = color || this.world.theme.dust;
@@ -367,6 +407,12 @@
     }
 
     update(dt) {
+      if (this.pending && this.pending.length) {
+        for (const p of this.pending) p.t -= dt;
+        const due = this.pending.filter((p) => p.t <= 0);
+        this.pending = this.pending.filter((p) => p.t > 0);
+        for (const p of due) p.fn();
+      }
       this.dust.update(dt);
       this.glow.update(dt);
       this.skids.flush();
