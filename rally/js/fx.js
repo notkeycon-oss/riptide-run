@@ -366,16 +366,6 @@
         this.glow.spawn(pos.x, pos.y, pos.z, vel.x * 0.4 + (r() - 0.5) * 8, r() * 5, vel.z * 0.4 + (r() - 0.5) * 8, 0.3 + r() * 0.4, 0.12, 0.04, 1, 0.8, 0.35, 1, 0.8, 9);
       }
     }
-    // water splash: a sheet of spray thrown up and out from the car
-    splash(pos, vel, n) {
-      const r = this.r;
-      for (let i = 0; i < n; i++) {
-        const a = r() * 6.28, s = 2 + r() * 5;
-        this.dust.spawn(pos.x + (r() - 0.5) * 1.6, pos.y + 0.2, pos.z + (r() - 0.5) * 2.4,
-          vel.x * 0.45 + Math.cos(a) * s, 3 + r() * 6, vel.z * 0.45 + Math.sin(a) * s,
-          0.9 + r() * 0.8, 0.5, 2.2 + r() * 1.5, 0.86, 0.92, 0.98, 0.55, 0.8, 9.8);
-      }
-    }
     // finish-line fireworks and confetti
     fireworks(pos) {
       const r = this.r;
